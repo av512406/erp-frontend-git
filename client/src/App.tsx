@@ -13,7 +13,7 @@ import FeesPage from "@/components/FeesPage";
 import GradesPage from "@/components/GradesPage";
 import ReportsPage from "@/components/ReportsPage";
 import DataToolsPage from "@/components/DataToolsPage";
-import type { Student } from "@/components/StudentsPage";
+import type { Student } from "@shared/schema";
 import type { FeeTransaction } from "@/components/FeesPage";
 import type { GradeEntry } from "@/components/GradesPage";
 
@@ -27,48 +27,78 @@ function Router({ user }: { user: User }) {
   const [students, setStudents] = useState<Student[]>([
     {
       id: '1',
-      studentId: 'STU001',
+      admissionNumber: 'STU001',
       name: 'John Doe',
+      dateOfBirth: '2010-05-15',
+      admissionDate: '2022-04-01',
+      aadharNumber: '1234-5678-9012',
+      penNumber: 'PEN001234',
+      aaparId: 'AAP001',
+      mobileNumber: '555-0101',
+      address: '123 Main St, City, State',
       grade: '10',
       section: 'A',
-      parentName: 'Robert Doe',
-      contactNumber: '555-0101'
+      yearlyFeeAmount: '25000'
     },
     {
       id: '2',
-      studentId: 'STU002',
+      admissionNumber: 'STU002',
       name: 'Jane Smith',
+      dateOfBirth: '2010-08-22',
+      admissionDate: '2022-04-01',
+      aadharNumber: '2345-6789-0123',
+      penNumber: 'PEN001235',
+      aaparId: 'AAP002',
+      mobileNumber: '555-0102',
+      address: '456 Oak Ave, City, State',
       grade: '10',
       section: 'A',
-      parentName: 'Mary Smith',
-      contactNumber: '555-0102'
+      yearlyFeeAmount: '25000'
     },
     {
       id: '3',
-      studentId: 'STU003',
+      admissionNumber: 'STU003',
       name: 'Bob Johnson',
+      dateOfBirth: '2010-03-10',
+      admissionDate: '2022-04-01',
+      aadharNumber: '3456-7890-1234',
+      penNumber: 'PEN001236',
+      aaparId: 'AAP003',
+      mobileNumber: '555-0103',
+      address: '789 Elm St, City, State',
       grade: '10',
       section: 'B',
-      parentName: 'James Johnson',
-      contactNumber: '555-0103'
+      yearlyFeeAmount: '25000'
     },
     {
       id: '4',
-      studentId: 'STU004',
+      admissionNumber: 'STU004',
       name: 'Alice Williams',
+      dateOfBirth: '2011-11-30',
+      admissionDate: '2023-04-01',
+      aadharNumber: '4567-8901-2345',
+      penNumber: 'PEN001237',
+      aaparId: 'AAP004',
+      mobileNumber: '555-0104',
+      address: '321 Pine Rd, City, State',
       grade: '9',
       section: 'A',
-      parentName: 'Sarah Williams',
-      contactNumber: '555-0104'
+      yearlyFeeAmount: '28000'
     },
     {
       id: '5',
-      studentId: 'STU005',
+      admissionNumber: 'STU005',
       name: 'Charlie Brown',
+      dateOfBirth: '2009-07-18',
+      admissionDate: '2021-04-01',
+      aadharNumber: '5678-9012-3456',
+      penNumber: 'PEN001238',
+      aaparId: 'AAP005',
+      mobileNumber: '555-0105',
+      address: '654 Maple Dr, City, State',
       grade: '11',
       section: 'A',
-      parentName: 'David Brown',
-      contactNumber: '555-0105'
+      yearlyFeeAmount: '22000'
     }
   ]);
 

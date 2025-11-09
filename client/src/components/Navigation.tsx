@@ -41,13 +41,11 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-6">
-            <Link href="/">
-              <a className="flex items-center gap-2 hover-elevate rounded-md px-3 py-2">
-                <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-                  <GraduationCap className="w-5 h-5 text-primary-foreground" />
-                </div>
-                <span className="font-semibold text-lg">School ERP</span>
-              </a>
+            <Link href="/" className="flex items-center gap-2 hover-elevate rounded-md px-3 py-2">
+              <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
+                <GraduationCap className="w-5 h-5 text-primary-foreground" />
+              </div>
+              <span className="font-semibold text-lg">School ERP</span>
             </Link>
             
             <div className="flex items-center gap-1">
@@ -56,17 +54,15 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
                 const isActive = location === link.path;
                 return (
                   <Link key={link.path} href={link.path}>
-                    <a>
-                      <Button
-                        variant={isActive ? "secondary" : "ghost"}
-                        size="sm"
-                        className="gap-2"
-                        data-testid={`link-${link.label.toLowerCase()}`}
-                      >
-                        <Icon className="w-4 h-4" />
-                        {link.label}
-                      </Button>
-                    </a>
+                    <Button
+                      variant={isActive ? "secondary" : "ghost"}
+                      size="sm"
+                      className="gap-2"
+                      data-testid={`link-${link.label.toLowerCase()}`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {link.label}
+                    </Button>
                   </Link>
                 );
               })}

@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Upload, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { Student } from "./StudentsPage";
+import type { Student } from "@shared/schema";
 import type { GradeEntry } from "./GradesPage";
 
 interface DataToolsPageProps {
@@ -44,14 +44,20 @@ export default function DataToolsPage({ students, onImportStudents, onImportGrad
         header: true,
         complete: (results: any) => {
           const importedStudents = results.data
-            .filter((row: any) => row.studentId && row.name)
+            .filter((row: any) => row.admissionNumber && row.name)
             .map((row: any) => ({
-              studentId: row.studentId,
+              admissionNumber: row.admissionNumber,
               name: row.name,
+              dateOfBirth: row.dateOfBirth,
+              admissionDate: row.admissionDate,
+              aadharNumber: row.aadharNumber,
+              penNumber: row.penNumber,
+              aaparId: row.aaparId,
+              mobileNumber: row.mobileNumber,
+              address: row.address,
               grade: row.grade,
               section: row.section,
-              parentName: row.parentName,
-              contactNumber: row.contactNumber
+              yearlyFeeAmount: row.yearlyFeeAmount
             }));
           onImportStudents(importedStudents);
           toast({
@@ -105,9 +111,9 @@ export default function DataToolsPage({ students, onImportStudents, onImportGrad
       : students.filter(s => s.grade === exportFilter);
 
     const csvContent = [
-      ['studentId', 'name', 'grade', 'section', 'parentName', 'contactNumber'].join(','),
+      ['admissionNumber', 'name', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'grade', 'section', 'yearlyFeeAmount'].join(','),
       ...filteredStudents.map(s => 
-        [s.studentId, s.name, s.grade, s.section, s.parentName, s.contactNumber].join(',')
+        [s.admissionNumber, s.name, s.dateOfBirth, s.admissionDate, s.aadharNumber, s.penNumber, s.aaparId, s.mobileNumber, s.address, s.grade, s.section, s.yearlyFeeAmount].join(',')
       )
     ].join('\n');
 
@@ -156,7 +162,7 @@ export default function DataToolsPage({ students, onImportStudents, onImportGrad
             </div>
             <div className="text-sm text-muted-foreground">
               <p className="font-medium mb-1">Expected columns:</p>
-              <p className="font-mono text-xs">studentId, name, grade, section, parentName, contactNumber</p>
+              <p className="font-mono text-xs">admissionNumber, name, dateOfBirth, admissionDate, aadharNumber, penNumber, aaparId, mobileNumber, address, grade, section, yearlyFeeAmount</p>
             </div>
             <Button
               variant="outline"

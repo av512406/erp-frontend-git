@@ -11,16 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import StudentFormModal from "./StudentFormModal";
-
-export interface Student {
-  id: string;
-  studentId: string;
-  name: string;
-  grade: string;
-  section: string;
-  parentName: string;
-  contactNumber: string;
-}
+import type { Student, InsertStudent } from "@shared/schema";
 
 interface StudentsPageProps {
   students: Student[];
@@ -43,8 +34,9 @@ export default function StudentsPage({
 
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.studentId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.grade.toLowerCase().includes(searchTerm.toLowerCase())
+    student.admissionNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    student.grade.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    student.section.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleAdd = () => {
@@ -101,12 +93,12 @@ export default function StudentsPage({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Student ID</TableHead>
+              <TableHead>Admission No.</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Grade</TableHead>
               <TableHead>Section</TableHead>
-              <TableHead>Parent Name</TableHead>
-              <TableHead>Contact</TableHead>
+              <TableHead>Mobile</TableHead>
+              <TableHead>Yearly Fee</TableHead>
               {!isReadOnly && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
@@ -120,12 +112,12 @@ export default function StudentsPage({
             ) : (
               filteredStudents.map((student) => (
                 <TableRow key={student.id} data-testid={`row-student-${student.id}`}>
-                  <TableCell className="font-mono">{student.studentId}</TableCell>
+                  <TableCell className="font-mono">{student.admissionNumber}</TableCell>
                   <TableCell className="font-medium">{student.name}</TableCell>
                   <TableCell>{student.grade}</TableCell>
                   <TableCell>{student.section}</TableCell>
-                  <TableCell>{student.parentName}</TableCell>
-                  <TableCell className="font-mono text-sm">{student.contactNumber}</TableCell>
+                  <TableCell className="font-mono text-sm">{student.mobileNumber}</TableCell>
+                  <TableCell>₹{parseFloat(student.yearlyFeeAmount).toLocaleString('en-IN')}</TableCell>
                   {!isReadOnly && (
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
