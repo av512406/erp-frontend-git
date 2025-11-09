@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Upload, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Student } from "./StudentsPage";
@@ -22,9 +23,14 @@ declare global {
 
 export default function DataToolsPage({ students, onImportStudents, onImportGrades }: DataToolsPageProps) {
   const [isImporting, setIsImporting] = useState(false);
+  const [exportFilter, setExportFilter] = useState<string>("all");
   const studentFileRef = useRef<HTMLInputElement>(null);
   const gradesFileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  // Get unique grades for filter dropdown
+  const uniqueGrades = Array.from(new Set(students.map(s => s.grade)))
+    .sort((a, b) => parseInt(a) - parseInt(b));
 
   const handleStudentImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -93,9 +99,14 @@ export default function DataToolsPage({ students, onImportStudents, onImportGrad
   };
 
   const handleExportStudents = () => {
+    // Filter students based on selected filter
+    const filteredStudents = exportFilter === "all" 
+      ? students 
+      : students.filter(s => s.grade === exportFilter);
+
     const csvContent = [
       ['studentId', 'name', 'grade', 'section', 'parentName', 'contactNumber'].join(','),
-      ...students.map(s => 
+      ...filteredStudents.map(s => 
         [s.studentId, s.name, s.grade, s.section, s.parentName, s.contactNumber].join(',')
       )
     ].join('\n');
@@ -104,13 +115,14 @@ export default function DataToolsPage({ students, onImportStudents, onImportGrad
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `students-${new Date().toISOString().split('T')[0]}.csv`;
+    const filterSuffix = exportFilter === "all" ? "all" : `grade-${exportFilter}`;
+    a.download = `students-${filterSuffix}-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
 
     toast({
       title: "Export Successful",
-      description: `Exported ${students.length} students`,
+      description: `Exported ${filteredStudents.length} student${filteredStudents.length === 1 ? '' : 's'}`,
     });
   };
 
@@ -200,10 +212,30 @@ export default function DataToolsPage({ students, onImportStudents, onImportGrad
           <CardHeader>
             <CardTitle>Export Students</CardTitle>
             <CardDescription>
-              Download all student data as a CSV file
+              Download student data as a CSV file with filters
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="export-filter">Filter by Grade</Label>
+              <Select
+                value={exportFilter}
+                onValueChange={setExportFilter}
+                data-testid="select-export-filter"
+              >
+                <SelectTrigger id="export-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Students</SelectItem>
+                  {uniqueGrades.map(grade => (
+                    <SelectItem key={grade} value={grade}>
+                      Grade {grade} only
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Button
               className="w-full gap-2"
               onClick={handleExportStudents}
@@ -211,7 +243,10 @@ export default function DataToolsPage({ students, onImportStudents, onImportGrad
               data-testid="button-export-students"
             >
               <Download className="w-4 h-4" />
-              Download CSV ({students.length} students)
+              {exportFilter === "all" 
+                ? `Download CSV (${students.length} students)` 
+                : `Download CSV (${students.filter(s => s.grade === exportFilter).length} students)`
+              }
             </Button>
           </CardContent>
         </Card>
