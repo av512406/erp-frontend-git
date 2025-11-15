@@ -1,20 +1,15 @@
 name: Deploy Client to GitHub Pages
 
-# Run on pushes to the main branch
 on:
   push:
-    branches: [ "main" ] # Change to 'master' if that's your default branch
-  
-  # Allows you to run this workflow manually from the Actions tab
+    branches: [ "main" ]
   workflow_dispatch:
 
-# Sets permissions for GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
 concurrency:
   group: "pages"
   cancel-in-progress: true
@@ -32,21 +27,20 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18 # Using Node.js 18
+          node-version: 18
 
-      - name: Install client dependencies
-        # We only need to build the client
-        run: cd client && npm ci
+      - name: Install dependencies
+        # Install from the root package.json
+        run: npm ci
 
       - name: Build client for GitHub Pages
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         #
-        # --- THIS IS THE UPDATED LINE ---
-        # We call 'npx vite build' directly to bypass the server build in 'npm run build'
-        run: cd client && npx vite build --base=/${{ github.event.repository.name }}/
+        # --- FIX #1: Run from the root, not from 'cd client' ---
+        run: npx vite build --base=/${{ github.event.repository.name }}/
         #
-        # --- END OF UPDATE ---
+        # --- END OF FIX #1 ---
         #
 
       - name: Setup GitHub Pages
@@ -55,8 +49,12 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload the 'dist' folder from the 'client' directory
-          path: 'client/dist'
+          #
+          # --- FIX #2: Change path from 'client/dist' to 'dist/public' ---
+          path: 'dist/public'
+          #
+          # --- END OF FIX #2 ---
+          #
 
       - name: Deploy to GitHub Pages
         id: deployment
