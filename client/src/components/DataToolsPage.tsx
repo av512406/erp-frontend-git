@@ -234,7 +234,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
       : students.filter(s => s.grade === exportFilter);
 
     const csvContent = [
-      ['admissionNumber','name','fatherName','motherName','dateOfBirth','admissionDate','aadharNumber','penNumber','aaparId','mobileNumber','address','grade','section','yearlyFeeAmount'].join(','),
+      ['admissionNumber','name','fatherName','motherName','dateOfBirth','admissionDate','aadharNumber','penNumber','aaparId','mobileNumber','address','class','section','yearlyFeeAmount'].join(','),
       ...filteredStudents.map(s => [
         s.admissionNumber,
         s.name,
@@ -313,7 +313,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
               onClick={() => {
                 // export skipped rows as CSV if available
                 if (!skippedRows || skippedRows.length === 0) return;
-                const header = ['admissionNumber','name','fatherName','motherName','dateOfBirth','admissionDate','aadharNumber','penNumber','aaparId','mobileNumber','address','grade','section','yearlyFeeAmount'];
+                const header = ['admissionNumber','name','fatherName','motherName','dateOfBirth','admissionDate','aadharNumber','penNumber','aaparId','mobileNumber','address','class','section','yearlyFeeAmount'];
                 const rows = skippedRows.map(r => [
                   r.admissionNumber,
                   `"${(r.name||'').replace(/"/g, '""') }"`,
@@ -420,7 +420,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 onClick={() => {
                   // generate template for selected templateGrade
                   const filtered = templateGrade === 'all' ? students : students.filter(s => s.grade === templateGrade);
-                  const header = ['admissionNumber','name','fatherName','motherName','dateOfBirth','admissionDate','aadharNumber','penNumber','aaparId','mobileNumber','address','grade','section','yearlyFeeAmount'];
+                  const header = ['admissionNumber','name','fatherName','motherName','dateOfBirth','admissionDate','aadharNumber','penNumber','aaparId','mobileNumber','address','class','section','yearlyFeeAmount'];
                   // Template with one sample row illustrating date format (YYYY-MM-DD)
                   const sample = [
                     'STU001',
@@ -443,7 +443,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
-                  a.download = `students-template-${templateGrade === 'all' ? 'all' : 'grade-' + templateGrade}.csv`;
+                  a.download = `students-template-${templateGrade === 'all' ? 'all' : 'class-' + templateGrade}.csv`;
                   document.body.appendChild(a);
                   a.click();
                   a.remove();

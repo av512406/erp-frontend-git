@@ -235,7 +235,7 @@ export default function StudentFormModal({
               <legend className="text-sm font-semibold px-2">Academic Information</legend>
               <div className="grid grid-cols-3 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="grade">Grade</Label>
+                  <Label htmlFor="grade">Class</Label>
                   <Input
                     id="grade"
                     value={formData.grade}

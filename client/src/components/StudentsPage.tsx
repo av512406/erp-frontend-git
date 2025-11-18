@@ -137,7 +137,7 @@ export default function StudentsPage({
             <TableRow>
               <TableHead>Admission No.</TableHead>
               <TableHead>Name</TableHead>
-              <TableHead>Grade</TableHead>
+              <TableHead>Class</TableHead>
               <TableHead>Section</TableHead>
               <TableHead>Mobile</TableHead>
               <TableHead>Yearly Fee</TableHead>
