@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import { gray } from "tailwindcss/colors";
 
 export default {
   darkMode: ["class"],
@@ -11,6 +12,7 @@ export default {
         sm: ".1875rem", /* 3px */
       },
       colors: {
+        gray,
         // Flat / base colors (regular buttons)
         background: "hsl(var(--background) / <alpha-value>)",
         foreground: "hsl(var(--foreground) / <alpha-value>)",
