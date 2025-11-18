@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -29,6 +30,8 @@ export interface FeeTransaction {
   amount: number;
   date: string;
   transactionId: string;
+  paymentMode?: string;
+  remarks?: string;
 }
 
 interface FeesPageProps {
@@ -44,6 +47,8 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedPayslip, setSelectedPayslip] = useState<FeeTransaction | null>(null);
+  const [paymentMode, setPaymentMode] = useState<string>('cash');
+  const [remarks, setRemarks] = useState<string>('');
   // New: class & section filters (dependencies order: choose class first, then section)
   const [filterGrade, setFilterGrade] = useState<'all' | string>('all');
   const [filterSection, setFilterSection] = useState<'all' | string>('all');
@@ -77,13 +82,17 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
         studentId: student.id,
         studentName: student.name,
         amount: parseFloat(amount),
-        date
+        date,
+        paymentMode,
+        remarks
       });
       // open payslip for the newly created transaction
       setSelectedPayslip(created);
       setSelectedStudent("");
       setAmount("");
       setDate(new Date().toISOString().split('T')[0]);
+      setPaymentMode('cash');
+      setRemarks('');
     }
   };
 
@@ -143,6 +152,22 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="payment-mode">Payment Mode</Label>
+                <Select value={paymentMode} onValueChange={setPaymentMode}>
+                  <SelectTrigger id="payment-mode" data-testid="select-payment-mode">
+                    <SelectValue placeholder="Select payment mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="upi">UPI</SelectItem>
+                    <SelectItem value="cheque">Cheque</SelectItem>
+                    <SelectItem value="bank-transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="date">Payment Date</Label>
                 <Input
                   id="date"
@@ -151,6 +176,16 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
                   onChange={(e) => setDate(e.target.value)}
                   required
                   data-testid="input-date"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="remarks">Remarks</Label>
+                <Textarea
+                  id="remarks"
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Optional notes (e.g., receipt no., reference)"
+                  data-testid="input-remarks"
                 />
               </div>
               <Button type="submit" className="w-full" data-testid="button-record-payment">

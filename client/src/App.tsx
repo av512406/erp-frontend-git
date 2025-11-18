@@ -100,8 +100,8 @@ function Router({ user }: { user: User }) {
         studentId: transaction.studentId,
         amount: transaction.amount,
         paymentDate: transaction.date,
-        paymentMode: 'cash',
-        remarks: ''
+        paymentMode: transaction.paymentMode || 'cash',
+        remarks: transaction.remarks || ''
       }) });
       if (res.ok) {
         const created = await res.json();
@@ -116,7 +116,9 @@ function Router({ user }: { user: User }) {
       studentName: transaction.studentName,
       amount: transaction.amount,
       date: transaction.date,
-      transactionId: 'TEMP' + Math.random().toString().slice(2,8)
+      transactionId: 'TEMP' + Math.random().toString().slice(2,8),
+      paymentMode: transaction.paymentMode || 'cash',
+      remarks: transaction.remarks || ''
     };
     setTransactions(prev => [optimistic, ...prev]);
     return optimistic;
@@ -185,6 +187,8 @@ function Router({ user }: { user: User }) {
         address: '',
         grade,
         section,
+        fatherName: '',
+        motherName: '',
         yearlyFeeAmount: (20000 + (parseInt(grade) * 1000)).toString()
       });
     }
