@@ -84,15 +84,20 @@ export default function GradesPage({ students, grades, onSaveGrades }: GradesPag
 
   // CSV template download
   const handleDownloadTemplate = () => {
-    // CSV headers: admissionNumber, name, marks
-    const rows = filteredStudents.map(s => ({
-      admissionNumber: s.admissionNumber,
-      name: s.name,
-      marks: ''
-    }));
-    const header = ['admissionNumber', 'name', 'marks'];
+    // CSV headers (human-friendly): Admission Number, Name, Class, Section, Subject, Term, Marks
+    // Prefill Class/Section/Subject/Term for clarity; Marks left blank
+    const header = ['Admission Number', 'Name', 'Class', 'Section', 'Subject', 'Term', 'Marks'];
+    const csvRows = filteredStudents.map(s => [
+      s.admissionNumber,
+      `"${s.name.replace(/"/g, '""')}"`,
+      selectedGrade,
+      selectedSection,
+      selectedSubject,
+      selectedTerm,
+      ''
+    ].join(','));
     const csv = [header.join(',')]
-      .concat(rows.map(r => `${r.admissionNumber},"${r.name.replace(/"/g, '""')}",${r.marks}`))
+      .concat(csvRows)
       .join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -114,12 +119,15 @@ export default function GradesPage({ students, grades, onSaveGrades }: GradesPag
       if (!text) return;
       const lines = text.split(/\r?\n/).filter(Boolean);
       if (lines.length === 0) return;
-      const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+      // normalize headers: remove spaces and lowercase to match tokens like
+      // admissionnumber, name, class, section, subject, term, marks
+      const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g, ''));
       const admIndex = header.indexOf('admissionnumber');
-      const nameIndex = header.indexOf('name');
       const marksIndex = header.indexOf('marks');
+      const subjectIndex = header.indexOf('subject');
+      const termIndex = header.indexOf('term');
       if (admIndex === -1 || marksIndex === -1) {
-        window.alert('CSV must contain headers: admissionNumber, name, marks');
+        window.alert('CSV must contain headers: Admission Number, Name, Class, Section, Subject, Term, Marks');
         return;
       }
       const parsed: GradeEntry[] = [];
@@ -128,14 +136,22 @@ export default function GradesPage({ students, grades, onSaveGrades }: GradesPag
         const cols = lines[i].split(',');
         const admissionNumber = cols[admIndex]?.replace(/"/g, '').trim();
         const marksStr = (cols[marksIndex] || '').trim();
+        const csvSubject = subjectIndex !== -1 ? (cols[subjectIndex] || '').trim() : '';
+        const csvTerm = termIndex !== -1 ? (cols[termIndex] || '').trim() : '';
         if (!admissionNumber) continue;
+        // Use current filter scope; template is generated for filtered students
         const student = filteredStudents.find(s => s.admissionNumber === admissionNumber);
         if (!student) {
           skipped.push(admissionNumber);
           continue;
         }
         const marks = parseFloat(marksStr || '0');
-        parsed.push({ studentId: student.id, subject: selectedSubject, marks, term: selectedTerm });
+        parsed.push({
+          studentId: student.id,
+          subject: csvSubject || selectedSubject,
+          term: csvTerm || selectedTerm,
+          marks,
+        });
       }
       if (parsed.length > 0) {
         onSaveGrades(parsed);
