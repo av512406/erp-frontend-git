@@ -13,6 +13,7 @@ import FeesPage from "@/components/FeesPage";
 import GradesPage from "@/components/GradesPage";
 import ReportsPage from "@/components/ReportsPage";
 import DataToolsPage from "@/components/DataToolsPage";
+import SubjectsPage from "@/components/SubjectsPage";
 import type { Student } from "@shared/schema";
 import type { FeeTransaction } from "@/components/FeesPage";
 import type { GradeEntry } from "@/components/GradesPage";
@@ -255,6 +256,9 @@ function Router({ user }: { user: User }) {
           onUpsertStudents={handleUpsertStudents}
           onImportGrades={handleImportGrades}
         />
+      </Route>
+      <Route path="/subjects">
+        <SubjectsPage students={students} />
       </Route>
       <Route path="/grades">
         <GradesPage

@@ -91,3 +91,14 @@ export const insertGradeSchema = createInsertSchema(grades).omit({
 
 export type InsertGrade = z.infer<typeof insertGradeSchema>;
 export type Grade = typeof grades.$inferSelect;
+
+// Subjects catalog (for persistence)
+export const subjects = pgTable("subjects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+});
+
+export const insertSubjectSchema = createInsertSchema(subjects).omit({ id: true });
+export type InsertSubject = z.infer<typeof insertSubjectSchema>;
+export type Subject = typeof subjects.$inferSelect;

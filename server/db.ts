@@ -63,6 +63,25 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
         updated_at timestamptz NOT NULL DEFAULT now()
       );
 
+      -- subjects catalog
+      CREATE TABLE IF NOT EXISTS subjects (
+        id text PRIMARY KEY,
+        code text UNIQUE NOT NULL,
+        name text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      -- per-class subject assignments
+      CREATE TABLE IF NOT EXISTS class_subjects (
+        id text PRIMARY KEY,
+        grade text NOT NULL,
+        subject_id text NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE(grade, subject_id)
+      );
+
       -- add transaction_id column if upgrading existing schema
       ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS transaction_id text UNIQUE;
   -- ensure timestamp columns exist for legacy tables
@@ -72,6 +91,11 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
   ALTER TABLE students ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
   ALTER TABLE grades ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
   ALTER TABLE grades ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+  -- ensure columns exist for new tables in case of partial deployments
+  ALTER TABLE subjects ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+  ALTER TABLE subjects ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+  ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+  ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
       -- backfill any null transaction_id values
       UPDATE fee_transactions SET transaction_id = concat('TXN', substr(md5(random()::text),1,8)) WHERE transaction_id IS NULL;
       -- add parent name columns if missing

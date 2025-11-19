@@ -1,7 +1,7 @@
 import type { Express } from 'express';
 import { createServer, type Server } from 'http';
 import { pool, ensureTables, genId, genTransactionId } from './db';
-import { insertStudentSchema, insertGradeSchema, insertFeeTransactionSchema } from '../shared/schema';
+import { insertStudentSchema, insertGradeSchema, insertFeeTransactionSchema, insertSubjectSchema } from '../shared/schema';
 import { ZodError } from 'zod';
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -36,6 +36,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       subject: row.subject,
       marks: parseFloat(row.marks),
       term: row.term,
+    };
+  }
+
+  function mapSubject(row: any) {
+    return {
+      id: row.id,
+      code: row.code,
+      name: row.name,
     };
   }
 
@@ -248,6 +256,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const id = req.params.id;
     await pool.query('DELETE FROM fee_transactions WHERE id=$1', [id]);
     res.json({ deleted: id });
+  });
+
+  // --- Subjects Management ---
+  app.get('/api/subjects', async (_req, res) => {
+    const { rows } = await pool.query('SELECT * FROM subjects ORDER BY name');
+    res.json(rows.map(mapSubject));
+  });
+
+  app.post('/api/subjects', async (req, res) => {
+    try {
+      const data = insertSubjectSchema.parse(req.body);
+      const id = genId();
+      const q = await pool.query('INSERT INTO subjects (id, code, name) VALUES ($1,$2,$3) RETURNING *', [id, data.code, data.name]);
+      res.status(201).json(mapSubject(q.rows[0]));
+    } catch (e) {
+      if (e instanceof ZodError) return res.status(400).json({ message: 'validation', issues: e.format() });
+      if ((e as any)?.code === '23505') return res.status(409).json({ message: 'subject code exists' });
+      res.status(500).json({ message: 'internal error' });
+    }
+  });
+
+  app.delete('/api/subjects/:id', async (req, res) => {
+    const id = req.params.id;
+    await pool.query('DELETE FROM subjects WHERE id=$1', [id]);
+    res.json({ deleted: id });
+  });
+
+  // Class-subject assignments
+  app.get('/api/classes/:grade/subjects', async (req, res) => {
+    const grade = req.params.grade;
+    const { rows } = await pool.query(
+      `SELECT s.* FROM class_subjects cs JOIN subjects s ON s.id = cs.subject_id WHERE cs.grade=$1 ORDER BY s.name`,
+      [grade]
+    );
+    res.json(rows.map(mapSubject));
+  });
+
+  app.post('/api/classes/:grade/subjects', async (req, res) => {
+    const grade = req.params.grade;
+    const { subjectId } = req.body as { subjectId: string };
+    if (!subjectId) return res.status(400).json({ message: 'subjectId required' });
+    const id = genId();
+    try {
+      await pool.query('INSERT INTO class_subjects (id, grade, subject_id) VALUES ($1,$2,$3)', [id, grade, subjectId]);
+      res.status(201).json({ id, grade, subjectId });
+    } catch (e) {
+      if ((e as any)?.code === '23505') return res.status(409).json({ message: 'already assigned' });
+      res.status(500).json({ message: 'failed to assign' });
+    }
+  });
+
+  app.delete('/api/classes/:grade/subjects/:subjectId', async (req, res) => {
+    const grade = req.params.grade;
+    const subjectId = req.params.subjectId;
+    await pool.query('DELETE FROM class_subjects WHERE grade=$1 AND subject_id=$2', [grade, subjectId]);
+    res.json({ grade, subjectId, unassigned: true });
   });
 
   // --- Export Endpoints (CSV) ---

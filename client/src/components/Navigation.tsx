@@ -8,6 +8,7 @@ import {
   FileText,
   BookOpen,
   Database,
+  Library,
   LogOut
 } from "lucide-react";
 
@@ -26,6 +27,7 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
     { path: "/fees", label: "Fees", icon: DollarSign },
     { path: "/reports", label: "Reports", icon: FileText },
     { path: "/grades", label: "Grades", icon: BookOpen },
+    { path: "/subjects", label: "Subjects", icon: Library },
     { path: "/data-tools", label: "Data Tools", icon: Database },
   ];
 

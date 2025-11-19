@@ -204,7 +204,7 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="text-center border-b pb-4">
-              <h1 className="text-2xl font-semibold">Greenwood Academy</h1>
+              <h1 className="text-2xl font-semibold">Glorious Public School</h1>
               <p className="text-sm text-muted-foreground">Academic Report Card</p>
             </div>
 
