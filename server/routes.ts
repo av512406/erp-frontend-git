@@ -278,6 +278,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk import fee transactions
+  app.post('/api/fees/import', async (req, res) => {
+    const incoming = req.body as any[];
+    if (!Array.isArray(incoming)) return res.status(400).json({ message: 'transactions array required' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      let inserted = 0;
+      const skipped: any[] = [];
+      for (let i = 0; i < incoming.length; i++) {
+        const row = incoming[i];
+        try {
+          // ensure amount is string for schema/decimal
+          const normalized = { ...row, amount: row.amount != null ? String(row.amount) : row.amount };
+          const data = insertFeeTransactionSchema.parse(normalized);
+          // verify student exists
+          const exists = await client.query('SELECT id FROM students WHERE id=$1', [data.studentId]);
+          if ((exists.rowCount ?? 0) === 0) {
+            skipped.push({ index: i, reason: 'student not found', row });
+            continue;
+          }
+          const id = genId();
+          const transactionId = genTransactionId();
+          await client.query(
+            `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null]
+          );
+          inserted++;
+        } catch (e: any) {
+          skipped.push({ index: i, reason: e?.message || 'invalid row', row });
+        }
+      }
+      await client.query('COMMIT');
+      res.json({ inserted, skipped: skipped.length, skippedRows: skipped });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error(e);
+      res.status(500).json({ message: 'import failed' });
+    } finally {
+      client.release();
+    }
+  });
+
   app.delete('/api/fees/:id', async (req, res) => {
     const id = req.params.id;
     await pool.query('DELETE FROM fee_transactions WHERE id=$1', [id]);

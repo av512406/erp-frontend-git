@@ -67,6 +67,7 @@ interface DataToolsPageProps {
   // upsert existing students (update existing records by admissionNumber)
   onUpsertStudents: (students: Omit<Student, 'id'>[]) => Promise<{ updated: number }> | { updated: number };
   onImportGrades: (grades: GradeEntry[]) => Promise<void> | void;
+  onImportTransactions?: (transactions: { studentId: string; amount: string; paymentDate: string; paymentMode?: string; remarks?: string }[]) => Promise<{ inserted: number; skipped: number; skippedRows?: any[] }> | { inserted: number; skipped: number; skippedRows?: any[] };
   // optional: load demo data (for admin/testing)
   onLoadDemoData?: (count?: number) => void;
 }
@@ -83,10 +84,13 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
   const [templateGrade, setTemplateGrade] = useState<string>("all");
   const studentFileRef = useRef<HTMLInputElement>(null);
   const gradesFileRef = useRef<HTMLInputElement>(null);
+  const transactionsFileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const [skippedAdmissions, setSkippedAdmissions] = useState<string[] | null>(null);
   const [lastImportedRows, setLastImportedRows] = useState<RawStudentRow[] | null>(null);
   const [skippedRows, setSkippedRows] = useState<RawStudentRow[] | null>(null);
+  const [skippedTransactions, setSkippedTransactions] = useState<any[] | null>(null);
+  const [lastImportedTransactions, setLastImportedTransactions] = useState<any[] | null>(null);
 
   // Get unique grades for filter dropdown
   const uniqueGrades = Array.from(new Set(students.map(s => s.grade)))
@@ -256,6 +260,56 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
     reader.readAsText(file);
   };
 
+  const handleTransactionsImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const csv = event.target?.result as string;
+      window.Papa.parse(csv, {
+        header: true,
+        complete: async (results: any) => {
+          const normalize = (val: any) => typeof val === 'string' ? val.trim() : (val ?? '');
+          const normalizeNumberString = (val: any) => String((String(val ?? '')).replace(/,/g, '').trim());
+          const imported = results.data
+            .map((row: any, idx: number) => {
+              const admissionNumber = normalize(row.admissionNumber || row['Admission Number']);
+              const studentId = normalize(row.studentId || row.studentId) || (admissionNumber ? (students.find(s => s.admissionNumber === admissionNumber)?.id || '') : '');
+              const amount = normalizeNumberString(row.amount || row.Amount || row.AMOUNT);
+              const paymentDateRaw = normalize(row.paymentDate || row['paymentDate'] || row['Payment Date'] || row.payment_date);
+              const paymentDate = formatCsvDate(paymentDateRaw);
+              const paymentMode = normalize(row.paymentMode || row['paymentMode'] || row['Payment Mode']) || 'cash';
+              const remarks = normalize(row.remarks || row.Remarks || '');
+              return { studentId, admissionNumber, amount, paymentDate, paymentMode, remarks, _raw: row, _index: idx };
+            })
+            .filter((r: any) => r.studentId && r.amount && r.paymentDate);
+
+          try {
+            let summary: any = null;
+            if (typeof (onImportTransactions as any) === 'function') {
+              summary = await (onImportTransactions as any)(imported.map((r: any) => ({ studentId: r.studentId, amount: r.amount, paymentDate: r.paymentDate, paymentMode: r.paymentMode, remarks: r.remarks })));
+            } else {
+              const res = await fetch('/api/fees/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(imported.map((r: any) => ({ studentId: r.studentId, amount: r.amount, paymentDate: r.paymentDate, paymentMode: r.paymentMode, remarks: r.remarks }))) });
+              if (!res.ok) throw new Error('Import failed');
+              summary = await res.json();
+            }
+            toast({ title: 'Import Finished', description: `Inserted ${summary.inserted || 0} transactions, skipped ${summary.skipped || 0}` });
+            setLastImportedTransactions(imported as any[]);
+            setSkippedTransactions(summary.skippedRows || []);
+          } catch (err: any) {
+            toast({ title: 'Import error', description: err?.message || 'Failed to import transactions', variant: 'destructive' });
+          }
+
+          setIsImporting(false);
+          if (transactionsFileRef.current) transactionsFileRef.current.value = '';
+        }
+      });
+    };
+    reader.readAsText(file);
+  };
+
   const handleExportStudents = () => {
     // Filter students based on selected filter
     const filteredStudents = exportFilter === "all" 
@@ -389,6 +443,50 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
           <AlertDialogFooter>
             <AlertDialogCancel>Close</AlertDialogCancel>
             <AlertDialogAction onClick={() => setSkippedAdmissions(null)}>Okay</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Skipped transactions dialog */}
+      <AlertDialog open={!!skippedTransactions} onOpenChange={() => setSkippedTransactions(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Skipped Transactions</AlertDialogTitle>
+            <AlertDialogDescription>
+              The following transaction rows were skipped during import.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-64 overflow-y-auto mt-2">
+            <ul className="list-disc pl-6">
+              {skippedTransactions?.map((r, idx) => (
+                <li key={idx} className="font-mono">{r.index != null ? `Row ${r.index}` : JSON.stringify(r)} — {r.reason || ''}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!skippedTransactions || skippedTransactions.length === 0) return;
+                const header = ['index','reason','raw'];
+                const rows = skippedTransactions.map(r => [
+                  r.index ?? '',
+                  (r.reason || '').replace(/"/g, '""'),
+                  '"' + JSON.stringify(r.row || {}) + '"'
+                ].join(','));
+                const csv = [header.join(','), ...rows].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = `skipped-transactions-${new Date().toISOString().split('T')[0]}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+              }}
+            >
+              Export Skipped CSV
+            </Button>
+            <Button onClick={() => setSkippedTransactions(null)}>Close</Button>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Close</AlertDialogCancel>
+            <AlertDialogAction onClick={() => setSkippedTransactions(null)}>Okay</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -527,6 +625,43 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
               onClick={() => gradesFileRef.current?.click()}
               disabled={isImporting}
               data-testid="button-import-grades"
+            >
+              <Upload className="w-4 h-4" />
+              {isImporting ? 'Importing...' : 'Select File'}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Import Transactions</CardTitle>
+            <CardDescription>
+              Upload a CSV to bulk import fee transactions (studentId or admissionNumber supported)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="transactions-file">CSV File</Label>
+              <Input
+                id="transactions-file"
+                type="file"
+                accept=".csv"
+                ref={transactionsFileRef}
+                onChange={handleTransactionsImport}
+                disabled={isImporting}
+                data-testid="input-import-transactions"
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <p className="font-medium mb-1">Accepted columns (case-insensitive):</p>
+              <p className="font-mono text-xs">studentId or admissionNumber, amount, paymentDate, paymentMode (optional), remarks (optional)</p>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              onClick={() => transactionsFileRef.current?.click()}
+              disabled={isImporting}
+              data-testid="button-import-transactions"
             >
               <Upload className="w-4 h-4" />
               {isImporting ? 'Importing...' : 'Select File'}

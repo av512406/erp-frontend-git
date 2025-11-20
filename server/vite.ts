@@ -41,8 +41,13 @@ export async function setupVite(app: Express, server: Server) {
   });
 
   app.use(vite.middlewares);
+  // Only serve the client index.html for non-API requests. If the request
+  // path starts with /api we must call next() so API routes registered
+  // earlier are allowed to handle the request.
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
+
+    if (url.startsWith('/api')) return next();
 
     try {
       const clientTemplate = path.resolve(

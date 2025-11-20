@@ -195,6 +195,19 @@ function Router({ user }: { user: User }) {
     await handleSaveGrades(imported);
   };
 
+  const handleImportTransactions = async (imported: { studentId: string; amount: string; paymentDate: string; paymentMode?: string; remarks?: string }[]) => {
+    try {
+      const res = await fetch('/api/fees/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(imported) });
+      if (res.ok) {
+        const summary = await res.json();
+        const refreshed = await fetch('/api/fees').then(r => r.json());
+        setTransactions(refreshed);
+        return { inserted: summary.inserted, skipped: summary.skipped, skippedRows: summary.skippedRows || [] };
+      }
+    } catch (e) { /* ignore */ }
+    return { inserted: 0, skipped: 0, skippedRows: [] };
+  };
+
   const handleLoadDemoData = (count = 50) => {
     // Generate demo students across grades 1-12 and sections A-C
     const gradesList = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
@@ -294,6 +307,7 @@ function Router({ user }: { user: User }) {
           onImportStudents={handleImportStudents}
           onUpsertStudents={handleUpsertStudents}
           onImportGrades={handleImportGrades}
+          onImportTransactions={handleImportTransactions}
         />
       </Route>
       <Route path="/subjects">
