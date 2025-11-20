@@ -14,8 +14,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       id: row.id,
       admissionNumber: row.admission_number,
       name: row.name,
-      dateOfBirth: row.date_of_birth,
-      admissionDate: row.admission_date,
+      // normalize date fields to YYYY-MM-DD strings so frontend <input type="date"> can display them
+      dateOfBirth: formatDateForClient(row.date_of_birth),
+      admissionDate: formatDateForClient(row.admission_date),
       aadharNumber: row.aadhar_number,
       penNumber: row.pen_number,
       aaparId: row.aapar_id,
@@ -27,6 +28,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       motherName: row.mother_name,
       yearlyFeeAmount: row.yearly_fee_amount?.toString?.() ?? row.yearly_fee_amount
     };
+  }
+
+  function formatDateForClient(v: any) {
+    if (v == null) return '';
+    // If it's already a YYYY-MM-DD string
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    // If it's an ISO timestamp string
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) return v.slice(0, 10);
+    // If it's a Date object
+    if (v instanceof Date && !isNaN(v.getTime())) return v.toISOString().slice(0, 10);
+    // Fallback: try to parse and format
+    try {
+      const d = new Date(v);
+      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    } catch {}
+    return '';
   }
 
   function mapGrade(row: any) {
