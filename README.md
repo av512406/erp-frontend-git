@@ -2,6 +2,15 @@
 # School ERP — Project overview, analysis & improvements
 
 
+# Empty schema (clean slate)
+npm run reset:db111  
+
+# Reset and load sample data for quick UI testing
+npm run reset:db111:sample
+
+# Start dev server afterwards
+npm run dev
+
 
 This document summarizes the current project (School ERP), describes what to improve for production readiness and maintainability, and answers whether the project can run on free tiers given expected usage (250–500 students and ~50 concurrent/active users for one school).
 
