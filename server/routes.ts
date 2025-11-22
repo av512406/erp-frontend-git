@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import ExcelJS from 'exceljs';
 import { createServer, type Server } from 'http';
 import { pool, ensureTables, genId, genTransactionId } from './db';
 import { insertStudentSchema, insertGradeSchema, insertFeeTransactionSchema, insertSubjectSchema } from '../shared/schema';
@@ -552,6 +553,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e) {
       console.error(e);
       res.status(500).json({ message: 'failed to export students' });
+    }
+  });
+
+  // Real .xlsx export for students with selectable columns via ?cols=col1,col2 using exceljs
+  app.get('/api/export/students/excel', async (req, res) => {
+    try {
+      const rawCols = (req.query.cols as string | undefined) || '';
+      const requested = rawCols.split(',').map(c => c.trim()).filter(Boolean);
+      const allowedMap: Record<string, { header: string; expr: string; transform?: (v: any) => any }> = {
+        admissionNumber: { header: 'Admission Number', expr: 'admission_number' },
+        name: { header: 'Name', expr: 'name' },
+        fatherName: { header: "Father's Name", expr: 'father_name' },
+        motherName: { header: "Mother's Name", expr: 'mother_name' },
+        dateOfBirth: { header: 'Date of Birth', expr: 'date_of_birth' },
+        admissionDate: { header: 'Admission Date', expr: 'admission_date' },
+        aadharNumber: { header: 'Aadhar Number', expr: 'aadhar_number' },
+        penNumber: { header: 'PEN Number', expr: 'pen_number' },
+        aaparId: { header: 'Aapar ID', expr: 'aapar_id' },
+        mobileNumber: { header: 'Mobile Number', expr: 'mobile_number' },
+        address: { header: 'Address', expr: 'address' },
+        grade: { header: 'Class', expr: 'grade' },
+        section: { header: 'Section', expr: 'section' },
+        yearlyFeeAmount: { header: 'Yearly Fee Amount', expr: 'yearly_fee_amount', transform: v => v?.toString?.() ?? v },
+        status: { header: 'Status', expr: 'status' },
+        leftDate: { header: 'Left Date', expr: 'left_date' },
+        leavingReason: { header: 'Leaving Reason', expr: 'leaving_reason' }
+      };
+      const finalCols = (requested.length ? requested : Object.keys(allowedMap)).filter(c => allowedMap[c]);
+      if (finalCols.length === 0) return res.status(400).json({ message: 'no valid columns requested' });
+      const uniqueExprs: string[] = [];
+      for (const c of finalCols) {
+        const expr = allowedMap[c].expr;
+        if (!uniqueExprs.includes(expr)) uniqueExprs.push(expr);
+      }
+      const selectList = uniqueExprs.join(', ');
+      const { rows } = await pool.query(`SELECT ${selectList} FROM students ORDER BY admission_number`);
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Students');
+      sheet.addRow(finalCols.map(c => allowedMap[c].header));
+      for (const r of rows) {
+        const rowValues = finalCols.map(c => {
+          const def = allowedMap[c];
+          const raw = (r as any)[def.expr];
+          return def.transform ? def.transform(raw) : raw;
+        });
+        sheet.addRow(rowValues);
+      }
+      // Basic styling: header bold
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.alignment = { vertical: 'middle' };
+      // Auto width approximation
+      finalCols.forEach((c, idx) => {
+        let maxLen = allowedMap[c].header.length;
+        for (let i = 2; i <= sheet.rowCount; i++) {
+          const v = sheet.getRow(i).getCell(idx + 1).value;
+          const len = v == null ? 0 : String(v).length;
+          if (len > maxLen) maxLen = len;
+        }
+        sheet.getColumn(idx + 1).width = Math.min(60, Math.max(12, maxLen + 2));
+      });
+      const arrayBuffer = await workbook.xlsx.writeBuffer();
+      const buf = Buffer.from(arrayBuffer);
+      res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition',`attachment; filename="students-${finalCols.length}-cols-${new Date().toISOString().split('T')[0]}.xlsx"`);
+      res.send(buf);
+    } catch (e) {
+      console.error('students excel export error', e);
+      res.status(500).json({ message: 'failed to export students xlsx', error: (e as any)?.message });
     }
   });
 

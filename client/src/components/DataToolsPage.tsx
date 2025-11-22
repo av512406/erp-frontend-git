@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Download } from "lucide-react";
+import { Upload, Download, FileSpreadsheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -17,6 +17,7 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import type { Student } from "@shared/schema";
+import StudentsExcelExportModal from './StudentsExcelExportModal';
 import type { GradeEntry } from "./GradesPage";
 
 // Utility: consistently format date fields as YYYY-MM-DD for CSV (strip time if present)
@@ -91,6 +92,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
   const [skippedRows, setSkippedRows] = useState<RawStudentRow[] | null>(null);
   const [skippedTransactions, setSkippedTransactions] = useState<any[] | null>(null);
   const [lastImportedTransactions, setLastImportedTransactions] = useState<any[] | null>(null);
+  const [excelModalOpen, setExcelModalOpen] = useState(false);
 
   // Get unique grades for filter dropdown
   const uniqueGrades = Array.from(new Set(students.map(s => s.grade)))
@@ -710,6 +712,15 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
               <Button
                 variant="outline"
                 className="w-full gap-2"
+                onClick={() => setExcelModalOpen(true)}
+                disabled={students.length === 0}
+                data-testid="button-export-students-excel"
+              >
+                <FileSpreadsheet className="w-4 h-4" /> Students Excel
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full gap-2"
                 onClick={async () => {
                   try {
                     const resp = await fetch('/api/export/transactions');
@@ -755,6 +766,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
           </CardContent>
         </Card>
       </div>
+      <StudentsExcelExportModal open={excelModalOpen} onClose={() => setExcelModalOpen(false)} />
     </div>
   );
 }
