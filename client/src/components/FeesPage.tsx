@@ -56,6 +56,10 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
   // New: class & section filters (dependencies order: choose class first, then section)
   const [filterGrade, setFilterGrade] = useState<'all' | string>('all');
   const [filterSection, setFilterSection] = useState<'all' | string>('all');
+  // Date range for Excel export
+  const [exportStart, setExportStart] = useState<string>('');
+  const [exportEnd, setExportEnd] = useState<string>('');
+  const [exporting, setExporting] = useState(false);
 
   // Unique grades & sections (sections depend on selected grade)
   const uniqueGrades = useMemo(() => Array.from(new Set(students.map(s => s.grade))).sort((a,b)=> Number(a)-Number(b)), [students]);
@@ -125,6 +129,30 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
   const totalPaid = studentTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
   const yearlyFee = viewedStudent ? parseFloat((viewedStudent as any).yearlyFeeAmount || '0') : 0;
   const balance = yearlyFee - totalPaid;
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (exportStart) params.set('start', exportStart);
+      if (exportEnd) params.set('end', exportEnd);
+      // Direct navigation gives browser native download handling & avoids blob memory
+      const url = `/api/export/transactions/excel?${params.toString()}`;
+      // Use a temporary iframe to avoid leaving current page
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = url;
+      document.body.appendChild(iframe);
+      // Cleanup after some seconds
+      setTimeout(() => {
+        iframe.remove();
+      }, 10000);
+    } catch (e) {
+      alert('Failed to initiate download');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div className="container mx-auto p-6">
@@ -291,7 +319,22 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
         <div className="lg:col-span-3">
           <Card>
             <CardHeader>
-              <CardTitle>Payment History</CardTitle>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <CardTitle>Payment History</CardTitle>
+                <div className="flex items-end gap-2 flex-wrap">
+                  <div className="flex flex-col">
+                    <Label htmlFor="export-start" className="text-xs">From</Label>
+                    <Input id="export-start" type="date" value={exportStart} onChange={e=>setExportStart(e.target.value)} className="h-8" />
+                  </div>
+                  <div className="flex flex-col">
+                    <Label htmlFor="export-end" className="text-xs">To</Label>
+                    <Input id="export-end" type="date" value={exportEnd} onChange={e=>setExportEnd(e.target.value)} className="h-8" />
+                  </div>
+                  <Button type="button" variant="outline" size="sm" disabled={exporting} onClick={handleExportExcel} className="gap-2" data-testid="button-export-fees-excel">
+                    <FileText className="w-4 h-4" /> {exporting ? 'Exporting...' : 'Export Excel'}
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <div className="border rounded-lg overflow-hidden">

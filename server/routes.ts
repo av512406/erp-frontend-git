@@ -581,6 +581,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Excel export with optional date range filtering (inclusive)
+  app.get('/api/export/transactions/excel', async (req, res) => {
+    // Fallback HTML-table based Excel (opens in Excel) to avoid external dependency issues
+    try {
+      const { start, end } = req.query as { start?: string; end?: string };
+      const params: any[] = [];
+      const where: string[] = [];
+      if (start) { where.push(`f.payment_date >= $${params.length + 1}`); params.push(start); }
+      if (end) { where.push(`f.payment_date <= $${params.length + 1}`); params.push(end); }
+      const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+      const q = await pool.query(`
+        SELECT f.transaction_id, f.amount, f.payment_date, f.payment_mode, f.remarks,
+               s.admission_number, s.name
+        FROM fee_transactions f
+        JOIN students s ON s.id = f.student_id
+        ${whereSql}
+        ORDER BY f.payment_date ASC, f.id ASC
+      `, params);
+      let total = 0;
+      const rowsHtml = q.rows.map(r => {
+        const amt = parseFloat(r.amount);
+        total += isFinite(amt) ? amt : 0;
+        return `<tr>
+          <td>${r.admission_number}</td>
+          <td>${escapeHtml(r.name)}</td>
+          <td>${r.transaction_id}</td>
+          <td>${amt.toFixed(2)}</td>
+          <td>${r.payment_date}</td>
+          <td>${r.payment_mode}</td>
+          <td>${escapeHtml(r.remarks || '')}</td>
+        </tr>`;
+      }).join('');
+      const summaryRow = `<tr style="font-weight:bold;background:#eef"><td></td><td>TOTAL</td><td></td><td>${total.toFixed(2)}</td><td></td><td></td><td></td></tr>`;
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8" />
+        <title>Fee Transactions Export</title></head><body>
+        <table border="1" cellspacing="0" cellpadding="4">
+          <thead style="background:#ddd;font-weight:bold">
+            <tr>
+              <th>Admission Number</th><th>Student Name</th><th>Transaction ID</th><th>Amount (₹)</th><th>Payment Date</th><th>Payment Mode</th><th>Remarks</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}${summaryRow}</tbody>
+        </table>
+      </body></html>`;
+      const filename = `fee-transactions-${start || 'ALL'}-${end || 'ALL'}.xls`;
+      res.setHeader('Content-Type','application/vnd.ms-excel');
+      res.setHeader('Content-Disposition',`attachment; filename="${filename}"`);
+      res.send(html);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'failed to export excel (html table)', error: (e as any)?.message });
+    }
+  });
+
   app.get('/api/export/grades', async (_req, res) => {
     try {
       const { rows } = await pool.query(`
@@ -609,6 +663,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const needsQuotes = /[",\n]/.test(value);
     let v = value.replace(/"/g, '""');
     return needsQuotes ? '"' + v + '"' : v;
+  }
+  function escapeHtml(value: string) {
+    if (value == null) return '';
+    return value
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
   }
 
   // --- School Config Endpoints ---
