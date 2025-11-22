@@ -17,9 +17,7 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator
+  DropdownMenuItem
 } from '@/components/ui/dropdown-menu';
 import { useSchoolConfig } from '@/hooks/useSchoolConfig';
 
@@ -34,11 +32,9 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
   // Fetch school config globally so logo/phone persist across reloads
   const { config } = useSchoolConfig();
 
-  // Core admin links (Settings & Subjects moved into dropdown)
+  // Core admin links (Students & Withdrawn consolidated into dropdown; Settings & Subjects in another)
   const adminLinks = [
     { path: "/", label: "Dashboard", icon: LayoutDashboard },
-    { path: "/students", label: "Students", icon: Users },
-    { path: "/students-withdrawn", label: 'Withdrawn Students', icon: UserX },
     { path: "/fees", label: "Fees", icon: DollarSign },
     { path: "/reports", label: "Reports", icon: FileText },
     { path: "/grades", label: "Grades", icon: BookOpen },
@@ -69,7 +65,53 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
             </Link>
             
             <div className="flex items-center gap-1">
-              {links.map((link) => {
+              {/* Dashboard always first */}
+              {links.filter(l => l.path === '/').map(link => {
+                const Icon = link.icon;
+                const isActive = location === link.path;
+                return (
+                  <Link key={link.path} href={link.path}>
+                    <Button
+                      variant={isActive ? "secondary" : "ghost"}
+                      size="sm"
+                      className="gap-2"
+                      data-testid={`link-${link.label.toLowerCase()}`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {link.label}
+                    </Button>
+                  </Link>
+                );
+              })}
+              {userRole === 'admin' && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant={["/students","/students-withdrawn"].includes(location) ? "secondary" : "ghost"}
+                      size="sm"
+                      className="gap-2"
+                      data-testid="link-students-dropdown"
+                    >
+                      <Users className="w-4 h-4" />
+                      Students
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem asChild>
+                      <Link href="/students" className="flex items-center gap-2">
+                        <Users className="w-4 h-4" /> Enrolled
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/students-withdrawn" className="flex items-center gap-2">
+                        <UserX className="w-4 h-4" /> Withdrawn
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {/* Remaining links (excluding Dashboard) */}
+              {links.filter(l => l.path !== '/').map(link => {
                 const Icon = link.icon;
                 const isActive = location === link.path;
                 return (

@@ -11,8 +11,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Search, UserX } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, UserX, Eye } from "lucide-react";
 import StudentFormModal from "./StudentFormModal";
+import StudentViewModal from "./StudentViewModal";
 import type { Student, InsertStudent } from "@shared/schema";
 
 interface StudentsPageProps {
@@ -37,6 +38,8 @@ export default function StudentsPage({
   const [filterSection, setFilterSection] = useState<string>("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
+  const [isViewOpen, setIsViewOpen] = useState(false);
 
   // derive unique grades and sections for filter dropdowns
   const uniqueGrades = Array.from(new Set(students.map(s => s.grade))).sort((a, b) => parseInt(a) - parseInt(b));
@@ -71,6 +74,11 @@ export default function StudentsPage({
     }
     setIsModalOpen(false);
     setEditingStudent(null);
+  };
+
+  const openView = (student: Student) => {
+    setViewingStudent(student);
+    setIsViewOpen(true);
   };
 
   return (
@@ -168,6 +176,15 @@ export default function StudentsPage({
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => openView(student)}
+                          title="View Details"
+                          data-testid={`button-view-${student.id}`}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleEdit(student)}
                           data-testid={`button-edit-${student.id}`}
                         >
@@ -218,6 +235,11 @@ export default function StudentsPage({
         }}
         onSave={handleSave}
         student={editingStudent}
+      />
+      <StudentViewModal
+        isOpen={isViewOpen}
+        onClose={() => { setIsViewOpen(false); setViewingStudent(null); }}
+        student={viewingStudent}
       />
     </div>
   );
