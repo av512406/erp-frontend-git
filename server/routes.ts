@@ -284,27 +284,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Fee Transactions APIs
   app.get('/api/fees', async (_req, res) => {
-    const { rows } = await pool.query(`
-      SELECT f.id, f.student_id as "studentId", f.transaction_id as "transactionId", f.amount, f.payment_date as "paymentDate", f.payment_mode as "paymentMode", f.remarks,
-             s.name as "studentName", f.created_at as "createdAt", f.updated_at as "updatedAt"
-      FROM fee_transactions f
-      JOIN students s ON s.id = f.student_id
-      ORDER BY f.payment_date DESC, f.id DESC
-    `);
-    // adapt shape for frontend expectations (amount number, date field)
-    const mapped = rows.map(r => ({
-      id: r.id,
-      studentId: r.studentId,
-      studentName: r.studentName,
-      amount: parseFloat(r.amount),
-      date: r.paymentDate, // frontend uses 'date'
-      transactionId: r.transactionId,
-      paymentMode: r.paymentMode,
-      remarks: r.remarks || '',
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt
-    }));
-    res.json(mapped);
+    try {
+      const { rows } = await pool.query(`
+        SELECT f.id, f.student_id as "studentId", f.transaction_id as "transactionId", f.amount, f.payment_date as "paymentDate", f.payment_mode as "paymentMode", f.remarks,
+               s.name as "studentName", f.created_at as "createdAt", f.updated_at as "updatedAt", f.receipt_serial as "receiptSerial"
+        FROM fee_transactions f
+        JOIN students s ON s.id = f.student_id
+        ORDER BY f.payment_date DESC, f.id DESC
+      `);
+      const mapped = rows.map(r => ({
+        id: r.id,
+        studentId: r.studentId,
+        studentName: r.studentName,
+        amount: parseFloat(r.amount),
+        date: r.paymentDate,
+        transactionId: r.transactionId,
+        paymentMode: r.paymentMode,
+        remarks: r.remarks || '',
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        receiptSerial: r.receiptSerial == null ? undefined : Number(r.receiptSerial)
+      }));
+      res.json(mapped);
+    } catch (e: any) {
+      // Fallback when receipt_serial column not yet migrated (42703 undefined column)
+      if (e?.code === '42703') {
+        const { rows } = await pool.query(`
+          SELECT f.id, f.student_id as "studentId", f.transaction_id as "transactionId", f.amount, f.payment_date as "paymentDate", f.payment_mode as "paymentMode", f.remarks,
+                 s.name as "studentName", f.created_at as "createdAt", f.updated_at as "updatedAt"
+          FROM fee_transactions f
+          JOIN students s ON s.id = f.student_id
+          ORDER BY f.payment_date DESC, f.id DESC
+        `);
+        const mapped = rows.map(r => ({
+          id: r.id,
+          studentId: r.studentId,
+          studentName: r.studentName,
+          amount: parseFloat(r.amount),
+          date: r.paymentDate,
+          transactionId: r.transactionId,
+          paymentMode: r.paymentMode,
+          remarks: r.remarks || '',
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+          receiptSerial: undefined
+        }));
+        res.json(mapped);
+      } else {
+        console.error(e);
+        res.status(500).json({ message: 'failed to fetch fee transactions' });
+      }
+    }
   });
 
   app.post('/api/fees', async (req, res) => {
@@ -319,10 +349,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if ((exists.rowCount ?? 0) === 0) return res.status(404).json({ message: 'student not found' });
       const id = genId();
       const transactionId = genTransactionId();
-      const q = await pool.query(
-        `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null]
-      );
+      // Obtain receipt serial via sequence; fallback MAX+1 if sequence missing.
+      let receiptSerial: number | null = null;
+      try {
+        const seq = await pool.query("SELECT nextval('receipt_serial_seq') as serial");
+        receiptSerial = Number(seq.rows[0].serial);
+      } catch {
+        try {
+          const maxQ = await pool.query('SELECT COALESCE(MAX(receipt_serial),0)+1 as next FROM fee_transactions');
+          receiptSerial = Number(maxQ.rows[0].next);
+        } catch {}
+      }
+      let q;
+      if (receiptSerial != null) {
+        try {
+          q = await pool.query(
+            `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks, receipt_serial) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+            [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null, receiptSerial]
+          );
+        } catch (e) {
+          // If column absent, retry without serial
+          q = await pool.query(
+            `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+            [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null]
+          );
+        }
+      } else {
+        q = await pool.query(
+          `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+          [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null]
+        );
+      }
       const row = q.rows[0];
       res.status(201).json({
         id: row.id,
@@ -334,12 +391,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentMode: row.payment_mode,
         remarks: row.remarks || '',
         createdAt: row.created_at,
-        updatedAt: row.updated_at
+        updatedAt: row.updated_at,
+        receiptSerial: row.receipt_serial == null ? undefined : Number(row.receipt_serial)
       });
     } catch (e) {
       if (e instanceof ZodError) return res.status(400).json({ message: 'validation', issues: e.format() });
       console.error(e);
       res.status(500).json({ message: 'internal error' });
+    }
+  });
+
+  // Assign a receipt serial to an existing transaction if missing (idempotent).
+  app.post('/api/fees/:id/assign-serial', async (req, res) => {
+    const id = req.params.id;
+    try {
+      const existing = await pool.query('SELECT receipt_serial FROM fee_transactions WHERE id=$1', [id]);
+      if ((existing.rowCount ?? 0) === 0) return res.status(404).json({ message: 'transaction not found' });
+      const current = existing.rows[0].receipt_serial;
+      if (current != null) return res.json({ receiptSerial: Number(current), assigned: false });
+      // Generate next serial via sequence; fallback to MAX+1 if sequence/column exists but sequence missing.
+      let next: number | null = null;
+      try {
+        const seq = await pool.query("SELECT nextval('receipt_serial_seq') as serial");
+        next = Number(seq.rows[0].serial);
+      } catch {
+        // fallback if sequence absent but column present
+        try {
+          const maxQ = await pool.query('SELECT COALESCE(MAX(receipt_serial),0)+1 as next FROM fee_transactions');
+          next = Number(maxQ.rows[0].next);
+        } catch {}
+      }
+      if (next == null) return res.status(500).json({ message: 'cannot allocate receipt serial (migration missing?)' });
+      const upd = await pool.query('UPDATE fee_transactions SET receipt_serial=$1 WHERE id=$2 RETURNING receipt_serial', [next, id]);
+      return res.json({ receiptSerial: Number(upd.rows[0].receipt_serial), assigned: true });
+    } catch (e: any) {
+      if (e?.code === '42703') {
+        return res.status(400).json({ message: 'receipt_serial column not found; run migration first' });
+      }
+      console.error(e);
+      return res.status(500).json({ message: 'internal error' });
     }
   });
 
@@ -366,10 +456,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           const id = genId();
           const transactionId = genTransactionId();
-          await client.query(
-            `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null]
-          );
+          // Per-row sequence consumption; fallback MAX+1 if sequence missing
+          let receiptSerial: number | null = null;
+          try {
+            const seq = await client.query("SELECT nextval('receipt_serial_seq') as serial");
+            receiptSerial = Number(seq.rows[0].serial);
+          } catch {
+            try {
+              const maxQ = await client.query('SELECT COALESCE(MAX(receipt_serial),0)+1 as next FROM fee_transactions');
+              receiptSerial = Number(maxQ.rows[0].next);
+            } catch {}
+          }
+          if (receiptSerial != null) {
+            try {
+              await client.query(
+                `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks, receipt_serial) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+                [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null, receiptSerial]
+              );
+            } catch {
+              await client.query(
+                `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null]
+              );
+            }
+          } else {
+            await client.query(
+              `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+              [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null]
+            );
+          }
           inserted++;
         } catch (e: any) {
           skipped.push({ index: i, reason: e?.message || 'invalid row', row });

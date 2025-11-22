@@ -21,6 +21,10 @@ export interface ReceiptProps {
 	paymentDate: string; // YYYY-MM-DD
 	serial?: number; // if not provided will auto-generate
 	session?: string; // override session
+	// Optional fee summary details
+	yearlyFeeAmount?: number; // total annual fee for student
+	paidSoFar?: number; // cumulative paid INCLUDING current transaction
+	remainingFee?: number; // if not supplied, computed from yearlyFeeAmount - paidSoFar
 }
 
 // Ensure defined order / fallback labels
@@ -33,7 +37,7 @@ const DEFAULT_ORDER = [
 	'Other Fee/Late Fee'
 ];
 
-export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, serial, session }) => {
+export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, serial, session, yearlyFeeAmount, paidSoFar, remainingFee }) => {
 	// Load dynamic config (will fallback to defaults until fetched)
 	useSchoolConfig();
 	const computedSerial = serial ?? nextReceiptSerial();
@@ -48,24 +52,27 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 
 	// Two copies (Student & Office) share same data; differentiate by copy label.
 	const copies = ['Student Copy', 'Office Copy'];
+	const showSummary = typeof yearlyFeeAmount === 'number' && typeof paidSoFar === 'number';
+	const computedRemaining = showSummary ? (typeof remainingFee === 'number' ? remainingFee : (yearlyFeeAmount! - paidSoFar!)) : undefined;
 
 	return (
 		<div className="print-receipt font-serif">
 			{copies.map(copy => (
 				<div key={copy} className="receipt border border-black p-3 mb-4 break-inside-avoid">
 					<div className="text-center mb-2">
-						{schoolConfig.logoUrl && (
-							<div className="flex flex-col items-center justify-center mb-1">
-								<img src={schoolConfig.logoUrl} alt="School Logo" className="h-16 object-contain" />
-								<h1 className="text-xl font-bold tracking-wide mt-1">{schoolConfig.name}</h1>
-							</div>
-						)}
-						{!schoolConfig.logoUrl && (
-							<h1 className="text-xl font-bold tracking-wide">{schoolConfig.name}</h1>
-						)}
+						{/* Compact centered header: logo + school name side-by-side to save vertical space */}
+						<div className="flex items-center justify-center gap-4 mb-1 min-h-[56px]">
+							{schoolConfig.logoUrl && (
+								<img src={schoolConfig.logoUrl} alt="School Logo" className="h-14 object-contain" />
+							)}
+							<h1 className="text-2xl font-bold tracking-wide">{schoolConfig.name}</h1>
+						</div>
 						<p className="text-xs italic">{schoolConfig.addressLine}</p>
-						<div className="inline-block border px-2 py-0.5 text-sm font-semibold mt-1">Fee Receipt</div>
-						<p className="text-[11px] mt-1">{copy}</p>
+						{/* Merge Fee Receipt and copy label to save vertical space */}
+						<div className="inline-flex items-center gap-2 border px-2 py-0.5 text-sm font-semibold mt-1">
+							<span>Fee Receipt</span>
+							<span className="text-[11px] font-normal">({copy})</span>
+						</div>
 					</div>
 					<div className="text-[11px] leading-4 space-y-0.5 mb-2">
 						<div className="flex justify-between"><span>Serial No.: <strong>{String(computedSerial).padStart(4,'0')}</strong></span><span>Date: {paymentDate}</span></div>
@@ -97,7 +104,16 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 							</tr>
 						</tbody>
 					</table>
-					<div className="text-[11px] mb-6">Amount In Words: <em>{amountWords}</em></div>
+					<div className="text-[10px] mb-2">Amount In Words: <em>{amountWords}</em></div>
+					{showSummary && (
+						<div className="text-[10px] mb-3 border border-black px-2 py-1 leading-tight">
+							<span className="font-semibold">Yearly:</span> ₹{yearlyFeeAmount!.toFixed(2)}
+							<span className="mx-1">•</span>
+							<span className="font-semibold">Total Paid:</span> ₹{paidSoFar!.toFixed(2)}
+							<span className="mx-1">•</span>
+							<span className="font-semibold">Remaining:</span> <span className={computedRemaining! <= 0 ? 'text-green-700 font-semibold' : 'text-red-700 font-semibold'}>₹{computedRemaining! >= 0 ? computedRemaining!.toFixed(2) : `${Math.abs(computedRemaining!).toFixed(2)} (Over)`}</span>
+						</div>
+					)}
 					<div className="flex justify-end mt-8">
 						<div className="text-center text-[11px]">
 							<div className="h-10" />
@@ -140,10 +156,13 @@ export function printReceipt(props: ReceiptProps & { copies?: number }) {
 @page { size: A4 portrait; margin: 8mm; }
 html, body { height: auto; margin: 0; }
 .layout { padding: 0; }
-.receipt { page-break-inside: avoid; height: 136mm; box-sizing: border-box; margin: 0 0 6mm 0; padding: 6mm; }
+/* Target approx half-page per receipt to keep two on one sheet */
+.receipt { page-break-inside: avoid; box-sizing: border-box; margin: 0 0 4mm 0; padding: 4mm; height: 134mm; overflow: hidden; }
 table { width:100%; border-collapse:collapse; }
-th,td { border:1px solid #000; }
-img { max-height:60px; }
+th,td { border:1px solid #000; padding:3px; }
+thead th { background:#f3f3f3; }
+img { max-height:50px; }
+.summary-box { font-size:10px; border:1px solid #000; padding:3px 6px; margin:4px 0 6px; }
 </style></head><body><div class="layout">${repeated}</div></body></html>`;
 
 	doc.open();
@@ -177,14 +196,17 @@ function buildPlainHtml(props: ReceiptProps): string {
 	const words = amountToIndianWords(total);
 	const cls = [props.student.grade ? `Class ${props.student.grade}` : '', props.student.section ? `Section ${props.student.section}` : ''].filter(Boolean).join(' ');
 	const copies = ['Student Copy','Office Copy'];
+	const showSummary = typeof props.yearlyFeeAmount === 'number' && typeof props.paidSoFar === 'number';
+	const remaining = showSummary ? (typeof props.remainingFee === 'number' ? props.remainingFee : (props.yearlyFeeAmount! - props.paidSoFar!)) : undefined;
 	const rowsHtml = (copy: string) => `
-	<div style="border:1px solid #000;margin:0 0 6mm 0;font-size:11px;font-family:serif;height:136mm;box-sizing:border-box;padding:6mm;">
+	<div style="border:1px solid #000;margin:0 0 4mm 0;font-size:10px;font-family:serif;box-sizing:border-box;padding:4mm;height:134mm;overflow:hidden;">
 		<div style="text-align:center;margin-bottom:6px;">
-			${schoolConfig.logoUrl ? `<img src="${schoolConfig.logoUrl}" alt="Logo" style="height:60px;object-fit:contain;display:block;margin:0 auto 4px;"/>` : ''}
-			<div style="font-size:18px;font-weight:700;letter-spacing:.5px;">${schoolConfig.name}</div>
+			<div style="display:flex;align-items:center;justify-content:center;gap:12px;min-height:54px;margin-bottom:2px;">
+				${schoolConfig.logoUrl ? `<img src="${schoolConfig.logoUrl}" alt="Logo" style="height:50px;object-fit:contain;"/>` : ''}
+				<div style="font-size:19px;font-weight:700;letter-spacing:.5px;">${schoolConfig.name}</div>
+			</div>
 			<div style="font-size:10px;font-style:italic;">${schoolConfig.addressLine}</div>
-			<div style="display:inline-block;border:1px solid #000;padding:2px 6px;font-size:12px;font-weight:600;margin-top:4px;">Fee Receipt</div>
-			<div style="font-size:10px;margin-top:4px;">${copy}</div>
+			<div style="display:inline-flex;align-items:center;gap:6px;border:1px solid #000;padding:2px 6px;font-size:12px;font-weight:600;margin-top:4px;">Fee Receipt <span style="font-size:10px;font-weight:400;">(${copy})</span></div>
 		</div>
 		<div style="line-height:1.3;margin-bottom:6px;">
 			<div style="display:flex;justify-content:space-between;"><span>Serial No.: <strong>${serial}</strong></span><span>Date: ${props.paymentDate}</span></div>
@@ -206,7 +228,10 @@ function buildPlainHtml(props: ReceiptProps): string {
 				<tr style="font-weight:600;"><td style="border:1px solid #000;text-align:center;padding:4px;">${ordered.length+1}.</td><td style="border:1px solid #000;padding:4px;">Total Amount</td><td style="border:1px solid #000;text-align:right;padding:4px;">${total.toFixed(2)}</td></tr>
 			</tbody>
 		</table>
-		<div style="font-size:11px;margin-bottom:30px;">Amount In Words: <em>${words}</em></div>
+		<div style="font-size:10px;margin-bottom:4px;">Amount In Words: <em>${words}</em></div>
+		${showSummary ? `<div style="font-size:10px;border:1px solid #000;padding:3px 6px;margin-bottom:8px;">
+			<strong>Yearly:</strong> ₹${props.yearlyFeeAmount!.toFixed(2)} • <strong>Total Paid:</strong> ₹${props.paidSoFar!.toFixed(2)} • <strong>Remaining:</strong> <span style="color:${remaining! <= 0 ? '#0a7a0a' : '#b10000'};">₹${remaining! >= 0 ? remaining!.toFixed(2) : `${Math.abs(remaining!).toFixed(2)} (Over)`}</span>
+		</div>` : ''}
 		<div style="text-align:right;font-size:11px;margin-top:20px;">
 			<div style="height:40px;"></div>
 			<div style="border-top:1px solid #000;padding-top:4px;display:inline-block;">Signature</div>

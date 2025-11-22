@@ -22,11 +22,15 @@ interface ReceiptDistributionModalProps {
   onClose: () => void;
   transaction: FeeTransaction | null;
   student: Student | null;
+  // Optional summary numbers supplied by parent
+  yearlyFeeAmount?: number;
+  paidSoFar?: number; // cumulative INCLUDING current transaction
 }
 
-export default function ReceiptDistributionModal({ open, onClose, transaction, student }: ReceiptDistributionModalProps) {
+export default function ReceiptDistributionModal({ open, onClose, transaction, student, yearlyFeeAmount, paidSoFar }: ReceiptDistributionModalProps) {
   const [amounts, setAmounts] = useState<Record<string,string>>({});
   const [touched, setTouched] = useState(false);
+  const [receiptSerial, setReceiptSerial] = useState<number | undefined>(transaction?.receiptSerial);
 
   // Initialize default distribution when transaction changes
   useEffect(() => {
@@ -39,6 +43,7 @@ export default function ReceiptDistributionModal({ open, onClose, transaction, s
       }
       setAmounts(initial);
       setTouched(false);
+      setReceiptSerial(transaction.receiptSerial);
     }
   }, [transaction]);
 
@@ -83,15 +88,30 @@ export default function ReceiptDistributionModal({ open, onClose, transaction, s
     setTouched(true);
   }
 
-  function handlePrint() {
+  async function handlePrint() {
     if (!valid || !transaction || !student) return;
+    let serialToUse = receiptSerial;
+    // Assign a serial if missing
+    if (serialToUse == null) {
+      try {
+        const resp = await fetch(`/api/fees/${transaction.id}/assign-serial`, { method: 'POST' });
+        if (resp.ok) {
+          const data = await resp.json();
+            serialToUse = data.receiptSerial;
+            setReceiptSerial(serialToUse);
+        }
+      } catch {}
+    }
     const items = numericAmounts.map(n => ({ label: n.label, amount: n.amount }));
     printReceipt({
       student: { name: student.name, fatherName: (student as any).fatherName || '', grade: student.grade, section: student.section, admissionNumber: student.admissionNumber },
       paymentDate: transaction.date.slice(0,10),
       items,
       session: schoolConfig.session,
-      copies: 1 // single physical page with both Office & Student copy
+      copies: 1,
+      serial: serialToUse,
+      yearlyFeeAmount: typeof yearlyFeeAmount === 'number' ? yearlyFeeAmount : undefined,
+      paidSoFar: typeof paidSoFar === 'number' ? paidSoFar : undefined
     });
     onClose();
   }
@@ -107,7 +127,11 @@ export default function ReceiptDistributionModal({ open, onClose, transaction, s
             <div className="text-sm">
               <p><strong>Student:</strong> {student.name} ({student.admissionNumber})</p>
               <p><strong>Transaction:</strong> {transaction.transactionId}</p>
+              <p><strong>Receipt Serial:</strong> {receiptSerial != null ? String(receiptSerial).padStart(4,'0') : 'Not Assigned'}</p>
               <p><strong>Total Amount:</strong> ₹{transaction.amount.toFixed(2)}</p>
+              {typeof yearlyFeeAmount === 'number' && typeof paidSoFar === 'number' && (
+                <p><strong>Remaining After Payment:</strong> ₹{(yearlyFeeAmount - paidSoFar).toFixed(2)}</p>
+              )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {CATEGORY_ORDER.map(label => (

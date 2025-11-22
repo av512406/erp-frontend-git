@@ -34,6 +34,7 @@ export interface FeeTransaction {
   transactionId: string;
   paymentMode?: string;
   remarks?: string;
+  receiptSerial?: number; // persisted server-side; undefined for legacy entries
 }
 
 interface FeesPageProps {
@@ -341,6 +342,7 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Receipt Serial</TableHead>
                       <TableHead>Transaction ID</TableHead>
                       <TableHead>Student Name</TableHead>
                       <TableHead>Amount</TableHead>
@@ -358,6 +360,7 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
                     ) : (
                       displayedTransactions.map((transaction) => (
                         <TableRow key={transaction.id} data-testid={`row-transaction-${transaction.id}`}>
+                          <TableCell className="font-mono text-sm">{transaction.receiptSerial != null ? String(transaction.receiptSerial).padStart(4,'0') : '—'}</TableCell>
                           <TableCell className="font-mono text-sm">{transaction.transactionId}</TableCell>
                           <TableCell className="font-medium">{transaction.studentName}</TableCell>
                           <TableCell className="font-semibold">₹{transaction.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
@@ -387,6 +390,8 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
         onClose={() => setDistributionTx(null)}
         transaction={distributionTx}
         student={distributionTx ? students.find(s => s.id === distributionTx.studentId) || null : null}
+        yearlyFeeAmount={distributionTx ? parseFloat(String((students.find(s => s.id === distributionTx.studentId) as any)?.yearlyFeeAmount || '0')) : undefined}
+        paidSoFar={distributionTx ? (transactions.filter(t => t.studentId === distributionTx.studentId).reduce((sum, t) => sum + (t.amount || 0), 0)) : undefined}
       />
     </div>
   );

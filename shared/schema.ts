@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, decimal, date } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, decimal, date, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -70,6 +70,9 @@ export const feeTransactions = pgTable("fee_transactions", {
   paymentDate: date("payment_date").notNull(),
   paymentMode: text("payment_mode").notNull(),
   remarks: text("remarks"),
+  // Persisted receipt serial to ensure reprints show original number.
+  // Nullable for legacy rows prior to introduction; new inserts should supply a value.
+  receiptSerial: integer("receipt_serial") // sequence-backed default applied via migration (not declared here to avoid runtime mismatch if sequence absent)
 });
 
 export const insertFeeTransactionSchema = createInsertSchema(feeTransactions).omit({
@@ -105,3 +108,35 @@ export const subjects = pgTable("subjects", {
 export const insertSubjectSchema = createInsertSchema(subjects).omit({ id: true });
 export type InsertSubject = z.infer<typeof insertSubjectSchema>;
 export type Subject = typeof subjects.$inferSelect;
+
+// 1) Add column
+// ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS receipt_serial integer;
+
+// 2) Create sequence if missing
+// DO $$
+// BEGIN
+//   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'receipt_serial_seq') THEN
+//     CREATE SEQUENCE receipt_serial_seq OWNED BY fee_transactions.receipt_serial;
+//   END IF;
+// END$$;
+
+// 3) Backfill null serials in chronological order
+// WITH ordered AS (
+//   SELECT id,
+//          ROW_NUMBER() OVER (ORDER BY payment_date, id) AS rn
+//   FROM fee_transactions
+//   WHERE receipt_serial IS NULL
+// )
+// UPDATE fee_transactions f
+// SET receipt_serial = ordered.rn
+// FROM ordered
+// WHERE f.id = ordered.id;
+
+// 4) Set default to sequence
+// ALTER TABLE fee_transactions ALTER COLUMN receipt_serial SET DEFAULT nextval('receipt_serial_seq');
+
+// 5) Align sequence to max
+// SELECT setval('receipt_serial_seq', COALESCE((SELECT MAX(receipt_serial) FROM fee_transactions),0));
+
+// 6) Optional: Unique index
+// CREATE UNIQUE INDEX IF NOT EXISTS fee_transactions_receipt_serial_unique ON fee_transactions(receipt_serial);
