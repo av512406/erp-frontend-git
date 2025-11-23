@@ -1,0 +1,32 @@
+.receipt-root {
+  padding: 12mm;
+  background: #fff;
+  min-height: 297mm; /* A4 height */
+}
+.receipt-frame {
+  border: 6px solid #000;
+  padding: 12px;
+  max-width: 210mm;
+  margin: 0 auto;
+}
+.receipt-header { text-align: center; }
+.receipt-logo { width: 120px; height: auto; display:block; margin: 0 auto 6px; }
+.school-name { font-size: 20px; margin: 0; letter-spacing: 1px; }
+.school-sub { font-size: 12px; margin-bottom: 6px; }
+.receipt-title { display:inline-block; background:#000; color:#fff; padding:6px 12px; margin-top:6px; border-radius:4px; }
+.meta-row { display:flex; justify-content:space-between; margin:12px 6px; }
+.student-block { padding: 6px 12px; margin-bottom: 6px; }
+.fee-table { width:100%; border-collapse: collapse; margin: 8px 0; }
+.fee-table th, .fee-table td { border:1px solid #000; padding:8px; }
+.fee-table th { background:#f5f5f5; }
+.fee-table .total-row td { font-weight:700; }
+.amount-words { margin-top: 12px; font-style: italic; padding-left: 8px; }
+.bottom-row { display:flex; justify-content: flex-end; margin-top: 24px; padding-right: 12px; }
+.signature { border-top:1px solid #000; padding-top: 8px; width: 160px; text-align:center; }
+
+@media print {
+  body * { visibility: visible; }
+  .no-print { display: none !important; }
+  .receipt-root { padding: 0; }
+  @page { size: A4; margin: 12mm; }
+}

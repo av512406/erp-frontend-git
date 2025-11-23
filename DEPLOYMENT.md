@@ -126,10 +126,23 @@ On your CI or build server:
 cd client
 npm ci
 npm run build
-# build artifacts will be in client/dist (Vite default)
+# build artifacts will be in frontend/dist (Vite default)
 ```
 
-Deploy `client/dist` to a static host:
+### GitHub Pages specifics
+
+If deploying to GitHub Pages at `https://USERNAME.github.io/REPO`, set a base path so Vite generates correct asset URLs:
+
+```bash
+export GH_PAGES_BASE="/REPO/"
+npm run build
+```
+
+Or configure in the Pages workflow using an env variable (`GH_PAGES_BASE`). The `vite.config.ts` reads this and sets `base` accordingly. After build, publish the `dist` (or `dist/public` if using current config) folder to Pages.
+
+API calls: ensure `VITE_API_BASE_URL` points to your AWS backend domain (e.g. `https://api.school.example`). GitHub Pages deployment is entirely static; CORS on the backend must allow the Pages origin.
+
+Deploy `frontend/dist` to a static host:
 - Vercel or Netlify (simple, managed)
 - Firebase Hosting
 - Or copy to a VPS and serve with Nginx (instructions below)
@@ -279,79 +292,91 @@ gunzip -c backup.sql.gz | psql -h <host> -U <user> -d <testdb>
 
 - Logging: structured JSON logs; ship to a log provider or rotate locally.
 - Error reporting: Sentry or similar.
-- Metrics: expose key metrics and use Prometheus or provider metrics.
+- Metrics:# School ERP — Production Deployment Guide
 
-Add a `/health` endpoint to confirm DB and storage connectivity for load balancers.
+This document provides a step-by-step guide to deploy the School ERP application using **Neon DB** (Database), **GitHub Pages** (Frontend), and **AWS EC2** (Backend).
 
----
+## Prerequisites
+- GitHub Account
+- Neon DB Account (https://neon.tech)
+- AWS Account (https://aws.amazon.com)
 
-## 10. CI/CD (GitHub Actions example)
+## 1. Database Setup (Neon DB)
+1.  Log in to Neon Console.
+2.  Create a new project (e.g., `school-erp`).
+3.  Copy the **Connection String** (Postgres URL). It looks like: `postgres://user:password@ep-xyz.region.neon.tech/neondb?sslmode=require`.
+4.  **Important**: Neon requires SSL. Ensure your connection string ends with `?sslmode=require`.
 
-A minimal action:
+## 2. Backend Deployment (AWS EC2)
+1.  **Launch Instance**:
+    *   Go to AWS Console -> EC2 -> Launch Instance.
+    *   Name: `school-erp-backend`.
+    *   OS: **Ubuntu Server 24.04 LTS** (or 22.04).
+    *   Instance Type: `t2.micro` or `t3.micro` (Free Tier eligible).
+    *   Key Pair: Create new or use existing (save the `.pem` file).
+    *   Security Group: Allow SSH (22), HTTP (80), HTTPS (443).
+2.  **Connect to Instance**:
+    *   `chmod 400 your-key.pem`
+    *   `ssh -i "your-key.pem" ubuntu@your-ec2-public-ip`
+3.  **Run Setup Script**:
+    *   On your local machine, copy the setup script to the server:
+        `scp -i "your-key.pem" scripts/setup-ec2.sh ubuntu@your-ec2-public-ip:~/`
+    *   On the server:
+        `chmod +x setup-ec2.sh`
+        `./setup-ec2.sh`
+    *   Follow the prompts (enter your domain name or public IP if no domain yet).
+4.  **Deploy Code**:
+    *   Clone your repo on the server: `git clone https://github.com/YOUR_USER/YOUR_REPO.git /srv/school-erp`
+    *   Create `.env` file in `/srv/school-erp/backend/.env`:
+        ```env
+        DATABASE_URL=your_neon_connection_string
+        NODE_ENV=production
+        PORT=3000
+        CORS_ORIGIN=https://YOUR_GITHUB_USERNAME.github.io
+        ```
+    *   Install and Build:
+        ```bash
+        cd /srv/school-erp
+        npm install
+        npm run build
+        ```
+    *   Start Backend:
+        ```bash
+        pm2 start dist/index.js --name school-erp
+        pm2 save
+        pm2 startup
+        ```
 
-```yaml
-name: CI
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Use Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-      - name: Install
-        run: npm ci
-      - name: Typecheck
-        run: npm run check
-      - name: Build client
-        run: |
-          cd client
-          npm ci
-          npm run build
-      - name: Build server
-        run: npm run build
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            cd /srv/school-erp
-            git pull origin main
-            npm ci --production
-            npm run build
-            sudo systemctl restart school-erp
-```
+## 3. Frontend Deployment (GitHub Pages)
+1.  **Configure Repository**:
+    *   Go to GitHub Repo -> Settings -> Pages.
+    *   Source: **GitHub Actions**.
+2.  **Set Secrets**:
+    *   Go to Settings -> Secrets and variables -> Actions.
+    *   Add `VITE_API_BASE_URL`: `https://your-ec2-domain.com/api` (or `http://your-ec2-public-ip/api` if no SSL yet).
+3.  **Push Code**:
+    *   Commit and push your changes.
+    *   The `.github/workflows/deploy.yml` action will automatically build and deploy.
+4.  **Verify**:
+    *   Visit your GitHub Pages URL (e.g., `https://username.github.io/repo-name/`).
 
-Securely provide secrets in the GitHub repository settings.
+## 4. Final Configuration
+1.  **Update CORS**:
+    *   Once you know your exact GitHub Pages URL, update `CORS_ORIGIN` in your EC2 `.env` file.
+    *   Restart backend: `pm2 restart school-erp`.
 
----
-
-## 11. Rollback strategy
-
-Keep the previously deployed commit or Docker image available. Rollback example (server):
-
+## 5. Database Migrations
+Run migrations from your local machine or the EC2 instance:
 ```bash
+# On EC2
 cd /srv/school-erp
-git checkout <previous-commit-or-tag>
-npm ci --production
-npm run build
-sudo systemctl restart school-erp
+npm run db:push
 ```
 
-For Docker, re-deploy the previous image tag.
-
----
-
-## 12. Post-deploy checklist
-
-- Smoke test login, student listing, CSV import, generate payslip and print.
-- Check logs for startup warnings.
-- Verify backups were created and uploaded.
-- Check TLS certificate and site accessibility.
+## 6. Verification
+1.  Open your GitHub Pages URL.
+2.  Try to log in.
+3.  Check EC2 logs: `pm2 logs school-erp`.
 
 ---
 

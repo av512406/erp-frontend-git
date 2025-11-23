@@ -2,6 +2,15 @@
 # School ERP — Project overview, analysis & improvements
 
 
+# Empty schema (clean slate)
+npm run reset:db111  
+
+# Reset and load sample data for quick UI testing
+npm run reset:db111:sample
+
+# Start dev server afterwards
+npm run dev
+
 
 This document summarizes the current project (School ERP), describes what to improve for production readiness and maintainability, and answers whether the project can run on free tiers given expected usage (250–500 students and ~50 concurrent/active users for one school).
 
@@ -11,14 +20,14 @@ This document summarizes the current project (School ERP), describes what to imp
 - Short answer about free tiers: yes — this can run on free tiers for development and early pilots, but you must design for cost-conscious usage patterns (limit real-time listeners, avoid heavy unbounded queries, limit file sizes, and use good caching). For production-grade reliability and backups, paid plans or low-cost managed instances are recommended.
 
 ## Repository snapshot (where things live)
-- `client/` — React + Vite SPA (app code under `client/src`).
-- `server/` — Node/Express server that integrates Vite for development and serves backend routes.
+- `frontend/` — React + Vite SPA (app code under `frontend/src`).
+- `backend/` — Node/Express server that integrates Vite for development and serves backend routes.
 - `shared/` — shared schema/types.
 - `attached_assets/` — static content or attachments.
 
 Key files to review:
-- `client/src/firebase.ts` — placeholder Firebase configuration; needs real credentials before using auth or Firestore.
-- `server/routes.ts`, `server/storage.ts` — server endpoints and file storage handling.
+- `frontend/src/firebase.ts` — placeholder Firebase configuration; needs real credentials before using auth or Firestore.
+- `backend/routes.ts`, `backend/storage.ts` — server endpoints and file storage handling.
 
 ## Requirements & contract (assumptions)
 
@@ -122,14 +131,14 @@ npx drizzle-kit push --config ./drizzle.config.ts
 If you added `server/db.ts` with a dev `ensureTables()` helper, only use it for local/dev. For production, rely on reviewed migrations.
 
 4) Build the frontend
-- From repo root (or `client/`):
+- From repo root (or `frontend/`):
 
 ```bash
-cd client
+cd frontend
 # install deps (if not already)
 npm ci
 npm run build
-# the build outputs static files into dist/ (Vite default) or client/dist
+# the build outputs static files into dist/ (Vite default) or frontend/dist
 ```
 
 - Deploy the produced static files to a static host (Vercel, Netlify, or a VPS with Nginx). Example Nginx config shown later.
@@ -337,7 +346,7 @@ If you want, I can also:
 - Create a ready-made GitHub Actions workflow that builds, tests, and deploys via SSH to your server.
 
 If you want me to generate either of those (docker-compose for prod or GitHub Actions), tell me which and I'll add it to the repository and wire up environment variable examples.
-   - Replace placeholder values in `client/src/firebase.ts` with secure env-driven config.
+   - Replace placeholder values in `frontend/src/firebase.ts` with secure env-driven config.
 
 2. Data persistence & schema
    - Decide on DB: Firestore (NoSQL, realtime) or managed Postgres (relational) depending on reporting needs.
@@ -411,7 +420,7 @@ Practical guidance: For early pilot (250–500 students), you can combine a stat
 3. Add a monitoring dashboard: basic Prometheus-style metrics or host provider metrics.
 
 ## Actionable small tickets (can be done in a few hours each)
-- Create `.env.example` and load env vars in `client/src/firebase.ts`.
+- Create `.env.example` and load env vars in `frontend/src/firebase.ts`.
 - Add server middleware to require a token on protected routes (JWT / Firebase token verify).
 - Implement pagination on student list (client and server) with page size 25 and cursor-based pagination.
 - Limit file uploads to 2 MB by default and add compression for PDF generation.
@@ -431,7 +440,7 @@ Practical guidance: For early pilot (250–500 students), you can combine a stat
 2. If you need SQL reports or larger file storage, migrate storage to a paid tier (or small Supabase/managed Postgres) and keep the frontend on free hosting.
 
 ## Next steps I can take for you
-1. Add `.env.example` and update `client/src/firebase.ts` to read from env variables.
+1. Add `.env.example` and update `frontend/src/firebase.ts` to read from env variables.
 2. Add pagination on the students endpoint + client list and provide a small integration test.
 3. Create a short monitoring/playbook doc showing how to estimate Firestore reads and expected cost for a given query pattern.
 
