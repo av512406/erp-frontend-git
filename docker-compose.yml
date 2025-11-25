@@ -1,7 +1,7 @@
 services:
   app:
     # build: . # Uncomment to build locally
-    image: av512406/school-erp-app:latest
+    image: sshatru/erp:latest
     container_name: school_erp_app
     ports:
       - "5000:5000"

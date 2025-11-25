@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build -t school-erp-app .
+docker build -t sshatru/erp:latest .
