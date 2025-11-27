@@ -32,6 +32,11 @@ git pull origin DOCKER
 # 3. Start Application
 echo "🚀 Starting application..."
 # Build and start containers
-docker compose up -d --build
+if command -v docker-compose &> /dev/null; then
+    docker-compose up -d --build
+else
+    docker compose up -d --build
+fi
+
 
 echo "✅ Deployment Complete! Access your app at http://$(curl -s ifconfig.me)"
