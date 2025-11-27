@@ -49,3 +49,5 @@ services:
 
 volumes:
   postgres_data:
+    name: school_erp_postgres_data
+    external: true
