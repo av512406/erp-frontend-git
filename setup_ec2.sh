@@ -31,6 +31,11 @@ git pull origin DOCKER
 
 # 3. Start Application
 echo "🚀 Starting application..."
+
+# Cleanup potential conflicting containers
+echo "🧹 Cleaning up old containers..."
+docker rm -f school_erp_app school_erp_db school_erp_nginx || true
+
 # Build and start containers
 if command -v docker-compose &> /dev/null; then
     docker-compose up -d --build
