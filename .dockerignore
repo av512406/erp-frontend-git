@@ -6,3 +6,5 @@ db_backups
 attached_assets
 .replit
 .github
+tests
+test_*

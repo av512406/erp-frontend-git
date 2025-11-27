@@ -7,11 +7,15 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  role: text("role").notNull().default('teacher'),
+  name: text("name").notNull().default('User'),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  role: true,
+  name: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -33,9 +37,10 @@ export const students = pgTable("students", {
   fatherName: text("father_name"),
   motherName: text("mother_name"),
   yearlyFeeAmount: decimal("yearly_fee_amount", { precision: 10, scale: 2 }).notNull(),
-  status: text("status").notNull(),
+  status: text("status").notNull().default('active'),
   leftDate: date("left_date"),
   leavingReason: text("leaving_reason"),
+  category: text("category").default('GEN'),
 });
 
 export const insertStudentSchema = createInsertSchema(students).omit({

@@ -5,7 +5,8 @@ export const defaultSchoolConfig = {
   addressLine: 'Jamoura (Sarkhadi), Distt. LALITPUR (U.P)',
   phone: '+91-0000-000000',
   session: '2025-2026',
-  logoUrl: '/logo.png'
+  logoUrl: '/logo.png',
+  email: 'info@gloriouspublicschool.com'
 };
 
 export type SchoolConfig = typeof defaultSchoolConfig & { updatedAt?: string | null };
@@ -16,7 +17,7 @@ function loadCached(): Partial<SchoolConfig> {
   try {
     const raw = localStorage.getItem('schoolConfig');
     if (raw) return JSON.parse(raw);
-  } catch {}
+  } catch { }
   return {};
 }
 
@@ -26,7 +27,7 @@ export function setSchoolConfig(cfg: Partial<SchoolConfig>) {
   schoolConfig = { ...schoolConfig, ...cfg };
   try {
     localStorage.setItem('schoolConfig', JSON.stringify(schoolConfig));
-  } catch {}
+  } catch { }
 }
 
 // Incremental serial number persistence (client side). In a multi-user

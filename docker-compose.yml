@@ -1,7 +1,7 @@
 services:
   app:
-    # build: . # Uncomment to build locally
-    image: sshatru/erp:latest
+    build: .
+    # image: sshatru/erp:latest
     container_name: school_erp_app
     # ports:
     #   - "5000:5000" # Exposed via Nginx now
@@ -9,6 +9,7 @@ services:
       - DATABASE_URL=postgres://school_erp:school_erp_pass@postgres:5432/school_erp
       - PORT=5000
       - NODE_ENV=production
+      - TZ=Asia/Kolkata
     depends_on:
       postgres:
         condition: service_healthy
@@ -34,6 +35,8 @@ services:
       POSTGRES_USER: school_erp
       POSTGRES_PASSWORD: school_erp_pass
       POSTGRES_DB: school_erp
+      TZ: Asia/Kolkata
+      PGTZ: Asia/Kolkata
     ports:
       - "15432:5432"
     volumes:

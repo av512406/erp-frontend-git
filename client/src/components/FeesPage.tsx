@@ -45,7 +45,7 @@ interface FeesPageProps {
 }
 
 export default function FeesPage({ students, transactions, onAddTransaction }: FeesPageProps) {
-  const [selectedStudent, setSelectedStudent] = useState("");
+
   const [viewStudent, setViewStudent] = useState("all");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -57,13 +57,14 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
   // New: class & section filters (dependencies order: choose class first, then section)
   const [filterGrade, setFilterGrade] = useState<'all' | string>('all');
   const [filterSection, setFilterSection] = useState<'all' | string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
   // Date range for Excel export
   const [exportStart, setExportStart] = useState<string>('');
   const [exportEnd, setExportEnd] = useState<string>('');
   const [exporting, setExporting] = useState(false);
 
   // Unique grades & sections (sections depend on selected grade)
-  const uniqueGrades = useMemo(() => Array.from(new Set(students.map(s => s.grade))).sort((a,b)=> Number(a)-Number(b)), [students]);
+  const uniqueGrades = useMemo(() => Array.from(new Set(students.map(s => s.grade))).sort((a, b) => Number(a) - Number(b)), [students]);
   const uniqueSectionsForGrade = useMemo(() => {
     const source = filterGrade === 'all' ? students : students.filter(s => s.grade === filterGrade);
     return Array.from(new Set(source.map(s => s.section))).sort();
@@ -71,12 +72,18 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
 
   // Filter students by grade then section
   const filteredStudents = useMemo(() => {
+    if (searchTerm) {
+      return students.filter(s =>
+        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.admissionNumber.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
     return students.filter(s => {
       const gradeOk = filterGrade === 'all' || s.grade === filterGrade;
       const sectionOk = filterSection === 'all' || s.section === filterSection;
       return gradeOk && sectionOk;
     });
-  }, [students, filterGrade, filterSection]);
+  }, [students, filterGrade, filterSection, searchTerm]);
 
   // If section becomes invalid after grade change, reset to 'all'
   if (filterSection !== 'all' && !uniqueSectionsForGrade.includes(filterSection)) {
@@ -85,7 +92,7 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const student = students.find(s => s.id === selectedStudent);
+    const student = students.find(s => s.id === viewStudent);
     if (student) {
       try {
         setSubmitError(null);
@@ -106,7 +113,7 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
         });
         // open distribution modal immediately for printing
         setDistributionTx(created);
-        setSelectedStudent("");
+        // setSelectedStudent(""); // Removed as we use viewStudent now
         setAmount("");
         setDate(new Date().toISOString().split('T')[0]);
         setPaymentMode('cash');
@@ -162,135 +169,60 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
         <p className="text-muted-foreground">Record and track student fee payments</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <Card className="lg:col-span-1">
+      <div className="grid grid-cols-1 gap-6 mb-6">
+        <Card>
           <CardHeader>
-            <CardTitle>Record Payment</CardTitle>
+            <CardTitle>Student Details & Payment</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="student">Student</Label>
-                <Select value={selectedStudent} onValueChange={setSelectedStudent} required>
-                  <SelectTrigger id="student" data-testid="select-student">
-                    <SelectValue placeholder="Select a student" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {students.map((student) => (
-                      <SelectItem key={student.id} value={student.id}>
-                        {student.name} ({student.admissionNumber})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="amount">Amount (₹)</Label>
-                <Input
-                  id="amount"
-                  // use text to remove native up/down controls; rely on regex validation above
-                  type="text"
-                  inputMode="decimal"
-                  pattern="\d+(?:\.\d{1,2})?"
-                  placeholder="e.g. 20000 or 1234.50"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-                  required
-                  data-testid="input-amount"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="payment-mode">Payment Mode</Label>
-                <Select value={paymentMode} onValueChange={setPaymentMode}>
-                  <SelectTrigger id="payment-mode" data-testid="select-payment-mode">
-                    <SelectValue placeholder="Select payment mode" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="card">Card</SelectItem>
-                    <SelectItem value="upi">UPI</SelectItem>
-                    <SelectItem value="cheque">Cheque</SelectItem>
-                    <SelectItem value="bank-transfer">Bank Transfer</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="date">Payment Date</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  required
-                  data-testid="input-date"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="remarks">Remarks</Label>
-                <Textarea
-                  id="remarks"
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="Optional notes (e.g., receipt no., reference)"
-                  data-testid="input-remarks"
-                />
-              </div>
-              <Button type="submit" className="w-full" data-testid="button-record-payment">
-                Record Payment
-              </Button>
-              {submitError && (
-                <p className="text-sm text-red-600" role="alert">{submitError}</p>
-              )}
-            </form>
-          </CardContent>
-        </Card>
-
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>View Student</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="filter-grade">Class</Label>
-                    <Select value={filterGrade} onValueChange={(v) => setFilterGrade(v as any)}>
-                      <SelectTrigger id="filter-grade">
-                        <SelectValue placeholder="All classes" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All classes</SelectItem>
-                        {uniqueGrades.map(g => (
-                          <SelectItem key={g} value={g}>Class {g}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="filter-section">Section</Label>
-                    <Select value={filterSection} onValueChange={(v) => setFilterSection(v as any)}>
-                      <SelectTrigger id="filter-section">
-                        <SelectValue placeholder="All sections" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All sections</SelectItem>
-                        {uniqueSectionsForGrade.map(sec => (
-                          <SelectItem key={sec} value={sec}>Section {sec}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+            <div className="space-y-6">
+              {/* Filters Section */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="search-student">Search Student</Label>
+                  <Input
+                    id="search-student"
+                    placeholder="Name or Admission No."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="filter-grade">Class</Label>
+                  <Select value={filterGrade} onValueChange={(v) => setFilterGrade(v as any)}>
+                    <SelectTrigger id="filter-grade">
+                      <SelectValue placeholder="All classes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All classes</SelectItem>
+                      {uniqueGrades.map(g => (
+                        <SelectItem key={g} value={g}>Class {g}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="filter-section">Section</Label>
+                  <Select value={filterSection} onValueChange={(v) => setFilterSection(v as any)}>
+                    <SelectTrigger id="filter-section">
+                      <SelectValue placeholder="All sections" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All sections</SelectItem>
+                      {uniqueSectionsForGrade.map(sec => (
+                        <SelectItem key={sec} value={sec}>Section {sec}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="view-student">Student</Label>
                   <Select value={viewStudent} onValueChange={setViewStudent}>
                     <SelectTrigger id="view-student">
-                      <SelectValue placeholder="Select a student to view" />
+                      <SelectValue placeholder="Select a student" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All students</SelectItem>
+                      <SelectItem value="all">Select a student...</SelectItem>
                       {filteredStudents.map((student) => (
                         <SelectItem key={student.id} value={student.id}>
                           {student.name} ({student.admissionNumber})
@@ -299,90 +231,175 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
                     </SelectContent>
                   </Select>
                 </div>
-
-                {viewedStudent && (
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Yearly Fee</p>
-                    <p className="text-lg font-semibold">₹{yearlyFee.toLocaleString('en-IN')}</p>
-                    <p className="text-sm text-muted-foreground">Total Paid</p>
-                    <p className="text-lg font-semibold">₹{totalPaid.toLocaleString('en-IN')}</p>
-                    <p className="text-sm text-muted-foreground">Balance</p>
-                    <p className={`text-lg font-semibold ${balance <= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      ₹{balance.toLocaleString('en-IN')}
-                    </p>
-                  </div>
-                )}
               </div>
-            </CardContent>
-          </Card>
-        </div>
 
-        <div className="lg:col-span-3">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <CardTitle>Payment History</CardTitle>
-                <div className="flex items-end gap-2 flex-wrap">
-                  <div className="flex flex-col">
-                    <Label htmlFor="export-start" className="text-xs">From</Label>
-                    <Input id="export-start" type="date" value={exportStart} onChange={e=>setExportStart(e.target.value)} className="h-8" />
+              {/* Student Summary & Payment Form */}
+              {viewedStudent && (
+                <div className="border-t pt-6 mt-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Summary Side */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Fee Summary</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-4 bg-muted rounded-lg">
+                          <p className="text-sm text-muted-foreground">Yearly Fee</p>
+                          <p className="text-2xl font-bold">₹{yearlyFee.toLocaleString('en-IN')}</p>
+                        </div>
+                        <div className="p-4 bg-muted rounded-lg">
+                          <p className="text-sm text-muted-foreground">Total Paid</p>
+                          <p className="text-2xl font-bold">₹{totalPaid.toLocaleString('en-IN')}</p>
+                        </div>
+                        <div className="p-4 bg-muted rounded-lg col-span-2">
+                          <p className="text-sm text-muted-foreground">Balance Due</p>
+                          <p className={`text-3xl font-bold ${balance <= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            ₹{balance.toLocaleString('en-IN')}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Payment Form Side */}
+                    <div className="space-y-4 border-l pl-8">
+                      <h3 className="text-lg font-semibold">Record New Payment</h3>
+                      <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="amount">Amount (₹)</Label>
+                            <Input
+                              id="amount"
+                              type="text"
+                              inputMode="decimal"
+                              pattern="\d+(?:\.\d{1,2})?"
+                              placeholder="0.00"
+                              value={amount}
+                              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                              required
+                              data-testid="input-amount"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="date">Payment Date</Label>
+                            <Input
+                              id="date"
+                              type="date"
+                              value={date}
+                              onChange={(e) => setDate(e.target.value)}
+                              required
+                              data-testid="input-date"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="payment-mode">Payment Mode</Label>
+                          <Select value={paymentMode} onValueChange={setPaymentMode}>
+                            <SelectTrigger id="payment-mode" data-testid="select-payment-mode">
+                              <SelectValue placeholder="Select payment mode" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="cash">Cash</SelectItem>
+                              <SelectItem value="card">Card</SelectItem>
+                              <SelectItem value="upi">UPI</SelectItem>
+                              <SelectItem value="cheque">Cheque</SelectItem>
+                              <SelectItem value="bank-transfer">Bank Transfer</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="remarks">Remarks</Label>
+                          <Textarea
+                            id="remarks"
+                            value={remarks}
+                            onChange={(e) => setRemarks(e.target.value)}
+                            placeholder="Optional notes..."
+                            className="h-20"
+                            data-testid="input-remarks"
+                          />
+                        </div>
+
+                        <Button type="submit" className="w-full" data-testid="button-record-payment">
+                          Record Payment
+                        </Button>
+                        {submitError && (
+                          <p className="text-sm text-red-600" role="alert">{submitError}</p>
+                        )}
+                      </form>
+                    </div>
                   </div>
-                  <div className="flex flex-col">
-                    <Label htmlFor="export-end" className="text-xs">To</Label>
-                    <Input id="export-end" type="date" value={exportEnd} onChange={e=>setExportEnd(e.target.value)} className="h-8" />
-                  </div>
-                  <Button type="button" variant="outline" size="sm" disabled={exporting} onClick={handleExportExcel} className="gap-2" data-testid="button-export-fees-excel">
-                    <FileText className="w-4 h-4" /> {exporting ? 'Exporting...' : 'Export Excel'}
-                  </Button>
                 </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle>Payment History</CardTitle>
+              <div className="flex items-end gap-2 flex-wrap">
+                <div className="flex flex-col">
+                  <Label htmlFor="export-start" className="text-xs">From</Label>
+                  <Input id="export-start" type="date" value={exportStart} onChange={e => setExportStart(e.target.value)} className="h-8" />
+                </div>
+                <div className="flex flex-col">
+                  <Label htmlFor="export-end" className="text-xs">To</Label>
+                  <Input id="export-end" type="date" value={exportEnd} onChange={e => setExportEnd(e.target.value)} className="h-8" />
+                </div>
+                <Button type="button" variant="outline" size="sm" disabled={exporting} onClick={handleExportExcel} className="gap-2" data-testid="button-export-fees-excel">
+                  <FileText className="w-4 h-4" /> {exporting ? 'Exporting...' : 'Export Excel'}
+                </Button>
               </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Receipt Serial</TableHead>
+                    <TableHead>Transaction ID</TableHead>
+                    <TableHead>Student Name</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactions.length === 0 ? (
                     <TableRow>
-                      <TableHead>Receipt Serial</TableHead>
-                      <TableHead>Transaction ID</TableHead>
-                      <TableHead>Student Name</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        No transactions recorded yet
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactions.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                          No transactions recorded yet
+                  ) : (
+                    displayedTransactions.map((transaction) => (
+                      <TableRow key={transaction.id} data-testid={`row-transaction-${transaction.id}`}>
+                        <TableCell className="font-mono text-sm">{transaction.receiptSerial != null ? String(transaction.receiptSerial).padStart(4, '0') : '—'}</TableCell>
+                        <TableCell className="font-mono text-sm">{transaction.transactionId}</TableCell>
+                        <TableCell className="font-medium">{transaction.studentName}</TableCell>
+                        <TableCell className="font-semibold">₹{transaction.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                        <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-right space-x-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setDistributionTx(transaction)}
+                          >
+                            Print Receipt
+                          </Button>
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      displayedTransactions.map((transaction) => (
-                        <TableRow key={transaction.id} data-testid={`row-transaction-${transaction.id}`}>
-                          <TableCell className="font-mono text-sm">{transaction.receiptSerial != null ? String(transaction.receiptSerial).padStart(4,'0') : '—'}</TableCell>
-                          <TableCell className="font-mono text-sm">{transaction.transactionId}</TableCell>
-                          <TableCell className="font-medium">{transaction.studentName}</TableCell>
-                          <TableCell className="font-semibold">₹{transaction.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                          <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
-                          <TableCell className="text-right space-x-2">
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => setDistributionTx(transaction)}
-                            >
-                              Print Receipt
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <ReceiptDistributionModal

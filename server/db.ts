@@ -109,6 +109,7 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
   ALTER TABLE students ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'active';
   ALTER TABLE students ADD COLUMN IF NOT EXISTS left_date date;
   ALTER TABLE students ADD COLUMN IF NOT EXISTS leaving_reason text;
+  ALTER TABLE students ADD COLUMN IF NOT EXISTS category text DEFAULT 'GEN';
 
       -- ensure payment_mode cannot be null and has a sensible default
       ALTER TABLE fee_transactions ALTER COLUMN payment_mode SET DEFAULT 'cash';
@@ -196,6 +197,58 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
           FOR EACH ROW EXECUTE FUNCTION set_updated_at();
         END IF;
       END $$;
+
+      -- Users table for authentication
+      CREATE TABLE IF NOT EXISTS users (
+        id text PRIMARY KEY,
+        username text UNIQUE NOT NULL,
+        password text NOT NULL,
+        role text NOT NULL DEFAULT 'teacher',
+        name text NOT NULL DEFAULT 'User',
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      -- Ensure columns exist if table already existed (robust migration)
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS username text;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS password text;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'teacher';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT 'User';
+      
+      -- Ensure unique constraint on username exists for ON CONFLICT to work
+      DO $$
+      BEGIN
+        -- Handle legacy email column if it exists
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='email') THEN
+          -- Make email nullable to avoid insert errors if we only use username
+          ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+          -- Backfill username from email if missing
+          UPDATE users SET username = email WHERE username IS NULL;
+        END IF;
+
+        -- Handle legacy password_hash column if it exists
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='password_hash') THEN
+          ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'users_username_key'
+        ) THEN
+          -- Check if any unique constraint exists on username to avoid duplicate
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_index i
+            JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+            WHERE i.indrelid = 'users'::regclass AND a.attname = 'username' AND i.indisunique
+          ) THEN
+             ALTER TABLE users ADD CONSTRAINT users_username_key UNIQUE (username);
+          END IF;
+        END IF;
+      END $$;
+
+      -- Seed default admin if no users exist
+      INSERT INTO users (id, username, password, role, name)
+      VALUES ('admin-seed-id', 'admin@school.edu', 'admin123', 'admin', 'Administrator')
+      ON CONFLICT (username) DO NOTHING;
 
       -- School configuration (single-row table). Stores basic metadata and optional base64 logo.
       CREATE TABLE IF NOT EXISTS school_config (

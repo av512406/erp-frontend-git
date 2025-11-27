@@ -242,13 +242,18 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
         header: true,
         complete: (results: any) => {
           const importedGrades = results.data
-            .filter((row: any) => row.studentId && row.subject && row.marks && row.term)
-            .map((row: any) => ({
-              studentId: row.studentId,
-              subject: row.subject,
-              marks: parseFloat(row.marks),
-              term: row.term
-            }));
+            .map((row: any) => {
+              const admissionNumber = (row.admissionNumber || row['Admission Number'] || '').trim();
+              const studentId = (row.studentId || row['Student ID'] || '').trim() || (admissionNumber ? (students.find(s => s.admissionNumber === admissionNumber)?.id || '') : '');
+              return {
+                studentId,
+                subject: (row.subject || row['Subject'] || '').trim(),
+                marks: parseFloat(row.marks || row['Marks'] || '0'),
+                term: (row.term || row['Term'] || '').trim()
+              };
+            })
+            .filter((row: any) => row.studentId && row.subject && !isNaN(row.marks) && row.term);
+
           onImportGrades(importedGrades);
           toast({
             title: "Import Successful",
@@ -314,12 +319,12 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
 
   const handleExportStudents = () => {
     // Filter students based on selected filter
-    const filteredStudents = exportFilter === "all" 
-      ? students 
+    const filteredStudents = exportFilter === "all"
+      ? students
       : students.filter(s => s.grade === exportFilter);
 
     const csvContent = [
-      ['admissionNumber','name','fatherName','motherName','dateOfBirth','admissionDate','aadharNumber','penNumber','aaparId','mobileNumber','address','class','section','yearlyFeeAmount'].join(','),
+      ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount'].join(','),
       ...filteredStudents.map(s => [
         s.admissionNumber,
         s.name,
@@ -342,8 +347,8 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-  const filterSuffix = exportFilter === "all" ? "all" : `class-${exportFilter}`;
-  a.download = `students-${filterSuffix}-${new Date().toISOString().split('T')[0]}.csv`;
+    const filterSuffix = exportFilter === "all" ? "all" : `class-${exportFilter}`;
+    a.download = `students-${filterSuffix}-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
 
@@ -398,10 +403,10 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
               onClick={() => {
                 // export skipped rows as CSV if available
                 if (!skippedRows || skippedRows.length === 0) return;
-                const header = ['admissionNumber','name','fatherName','motherName','dateOfBirth','admissionDate','aadharNumber','penNumber','aaparId','mobileNumber','address','class','section','yearlyFeeAmount'];
+                const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount'];
                 const rows = skippedRows.map(r => [
                   r.admissionNumber,
-                  `"${(r.name||'').replace(/"/g, '""') }"`,
+                  `"${(r.name || '').replace(/"/g, '""')}"`,
                   r.fatherName || '',
                   r.motherName || '',
                   formatCsvDate(r.dateOfBirth || ''),
@@ -410,7 +415,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                   r.penNumber || '',
                   r.aaparId || '',
                   r.mobileNumber || '',
-                  `"${(r.address||'').replace(/"/g,'""') }"`,
+                  `"${(r.address || '').replace(/"/g, '""')}"`,
                   r.grade || '',
                   r.section || '',
                   r.yearlyFeeAmount || ''
@@ -470,7 +475,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
               variant="outline"
               onClick={() => {
                 if (!skippedTransactions || skippedTransactions.length === 0) return;
-                const header = ['index','reason','raw'];
+                const header = ['index', 'reason', 'raw'];
                 const rows = skippedTransactions.map(r => [
                   r.index ?? '',
                   (r.reason || '').replace(/"/g, '""'),
@@ -493,7 +498,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
         </AlertDialogContent>
       </AlertDialog>
 
-  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Import Students</CardTitle>
@@ -549,7 +554,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 onClick={() => {
                   // generate template for selected templateGrade
                   const filtered = templateGrade === 'all' ? students : students.filter(s => s.grade === templateGrade);
-                  const header = ['admissionNumber','name','fatherName','motherName','dateOfBirth','admissionDate','aadharNumber','penNumber','aaparId','mobileNumber','address','class','section','yearlyFeeAmount'];
+                  const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount'];
                   // Template with one sample row illustrating date format (YYYY-MM-DD)
                   const sample = [
                     'STU001',
@@ -619,18 +624,42 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
             </div>
             <div className="text-sm text-muted-foreground">
               <p className="font-medium mb-1">Expected columns:</p>
-              <p className="font-mono text-xs">studentId, subject, marks, term</p>
+              <p className="font-mono text-xs">admissionNumber (or studentId), subject, marks, term</p>
             </div>
-            <Button
-              variant="outline"
-              className="w-full gap-2"
-              onClick={() => gradesFileRef.current?.click()}
-              disabled={isImporting}
-              data-testid="button-import-grades"
-            >
-              <Upload className="w-4 h-4" />
-              {isImporting ? 'Importing...' : 'Select File'}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={() => gradesFileRef.current?.click()}
+                disabled={isImporting}
+                data-testid="button-import-grades"
+              >
+                <Upload className="w-4 h-4" />
+                {isImporting ? 'Importing...' : 'Select File'}
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full gap-2"
+                onClick={() => {
+                  const header = ['admissionNumber', 'subject', 'marks', 'term'];
+                  const sample = ['STU001', 'Mathematics', '85.5', 'Term 1'].join(',');
+                  const csv = [header.join(','), sample].join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `grades-template.csv`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  URL.revokeObjectURL(url);
+                }}
+                data-testid="button-download-grades-template"
+              >
+                <Download className="w-4 h-4" />
+                Download Template
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -731,7 +760,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                     a.href = url;
                     a.download = `transactions-export-${new Date().toISOString().split('T')[0]}.csv`;
                     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-                  } catch (e:any) {
+                  } catch (e: any) {
                     toast({ title: 'Export error', description: e.message, variant: 'destructive' });
                   }
                 }}
@@ -753,7 +782,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                     a.href = url;
                     a.download = `grades-export-${new Date().toISOString().split('T')[0]}.csv`;
                     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-                  } catch (e:any) {
+                  } catch (e: any) {
                     toast({ title: 'Export error', description: e.message, variant: 'destructive' });
                   }
                 }}

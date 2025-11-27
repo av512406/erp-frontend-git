@@ -50,8 +50,8 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
 
   return (
     <nav className="border-b bg-background sticky top-0 z-50">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
+      <div className="container mx-auto px-4 min-w-[1024px]">
+        <div className="flex items-center justify-between h-16 whitespace-nowrap">
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-2 hover-elevate rounded-md px-3 py-2">
               {config.logoUrl ? (
@@ -63,7 +63,7 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
               )}
               <span className="font-semibold text-lg truncate max-w-[200px]" title={config.name}>{config.name || 'School ERP'}</span>
             </Link>
-            
+
             <div className="flex items-center gap-1">
               {/* Dashboard always first */}
               {links.filter(l => l.path === '/').map(link => {
@@ -87,7 +87,7 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
-                      variant={["/students","/students-withdrawn"].includes(location) ? "secondary" : "ghost"}
+                      variant={["/students", "/students-withdrawn"].includes(location) ? "secondary" : "ghost"}
                       size="sm"
                       className="gap-2"
                       data-testid="link-students-dropdown"
@@ -132,7 +132,7 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
-                      variant={["/admin-settings","/subjects"].includes(location) ? "secondary" : "ghost"}
+                      variant={["/admin-settings", "/subjects"].includes(location) ? "secondary" : "ghost"}
                       size="sm"
                       className="gap-2"
                       data-testid="link-settings-dropdown"
@@ -144,7 +144,7 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
                   <DropdownMenuContent align="start">
                     <DropdownMenuItem asChild>
                       <Link href="/admin-settings" className="flex items-center gap-2">
-                        <Settings className="w-4 h-4" /> School Settings
+                        <Settings className="w-4 h-4" /> Admin Settings
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>

@@ -21,6 +21,7 @@ import {
 import { FileText, Printer } from "lucide-react";
 import type { Student } from '@shared/schema';
 import type { GradeEntry } from "./GradesPage";
+import { schoolConfig } from '@/lib/schoolConfig';
 
 interface ReportsPageProps {
   students: Student[];
@@ -44,8 +45,142 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
     setShowReport(true);
   };
 
+
+
   const handlePrint = () => {
-    window.print();
+    if (!student) return;
+
+    const printWindow = window.open('', '', 'width=800,height=600');
+    if (!printWindow) return;
+
+    const rowsHtml = reportRows.map((row, index) => `
+      <tr>
+        <td style="text-align: center;">${index + 1}</td>
+        <td>${row.subject}</td>
+        <td style="text-align: right;">100</td>
+        <td style="text-align: right;">${row.marks ?? '-'}</td>
+      </tr>
+    `).join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Report Card - ${student.name}</title>
+          <style>
+            body { font-family: 'Times New Roman', serif; margin: 0; padding: 0; }
+            @page { size: A4; margin: 10mm; }
+            .container { 
+                border: 2px solid #000; 
+                padding: 20px; 
+                width: 100%; 
+                max-width: 210mm; 
+                margin: 0 auto; 
+                box-sizing: border-box; 
+                min-height: 90vh; 
+                display: flex; 
+                flex-direction: column; 
+            }
+            .header { text-align: center; margin-bottom: 20px; border-bottom: 1px solid #000; padding-bottom: 10px; }
+            .header-content { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 5px; }
+            .logo { height: 60px; object-fit: contain; }
+            .school-info { text-align: center; }
+            .school-name { font-size: 24px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
+            .school-address { font-size: 12px; font-style: italic; margin-top: 2px; }
+            .contact-info { font-size: 11px; margin-top: 2px; }
+            .report-title { 
+                font-size: 18px; 
+                font-weight: bold; 
+                text-decoration: underline; 
+                text-align: center; 
+                margin: 15px 0; 
+                text-transform: uppercase;
+            }
+            .student-info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; font-size: 13px; }
+            .info-row { display: flex; }
+            .info-label { font-weight: bold; width: 120px; }
+            .info-value { font-weight: 500; }
+            
+            table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px; border: 1px solid #000; }
+            th { border: 1px solid #000; padding: 8px; background-color: #f3f3f3; text-align: left; }
+            td { border: 1px solid #000; padding: 8px; }
+            
+            .footer { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; padding-top: 40px; }
+            .signature { text-align: center; width: 150px; }
+            .sign-line { border-top: 1px solid #000; margin-top: 40px; padding-top: 5px; font-size: 12px; font-weight: bold; }
+            
+            @media print {
+              body { margin: 0; -webkit-print-color-adjust: exact; }
+              .container { border: 2px solid #000; height: 270mm; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+                <div class="header-content">
+                    ${schoolConfig.logoUrl ? `<img src="${schoolConfig.logoUrl}" alt="Logo" class="logo" />` : ''}
+                    <div class="school-info">
+                        <div class="school-name">${schoolConfig.name}</div>
+                        <div class="school-address">${schoolConfig.addressLine}</div>
+                        <div class="contact-info">Phone: ${schoolConfig.phone} | Email: ${schoolConfig.email}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="report-title">REPORT CARD - ${selectedTerm}</div>
+            
+            <div class="student-info">
+                <div class="info-row"><span class="info-label">Student Name:</span> <span class="info-value">${student.name}</span></div>
+                <div class="info-row"><span class="info-label">Admission No:</span> <span class="info-value">${student.admissionNumber}</span></div>
+                <div class="info-row"><span class="info-label">Class/Section:</span> <span class="info-value">${student.grade} - ${student.section}</span></div>
+                <div class="info-row"><span class="info-label">Session:</span> <span class="info-value">${schoolConfig.session}</span></div>
+                <div class="info-row"><span class="info-label">Father's Name:</span> <span class="info-value">${student.fatherName || '-'}</span></div>
+                <div class="info-row"><span class="info-label">Date of Birth:</span> <span class="info-value">${student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString() : '-'}</span></div>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 50px; text-align: center;">S.No</th>
+                        <th>Subject</th>
+                        <th style="text-align: right; width: 100px;">Max Marks</th>
+                        <th style="text-align: right; width: 100px;">Marks Obtained</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                    <tr style="font-weight: bold; background-color: #f9f9f9;">
+                        <td colspan="2" style="text-align: right; padding-right: 20px;">Total</td>
+                        <td style="text-align: right;">${reportRows.length * 100}</td>
+                        <td style="text-align: right;">${total}</td>
+                    </tr>
+                    <tr style="font-weight: bold;">
+                        <td colspan="2" style="text-align: right; padding-right: 20px;">Percentage</td>
+                        <td colspan="2" style="text-align: center;">${average}%</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div class="footer">
+                <div class="signature">
+                    <div class="sign-line">Class Teacher</div>
+                </div>
+                <div class="signature">
+                    <div class="sign-line">Principal</div>
+                </div>
+                <div class="signature">
+                    <div class="sign-line">Parent</div>
+                </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
   };
 
   const student = students.find(s => s.id === selectedStudent);
@@ -100,7 +235,7 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All classes</SelectItem>
-                  {Array.from(new Set(students.map(s => s.grade))).sort((a,b) => parseInt(a)-parseInt(b)).map(c => (
+                  {Array.from(new Set(students.map(s => s.grade))).sort((a, b) => parseInt(a) - parseInt(b)).map(c => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>

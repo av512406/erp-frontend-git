@@ -22,8 +22,33 @@ import type { FeeTransaction } from "@/components/FeesPage";
 import type { GradeEntry } from "@/components/GradesPage";
 
 interface User {
-  email: string;
-  role: 'admin' | 'teacher';
+  id: string;
+  username: string;
+  role: string;
+  name: string;
+  email?: string; // compatibility
+}
+
+interface ProtectedRouteProps {
+  allowedRoles: string[];
+  userRole: string;
+  children: React.ReactNode;
+}
+
+function ProtectedRoute({ allowedRoles, userRole, children }: ProtectedRouteProps) {
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!allowedRoles.includes(userRole)) {
+      setLocation("/");
+    }
+  }, [allowedRoles, userRole, setLocation]);
+
+  if (!allowedRoles.includes(userRole)) {
+    return null;
+  }
+
+  return <>{children}</>;
 }
 
 function Router({ user }: { user: User }) {
@@ -89,7 +114,7 @@ function Router({ user }: { user: User }) {
     const existing = students.find(s => s.id === id);
     if (!existing) return;
     try {
-      const res = await fetch(`/api/students/${encodeURIComponent(existing.admissionNumber)}` , { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(student) });
+      const res = await fetch(`/api/students/${encodeURIComponent(existing.admissionNumber)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(student) });
       if (res.ok) {
         const updated = await res.json();
         setStudents(prev => prev.map(s => s.id === id ? updated : s));
@@ -323,66 +348,79 @@ function Router({ user }: { user: User }) {
         <Dashboard stats={stats} userRole={user.role} />
       </Route>
       <Route path="/students">
-        <StudentsPage
-          students={students}
-          onAddStudent={handleAddStudent}
-          onEditStudent={handleEditStudent}
-          onDeleteStudent={handleDeleteStudent}
-          onMarkWithdrawn={handleMarkWithdrawn}
-        />
+        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+          <StudentsPage
+            students={students}
+            onAddStudent={handleAddStudent}
+            onEditStudent={handleEditStudent}
+            onDeleteStudent={handleDeleteStudent}
+            onMarkWithdrawn={handleMarkWithdrawn}
+          />
+        </ProtectedRoute>
       </Route>
       <Route path="/students-withdrawn">
-        <WithdrawnStudentsPage students={withdrawnStudents} onRestore={async (admissionNumber) => {
-          try {
-            const res = await fetch(`/api/students/${encodeURIComponent(admissionNumber)}/restore`, { method: 'PUT' });
-            if (!res.ok) {
-              const msg = await (async () => { try { const j = await res.json(); return j?.message; } catch { return ''; } })();
-              throw new Error(msg || 'Failed to restore');
+        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+          <WithdrawnStudentsPage students={withdrawnStudents} onRestore={async (admissionNumber) => {
+            try {
+              const res = await fetch(`/api/students/${encodeURIComponent(admissionNumber)}/restore`, { method: 'PUT' });
+              if (!res.ok) {
+                const msg = await (async () => { try { const j = await res.json(); return j?.message; } catch { return ''; } })();
+                throw new Error(msg || 'Failed to restore');
+              }
+              const restored = await res.json();
+              setWithdrawnStudents(prev => prev.filter(s => s.admissionNumber !== admissionNumber));
+              setStudents(prev => [...prev, restored]);
+            } catch (e: any) {
+              alert(e?.message || 'Restore failed');
             }
-            const restored = await res.json();
-            setWithdrawnStudents(prev => prev.filter(s => s.admissionNumber !== admissionNumber));
-            setStudents(prev => [...prev, restored]);
-          } catch (e: any) {
-            alert(e?.message || 'Restore failed');
-          }
-        }} />
+          }} />
+        </ProtectedRoute>
       </Route>
       <Route path="/students-left">
-        <WithdrawnStudentsPage students={withdrawnStudents} onRestore={async (admissionNumber) => {
-          try {
-            const res = await fetch(`/api/students/${encodeURIComponent(admissionNumber)}/restore`, { method: 'PUT' });
-            if (!res.ok) {
-              const msg = await (async () => { try { const j = await res.json(); return j?.message; } catch { return ''; } })();
-              throw new Error(msg || 'Failed to restore');
+        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+          <WithdrawnStudentsPage students={withdrawnStudents} onRestore={async (admissionNumber) => {
+            try {
+              const res = await fetch(`/api/students/${encodeURIComponent(admissionNumber)}/restore`, { method: 'PUT' });
+              if (!res.ok) {
+                const msg = await (async () => { try { const j = await res.json(); return j?.message; } catch { return ''; } })();
+                throw new Error(msg || 'Failed to restore');
+              }
+              const restored = await res.json();
+              setWithdrawnStudents(prev => prev.filter(s => s.admissionNumber !== admissionNumber));
+              setStudents(prev => [...prev, restored]);
+            } catch (e: any) {
+              alert(e?.message || 'Restore failed');
             }
-            const restored = await res.json();
-            setWithdrawnStudents(prev => prev.filter(s => s.admissionNumber !== admissionNumber));
-            setStudents(prev => [...prev, restored]);
-          } catch (e: any) {
-            alert(e?.message || 'Restore failed');
-          }
-        }} />
+          }} />
+        </ProtectedRoute>
       </Route>
       <Route path="/fees">
-        <FeesPage
-          students={students}
-          transactions={transactions}
-          onAddTransaction={handleAddTransaction}
-        />
+        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+          <FeesPage
+            students={students}
+            transactions={transactions}
+            onAddTransaction={handleAddTransaction}
+          />
+        </ProtectedRoute>
       </Route>
       <Route path="/data-tools">
-        <DataToolsPage
-          students={students}
-          onImportStudents={handleImportStudents}
-          onUpsertStudents={handleUpsertStudents}
-          onImportGrades={handleImportGrades}
-          onImportTransactions={handleImportTransactions}
-        />
+        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+          <DataToolsPage
+            students={students}
+            onImportStudents={handleImportStudents}
+            onUpsertStudents={handleUpsertStudents}
+            onImportGrades={handleImportGrades}
+            onImportTransactions={handleImportTransactions}
+          />
+        </ProtectedRoute>
       </Route>
       <Route path="/subjects">
-        <SubjectsPage students={students} />
+        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+          <SubjectsPage students={students} />
+        </ProtectedRoute>
       </Route>
       <Route path="/grades">
+        {/* Grades accessible to both */}
         <GradesPage
           students={students}
           grades={grades}
@@ -391,10 +429,14 @@ function Router({ user }: { user: User }) {
         />
       </Route>
       <Route path="/reports">
-        <ReportsPage students={students} grades={grades} />
+        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+          <ReportsPage students={students} grades={grades} />
+        </ProtectedRoute>
       </Route>
       <Route path="/admin-settings">
-        <AdminSettingsPage />
+        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+          <AdminSettingsPage />
+        </ProtectedRoute>
       </Route>
       <Route component={NotFound} />
     </Switch>
@@ -403,17 +445,37 @@ function Router({ user }: { user: User }) {
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [, setLocation] = useLocation();
 
-  const handleLogin = (email: string, password: string) => {
-    if (email === 'admin@school.edu' && password === 'admin123') {
-      setUser({ email, role: 'admin' });
-    } else if (email === 'teacher@school.edu' && password === 'teacher123') {
-      setUser({ email, role: 'teacher' });
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: email, password })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUser({ ...data.user, email: data.user.username });
+      } else {
+        toast({
+          title: "Login failed",
+          description: "Invalid credentials",
+          variant: "destructive"
+        });
+      }
+    } catch (e) {
+      toast({
+        title: "Login error",
+        description: "Network error",
+        variant: "destructive"
+      });
     }
   };
 
   const handleLogout = () => {
     setUser(null);
+    setLocation("/");
   };
 
   if (!user) {

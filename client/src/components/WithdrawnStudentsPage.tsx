@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, FileText } from 'lucide-react';
 import type { Student } from '@shared/schema';
+import TransferCertificateModal from './TransferCertificateModal';
 
 interface WithdrawnStudentsPageProps {
   students: Student[]; // expects status==='left'
@@ -10,6 +11,8 @@ interface WithdrawnStudentsPageProps {
 }
 
 export default function WithdrawnStudentsPage({ students, onRestore }: WithdrawnStudentsPageProps) {
+  const [selectedStudentForTC, setSelectedStudentForTC] = useState<Student | null>(null);
+
   return (
     <div className="container mx-auto p-6">
       <div className="mb-6">
@@ -26,7 +29,7 @@ export default function WithdrawnStudentsPage({ students, onRestore }: Withdrawn
               <TableHead>Section</TableHead>
               <TableHead>Withdrawal Date</TableHead>
               <TableHead>Reason</TableHead>
-              {onRestore && <TableHead className="text-right">Actions</TableHead>}
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -42,8 +45,18 @@ export default function WithdrawnStudentsPage({ students, onRestore }: Withdrawn
                 <TableCell>{s.section}</TableCell>
                 <TableCell>{s.leftDate || '—'}</TableCell>
                 <TableCell>{s.leavingReason || '—'}</TableCell>
-                {onRestore && (
-                  <TableCell className="text-right">
+                <TableCell className="text-right space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedStudentForTC(s)}
+                    title="Generate TC"
+                    className="gap-1"
+                  >
+                    <FileText className="w-4 h-4" />
+                    TC
+                  </Button>
+                  {onRestore && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -62,13 +75,19 @@ export default function WithdrawnStudentsPage({ students, onRestore }: Withdrawn
                       <RotateCcw className="w-4 h-4" />
                       Restore
                     </Button>
-                  </TableCell>
-                )}
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      <TransferCertificateModal
+        open={!!selectedStudentForTC}
+        onClose={() => setSelectedStudentForTC(null)}
+        student={selectedStudentForTC}
+      />
     </div>
   );
 }

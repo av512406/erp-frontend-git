@@ -1,0 +1,20 @@
+{
+    "students": [
+        {
+            "admissionNumber": "ROUNDTRIP001",
+            "name": "Round Trip Student",
+            "fatherName": "",
+            "motherName": "",
+            "dateOfBirth": "2015-01-01",
+            "admissionDate": "2024-01-01",
+            "aadharNumber": "111122223333",
+            "penNumber": "PEN999",
+            "aaparId": "APA999",
+            "mobileNumber": "9876543210",
+            "address": "123 Test Lane",
+            "grade": "5",
+            "section": "B",
+            "yearlyFeeAmount": "15000.00"
+        }
+    ]
+}

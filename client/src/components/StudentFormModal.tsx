@@ -43,7 +43,8 @@ export default function StudentFormModal({
     section: '',
     fatherName: '',
     motherName: '',
-    yearlyFeeAmount: ''
+    yearlyFeeAmount: '',
+    category: 'GEN'
   });
 
   useEffect(() => {
@@ -62,7 +63,8 @@ export default function StudentFormModal({
         section: student.section,
         fatherName: (student as any).fatherName || '',
         motherName: (student as any).motherName || '',
-        yearlyFeeAmount: student.yearlyFeeAmount
+        yearlyFeeAmount: student.yearlyFeeAmount,
+        category: (student as any).category || 'GEN'
       });
     } else {
       setFormData({
@@ -79,14 +81,15 @@ export default function StudentFormModal({
         section: '',
         fatherName: '',
         motherName: '',
-        yearlyFeeAmount: ''
+        yearlyFeeAmount: '',
+        category: 'GEN'
       });
     }
   }, [student, isOpen]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    onSave(formData as any);
   };
 
   return (
@@ -114,16 +117,34 @@ export default function StudentFormModal({
                   placeholder="Enter student's full name"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="dateOfBirth">Date of Birth</Label>
-                <Input
-                  id="dateOfBirth"
-                  type="date"
-                  value={formData.dateOfBirth}
-                  onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                  required
-                  data-testid="input-dob"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                  <Input
+                    id="dateOfBirth"
+                    type="date"
+                    value={formData.dateOfBirth}
+                    onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                    required
+                    data-testid="input-dob"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="category">Category</Label>
+                  <select
+                    id="category"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={(formData as any).category || 'GEN'}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value } as any)}
+                    data-testid="input-category"
+                  >
+                    <option value="GEN">GEN</option>
+                    <option value="OBC">OBC</option>
+                    <option value="EWS">EWS</option>
+                    <option value="SC">SC</option>
+                    <option value="ST">ST</option>
+                  </select>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
