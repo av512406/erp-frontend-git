@@ -127,6 +127,37 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
         END IF;
       END $$;
 
+      -- Receipt Serial Migration
+      -- 1. Add column
+      ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS receipt_serial integer;
+
+      -- 2. Create sequence
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = 'receipt_serial_seq') THEN
+          CREATE SEQUENCE receipt_serial_seq OWNED BY fee_transactions.receipt_serial;
+        END IF;
+      END $$;
+
+      -- 3. Backfill null serials (safe for partial runs)
+      WITH ordered AS (
+        SELECT id,
+               COALESCE((SELECT MAX(receipt_serial) FROM fee_transactions), 0) + 
+               ROW_NUMBER() OVER (ORDER BY payment_date, created_at) AS rn
+        FROM fee_transactions
+        WHERE receipt_serial IS NULL
+      )
+      UPDATE fee_transactions f
+      SET receipt_serial = ordered.rn
+      FROM ordered
+      WHERE f.id = ordered.id;
+
+      -- 4. Set default
+      ALTER TABLE fee_transactions ALTER COLUMN receipt_serial SET DEFAULT nextval('receipt_serial_seq');
+
+      -- 5. Sync sequence
+      SELECT setval('receipt_serial_seq', COALESCE((SELECT MAX(receipt_serial) FROM fee_transactions), 0));
+
       -- helpful index for frequent queries
       CREATE INDEX IF NOT EXISTS idx_fee_transactions_student_date ON fee_transactions (student_id, payment_date);
 
