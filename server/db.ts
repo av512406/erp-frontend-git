@@ -155,8 +155,8 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
       -- 4. Set default
       ALTER TABLE fee_transactions ALTER COLUMN receipt_serial SET DEFAULT nextval('receipt_serial_seq');
 
-      -- 5. Sync sequence
-      SELECT setval('receipt_serial_seq', COALESCE((SELECT MAX(receipt_serial) FROM fee_transactions), 0));
+      -- 5. Sync sequence safely
+      SELECT setval('receipt_serial_seq', COALESCE((SELECT MAX(receipt_serial) FROM fee_transactions), 1), (SELECT MAX(receipt_serial) FROM fee_transactions) IS NOT NULL);
 
       -- helpful index for frequent queries
       CREATE INDEX IF NOT EXISTS idx_fee_transactions_student_date ON fee_transactions (student_id, payment_date);
@@ -281,20 +281,57 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
       VALUES ('admin-seed-id', 'admin@school.edu', 'admin123', 'admin', 'Administrator')
       ON CONFLICT (username) DO NOTHING;
 
-      -- School configuration (single-row table). Stores basic metadata and optional base64 logo.
-      CREATE TABLE IF NOT EXISTS school_config (
+      -- School configuration (Multi-tenant)
+      CREATE TABLE IF NOT EXISTS schools (
         id text PRIMARY KEY,
         name text NOT NULL,
-        address_line text NOT NULL,
+        slug text UNIQUE NOT NULL,
+        address text,
         phone text,
-        session text,
         logo_url text,
+        is_active boolean DEFAULT true,
+        created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
-      -- Ensure default row exists
-      INSERT INTO school_config (id, name, address_line, phone, session, logo_url)
-      VALUES ('default','GLORIOUS PUBLIC SCHOOL','Jamoura (Sarkhadi), Distt. LALITPUR (U.P)','+91-0000-000000','2025-2026', NULL)
-      ON CONFLICT (id) DO NOTHING;
+
+      -- Seed default school if none exists
+      INSERT INTO schools (id, name, slug, address, phone)
+      VALUES ('default-school-id', 'GLORIOUS PUBLIC SCHOOL', 'glorious', 'Jamoura (Sarkhadi), Distt. LALITPUR (U.P)', '+91-0000-000000')
+      ON CONFLICT (slug) DO NOTHING;
+
+      -- Add school_id to all tables
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
+      ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
+      ALTER TABLE grades ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
+      ALTER TABLE subjects ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
+      ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
+
+      -- Backfill school_id for existing data (assign to default school)
+      UPDATE students SET school_id = 'default-school-id' WHERE school_id IS NULL;
+      UPDATE fee_transactions SET school_id = 'default-school-id' WHERE school_id IS NULL;
+      UPDATE grades SET school_id = 'default-school-id' WHERE school_id IS NULL;
+      UPDATE subjects SET school_id = 'default-school-id' WHERE school_id IS NULL;
+      UPDATE class_subjects SET school_id = 'default-school-id' WHERE school_id IS NULL;
+      UPDATE users SET school_id = 'default-school-id' WHERE school_id IS NULL AND role != 'superadmin';
+
+      -- Make school_id NOT NULL after backfill (optional, maybe keep nullable for superadmin or shared resources?)
+      -- For now, we enforce it for data integrity, except maybe users who can be superadmins
+      ALTER TABLE students ALTER COLUMN school_id SET NOT NULL;
+      ALTER TABLE fee_transactions ALTER COLUMN school_id SET NOT NULL;
+      ALTER TABLE grades ALTER COLUMN school_id SET NOT NULL;
+      -- subjects might be shared? Let's assume per-school for now to allow custom subjects
+      ALTER TABLE subjects ALTER COLUMN school_id SET NOT NULL; 
+      ALTER TABLE class_subjects ALTER COLUMN school_id SET NOT NULL;
+
+      -- Indexes for performance
+      CREATE INDEX IF NOT EXISTS idx_students_school_id ON students (school_id);
+      CREATE INDEX IF NOT EXISTS idx_fees_school_id ON fee_transactions (school_id);
+      CREATE INDEX IF NOT EXISTS idx_users_school_id ON users (school_id);
+
+      -- Legacy school_config table support (deprecated but kept for safety if needed, or we can drop it)
+      -- We will migrate data from school_config to schools if needed, but for now we just created a default school.
+
     `);
   } finally {
     client.release();

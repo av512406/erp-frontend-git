@@ -17,6 +17,7 @@ import ReportsPage from "@/components/ReportsPage";
 import DataToolsPage from "@/components/DataToolsPage";
 import SubjectsPage from "@/components/SubjectsPage";
 import AdminSettingsPage from "./components/AdminSettingsPage";
+import SuperAdminDashboard from "@/components/SuperAdminDashboard";
 import type { Student } from "@shared/schema";
 import type { FeeTransaction } from "@/components/FeesPage";
 import type { GradeEntry } from "@/components/GradesPage";
@@ -436,6 +437,11 @@ function Router({ user }: { user: User }) {
       <Route path="/admin-settings">
         <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
           <AdminSettingsPage />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/super-admin">
+        <ProtectedRoute allowedRoles={['superadmin']} userRole={user.role}>
+          <SuperAdminDashboard />
         </ProtectedRoute>
       </Route>
       <Route component={NotFound} />

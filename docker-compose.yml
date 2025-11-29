@@ -9,6 +9,7 @@ services:
       - DATABASE_URL=postgres://school_erp:school_erp_pass@postgres:5432/school_erp
       - PORT=5000
       - NODE_ENV=production
+      - SESSION_SECURE=false
       - TZ=Asia/Kolkata
     depends_on:
       postgres:

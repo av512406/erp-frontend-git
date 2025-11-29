@@ -22,7 +22,7 @@ import {
 import { useSchoolConfig } from '@/hooks/useSchoolConfig';
 
 interface NavigationProps {
-  userRole: 'admin' | 'teacher';
+  userRole: 'admin' | 'teacher' | 'superadmin' | string;
   userEmail: string;
   onLogout: () => void;
 }
@@ -46,7 +46,12 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
     { path: "/grades", label: "Grades", icon: BookOpen },
   ];
 
-  const links = userRole === 'admin' ? adminLinks : teacherLinks;
+  const superAdminLinks = [
+    { path: "/super-admin", label: "Super Admin", icon: LayoutDashboard },
+    { path: "/", label: "School Dashboard", icon: LayoutDashboard },
+  ];
+
+  const links = userRole === 'teacher' ? teacherLinks : (userRole === 'superadmin' ? superAdminLinks : adminLinks);
 
   return (
     <nav className="border-b bg-background sticky top-0 z-50">
@@ -66,7 +71,7 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
 
             <div className="flex items-center gap-1">
               {/* Dashboard always first */}
-              {links.filter(l => l.path === '/').map(link => {
+              {links.filter(l => l.path === '/' || l.path === '/super-admin').map(link => {
                 const Icon = link.icon;
                 const isActive = location === link.path;
                 return (
@@ -75,7 +80,7 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
                       variant={isActive ? "secondary" : "ghost"}
                       size="sm"
                       className="gap-2"
-                      data-testid={`link-${link.label.toLowerCase()}`}
+                      data-testid={`link-${link.label.toLowerCase().replace(' ', '-')}`}
                     >
                       <Icon className="w-4 h-4" />
                       {link.label}
@@ -83,7 +88,7 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
                   </Link>
                 );
               })}
-              {userRole === 'admin' && (
+              {(userRole === 'admin' || userRole === 'superadmin') && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -110,8 +115,8 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
-              {/* Remaining links (excluding Dashboard) */}
-              {links.filter(l => l.path !== '/').map(link => {
+              {/* Remaining links (excluding Dashboard and Super Admin) */}
+              {links.filter(l => l.path !== '/' && l.path !== '/super-admin').map(link => {
                 const Icon = link.icon;
                 const isActive = location === link.path;
                 return (
@@ -120,7 +125,7 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
                       variant={isActive ? "secondary" : "ghost"}
                       size="sm"
                       className="gap-2"
-                      data-testid={`link-${link.label.toLowerCase()}`}
+                      data-testid={`link-${link.label.toLowerCase().replace(' ', '-')}`}
                     >
                       <Icon className="w-4 h-4" />
                       {link.label}
@@ -128,7 +133,7 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
                   </Link>
                 );
               })}
-              {userRole === 'admin' && (
+              {(userRole === 'admin' || userRole === 'superadmin') && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
