@@ -141,3 +141,25 @@ export const classSubjects = pgTable("class_subjects", {
   maxMarks: decimal("max_marks", { precision: 6, scale: 2 }),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
 });
+
+export const insertClassSubjectSchema = createInsertSchema(classSubjects).omit({ id: true, schoolId: true });
+export type InsertClassSubject = z.infer<typeof insertClassSubjectSchema>;
+export type ClassSubject = typeof classSubjects.$inferSelect;
+
+export const documentTemplates = pgTable("document_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  schoolId: varchar("school_id").notNull().references(() => schools.id),
+  type: text("type").notNull(), // 'report_card', 'transfer_certificate', 'payslip'
+  content: text("content").notNull(), // HTML template
+  config: text("config"), // JSON string for additional config
+  updatedAt: date("updated_at").defaultNow(),
+});
+
+export const insertDocumentTemplateSchema = createInsertSchema(documentTemplates).omit({
+  id: true,
+  schoolId: true,
+  updatedAt: true,
+});
+
+export type InsertDocumentTemplate = z.infer<typeof insertDocumentTemplateSchema>;
+export type DocumentTemplate = typeof documentTemplates.$inferSelect;

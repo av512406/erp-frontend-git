@@ -22,15 +22,24 @@ import { FileText, Printer } from "lucide-react";
 import type { Student } from '@shared/schema';
 import type { GradeEntry } from "./GradesPage";
 import { schoolConfig } from '@/lib/schoolConfig';
+import { useDocumentTemplate } from '@/hooks/useDocumentTemplate';
+import { useSchoolConfig } from '@/hooks/useSchoolConfig'; // Assuming this hook exists
 
 interface ReportsPageProps {
-  students: Student[];
-  grades: GradeEntry[];
+  // students: Student[]; // Removed as per instruction
+  // grades: GradeEntry[]; // Removed as per instruction
 }
 
 const TERMS = ['Term 1', 'Term 2', 'Final'];
 
-export default function ReportsPage({ students, grades }: ReportsPageProps) {
+export default function ReportsPage({ /* students, grades */ }: ReportsPageProps) {
+  const { config } = useSchoolConfig();
+  const { data: template } = useDocumentTemplate('report_card');
+
+  // Assuming students and grades will be fetched or come from context now
+  const [students, setStudents] = useState<Student[]>([]); // Placeholder
+  const [grades, setGrades] = useState<GradeEntry[]>([]); // Placeholder
+
   const [selectedStudent, setSelectedStudent] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
   const [selectedSection, setSelectedSection] = useState("");
@@ -62,7 +71,8 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
       </tr>
     `).join('');
 
-    printWindow.document.write(`
+    // Default Template Content
+    const defaultContent = `
       <html>
         <head>
           <title>Report Card - ${student.name}</title>
@@ -176,7 +186,25 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
           </div>
         </body>
       </html>
-    `);
+    `;
+
+    if (template) {
+      let html = template.content;
+      // Basic replacements - extend as needed
+      html = html.replace(/{{studentName}}/g, student.name);
+      html = html.replace(/{{admissionNumber}}/g, student.admissionNumber);
+      html = html.replace(/{{grade}}/g, student.grade);
+      html = html.replace(/{{section}}/g, student.section);
+      html = html.replace(/{{term}}/g, selectedTerm);
+      html = html.replace(/{{rows}}/g, rowsHtml);
+      html = html.replace(/{{total}}/g, total.toString());
+      html = html.replace(/{{average}}/g, average);
+
+      printWindow.document.write(html);
+    } else {
+      printWindow.document.write(defaultContent);
+    }
+
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();

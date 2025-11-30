@@ -7,6 +7,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Printer, CheckCircle } from "lucide-react";
 import type { FeeTransaction } from "./FeesPage";
+import { useDocumentTemplate } from '@/hooks/useDocumentTemplate';
+import { schoolConfig } from '@/lib/schoolConfig';
 
 interface PayslipModalProps {
   transaction: FeeTransaction | null;
@@ -15,8 +17,32 @@ interface PayslipModalProps {
 }
 
 export default function PayslipModal({ transaction, isOpen, onClose }: PayslipModalProps) {
+  const { data: template } = useDocumentTemplate('payslip');
+
   const handlePrint = () => {
-    window.print();
+    if (!transaction) return;
+
+    if (template) {
+      const printWindow = window.open('', '', 'width=800,height=600');
+      if (printWindow) {
+        let html = template.content;
+        // Basic replacements
+        html = html.replace(/{{transactionId}}/g, transaction.transactionId);
+        html = html.replace(/{{date}}/g, new Date(transaction.date).toLocaleDateString());
+        html = html.replace(/{{studentName}}/g, transaction.studentName);
+        html = html.replace(/{{amount}}/g, transaction.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+        html = html.replace(/{{schoolName}}/g, schoolConfig.name);
+        html = html.replace(/{{schoolAddress}}/g, schoolConfig.addressLine);
+
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+      }
+    } else {
+      window.print();
+    }
   };
 
   if (!transaction) return null;
@@ -27,10 +53,10 @@ export default function PayslipModal({ transaction, isOpen, onClose }: PayslipMo
         <DialogHeader className="print:hidden">
           <DialogTitle>Payment Payslip</DialogTitle>
         </DialogHeader>
-        
+
         <div className="space-y-6" id="payslip-content">
           <div className="text-center border-b pb-4">
-            <h1 className="text-2xl font-semibold">Glorious Public School</h1>
+            <h1 className="text-2xl font-semibold">{schoolConfig.name}</h1>
             <p className="text-sm text-muted-foreground">Fee Payment Receipt</p>
           </div>
 

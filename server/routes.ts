@@ -1,8 +1,27 @@
 import type { Express } from 'express';
 import ExcelJS from 'exceljs';
 import { createServer, type Server } from 'http';
-import { pool, ensureTables, genId, genTransactionId } from './db';
-import { insertStudentSchema, insertGradeSchema, insertFeeTransactionSchema, insertSubjectSchema, insertUserSchema, insertTeacherSchema, schools } from '../shared/schema';
+import { db, pool, ensureTables, genId, genTransactionId } from './db';
+import {
+  users,
+  students,
+  teachers,
+  feeTransactions,
+  grades,
+  subjects,
+  classSubjects,
+  documentTemplates,
+  insertUserSchema,
+  insertStudentSchema,
+  insertTeacherSchema,
+  insertFeeTransactionSchema,
+  insertGradeSchema,
+  insertSubjectSchema,
+  insertClassSubjectSchema,
+  insertDocumentTemplateSchema,
+  schools
+} from '@shared/schema';
+import { eq, and } from 'drizzle-orm';
 import { ZodError, z } from 'zod';
 import { hashPassword, comparePassword } from './lib/auth';
 
@@ -1350,6 +1369,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
       updatedAt: row.updated_at
     };
   }
+
+  // Document Templates (Session-based)
+  app.get("/api/templates/:type", async (req, res) => {
+    if (!(req.session as any).user) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const schoolId = (req.session as any).user.schoolId;
+      if (!schoolId) return res.status(400).json({ message: "No school associated with user" });
+
+      const { type } = req.params;
+      const [template] = await db
+        .select()
+        .from(documentTemplates)
+        .where(and(eq(documentTemplates.schoolId, schoolId), eq(documentTemplates.type, type)))
+        .limit(1);
+
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch template" });
+    }
+  });
+
+  // Document Templates (Admin/SuperAdmin management)
+  app.get("/api/schools/:schoolId/templates/:type", async (req, res) => {
+    try {
+      const { schoolId, type } = req.params;
+      const [template] = await db
+        .select()
+        .from(documentTemplates)
+        .where(and(eq(documentTemplates.schoolId, schoolId), eq(documentTemplates.type, type)))
+        .limit(1);
+
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch template" });
+    }
+  });
+
+  app.post("/api/schools/:schoolId/templates", async (req, res) => {
+    try {
+      const { schoolId } = req.params;
+      const { type, content, config } = req.body;
+
+      // Check if template exists
+      const [existing] = await db
+        .select()
+        .from(documentTemplates)
+        .where(and(eq(documentTemplates.schoolId, schoolId), eq(documentTemplates.type, type)))
+        .limit(1);
+
+      if (existing) {
+        const [updated] = await db
+          .update(documentTemplates)
+          .set({ content, config, updatedAt: new Date().toISOString() })
+          .where(eq(documentTemplates.id, existing.id))
+          .returning();
+        res.json(updated);
+      } else {
+        const [created] = await db
+          .insert(documentTemplates)
+          .values({
+            schoolId,
+            type,
+            content,
+            config
+          })
+          .returning();
+        res.json(created);
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save template" });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

@@ -1,10 +1,13 @@
 import { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import * as schema from '@shared/schema';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 
 const DATABASE_URL = process.env.DATABASE_URL || 'postgres://school_erp:school_erp_pass@localhost:15432/school_erp';
 
 export const pool = new Pool({ connectionString: DATABASE_URL });
+export const db = drizzle(pool, { schema });
 
 export async function ensureTables(retries = 8, delayMs = 1000) {
   // Attempt connection with simple retry to handle 57P03 (database starting up)
