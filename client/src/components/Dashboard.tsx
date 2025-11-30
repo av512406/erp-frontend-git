@@ -1,9 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useLocation } from "wouter";
 import { Users, DollarSign, BookOpen, TrendingUp } from "lucide-react";
 
 interface DashboardStats {
   totalStudents: number;
   pendingFees: number;
+  feesCollectedToday: number;
   gradesEntered: number;
   avgAttendance: number;
 }
@@ -14,6 +16,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ stats, userRole }: DashboardProps) {
+  const [, setLocation] = useLocation();
   const adminCards = [
     {
       title: "Total Students",
@@ -28,10 +31,11 @@ export default function Dashboard({ stats, userRole }: DashboardProps) {
       description: "Outstanding payments"
     },
     {
-      title: "Classes Entered",
-      value: stats.gradesEntered,
-      icon: BookOpen,
-      description: "This term"
+      title: "Fees Collected Today",
+      value: `₹${stats.feesCollectedToday.toLocaleString('en-IN')}`,
+      icon: DollarSign,
+      description: "Today's collection",
+      link: "/fees?filter=today"
     },
     {
       title: "Avg Attendance",
@@ -75,18 +79,20 @@ export default function Dashboard({ stats, userRole }: DashboardProps) {
         {cards.map((card, index) => {
           const Icon = card.icon;
           return (
-            <Card key={index} data-testid={`card-${card.title.toLowerCase().replace(/\s+/g, '-')}`}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
-                <Icon className="w-4 h-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-semibold" data-testid={`text-${card.title.toLowerCase().replace(/\s+/g, '-')}-value`}>
-                  {card.value}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">{card.description}</p>
-              </CardContent>
-            </Card>
+            <div key={index} onClick={() => (card as any).link && setLocation((card as any).link)} className={(card as any).link ? "cursor-pointer" : ""}>
+              <Card data-testid={`card-${card.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
+                  <Icon className="w-4 h-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-semibold" data-testid={`text-${card.title.toLowerCase().replace(/\s+/g, '-')}-value`}>
+                    {card.value}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{card.description}</p>
+                </CardContent>
+              </Card>
+            </div>
           );
         })}
       </div>

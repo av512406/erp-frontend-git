@@ -295,7 +295,10 @@ function Router({ user }: { user: User }) {
         yearlyFeeAmount: (20000 + (parseInt(grade) * 1000)).toString(),
         status: 'active',
         leftDate: '',
-        leavingReason: ''
+        leavingReason: '',
+        gender: i % 2 === 0 ? 'Male' : 'Female',
+        category: 'GEN',
+        schoolId: 'demo-school'
       });
     }
 
@@ -339,6 +342,12 @@ function Router({ user }: { user: User }) {
       const paid = transactions.reduce((s, t) => s + (t.amount || 0), 0);
       return Math.max(Math.round(totalYearly - paid), 0);
     })(),
+    feesCollectedToday: (() => {
+      const today = new Date().toISOString().split('T')[0];
+      return transactions
+        .filter(t => t.date === today)
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+    })(),
     gradesEntered: grades.length,
     avgAttendance: 95,
   };
@@ -346,7 +355,7 @@ function Router({ user }: { user: User }) {
   return (
     <Switch>
       <Route path="/">
-        <Dashboard stats={stats} userRole={user.role} />
+        <Dashboard stats={stats} userRole={user.role as any} />
       </Route>
       <Route path="/students">
         <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
@@ -450,10 +459,13 @@ function Router({ user }: { user: User }) {
 }
 
 function App() {
+  const { toast } = useToast();
   const [user, setUser] = useState<User | null>(null);
+  const [loginError, setLoginError] = useState<string>("");
   const [, setLocation] = useLocation();
 
   const handleLogin = async (email: string, password: string) => {
+    setLoginError(""); // clear previous errors
     try {
       const res = await fetch('/api/login', {
         method: 'POST',
@@ -464,13 +476,23 @@ function App() {
         const data = await res.json();
         setUser({ ...data.user, email: data.user.username });
       } else {
+        let msg = "Invalid credentials";
+        try {
+          const errorData = await res.json();
+          msg = errorData.message || msg;
+        } catch (e) {
+          // response was not JSON (e.g. 502 HTML), keep default or use status text
+          msg = res.statusText || "Server error";
+        }
+        setLoginError(msg);
         toast({
           title: "Login failed",
-          description: "Invalid credentials",
+          description: msg,
           variant: "destructive"
         });
       }
     } catch (e) {
+      setLoginError("Network error. Please try again.");
       toast({
         title: "Login error",
         description: "Network error",
@@ -481,6 +503,7 @@ function App() {
 
   const handleLogout = () => {
     setUser(null);
+    setLoginError("");
     setLocation("/");
   };
 
@@ -488,7 +511,7 @@ function App() {
     return (
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <LoginPage onLogin={handleLogin} />
+          <LoginPage onLogin={handleLogin} errorMessage={loginError} />
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>
@@ -499,7 +522,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <div className="min-h-screen bg-background">
-          <Navigation userRole={user.role} userEmail={user.email} onLogout={handleLogout} />
+          <Navigation userRole={user.role} userEmail={user.email || ''} onLogout={handleLogout} />
           <Router user={user} />
         </div>
         <Toaster />

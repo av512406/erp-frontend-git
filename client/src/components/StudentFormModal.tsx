@@ -44,7 +44,8 @@ export default function StudentFormModal({
     fatherName: '',
     motherName: '',
     yearlyFeeAmount: '',
-    category: 'GEN'
+    category: 'GEN',
+    gender: 'Male'
   });
 
   useEffect(() => {
@@ -64,7 +65,8 @@ export default function StudentFormModal({
         fatherName: (student as any).fatherName || '',
         motherName: (student as any).motherName || '',
         yearlyFeeAmount: student.yearlyFeeAmount,
-        category: (student as any).category || 'GEN'
+        category: (student as any).category || 'GEN',
+        gender: (student as any).gender || 'Male'
       });
     } else {
       setFormData({
@@ -82,7 +84,8 @@ export default function StudentFormModal({
         fatherName: '',
         motherName: '',
         yearlyFeeAmount: '',
-        category: 'GEN'
+        category: 'GEN',
+        gender: 'Male'
       });
     }
   }, [student, isOpen]);
@@ -117,7 +120,7 @@ export default function StudentFormModal({
                   placeholder="Enter student's full name"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="dateOfBirth">Date of Birth</Label>
                   <Input
@@ -128,6 +131,20 @@ export default function StudentFormModal({
                     required
                     data-testid="input-dob"
                   />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="gender">Gender</Label>
+                  <select
+                    id="gender"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={(formData as any).gender || 'Male'}
+                    onChange={(e) => setFormData({ ...formData, gender: e.target.value } as any)}
+                    data-testid="input-gender"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="category">Category</Label>

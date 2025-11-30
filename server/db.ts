@@ -40,6 +40,7 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
         status text NOT NULL DEFAULT 'active',
         left_date date,
         leaving_reason text,
+        gender text,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
@@ -93,6 +94,7 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
   ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
   ALTER TABLE students ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
   ALTER TABLE students ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+  ALTER TABLE students ADD COLUMN IF NOT EXISTS gender text;
   ALTER TABLE grades ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
   ALTER TABLE grades ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
   -- ensure columns exist for new tables in case of partial deployments

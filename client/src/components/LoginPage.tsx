@@ -7,9 +7,10 @@ import { GraduationCap } from "lucide-react";
 
 interface LoginPageProps {
   onLogin: (email: string, password: string) => void;
+  errorMessage?: string;
 }
 
-export default function LoginPage({ onLogin }: LoginPageProps) {
+export default function LoginPage({ onLogin, errorMessage }: LoginPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -56,6 +57,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 data-testid="input-password"
               />
             </div>
+            {errorMessage && (
+              <div className="text-sm text-destructive text-center font-medium">
+                {errorMessage}
+              </div>
+            )}
             <Button type="submit" className="w-full" data-testid="button-login">
               Sign In
             </Button>

@@ -30,7 +30,7 @@ interface School {
     address?: string;
     phone?: string;
     logoUrl?: string;
-    isActive: boolean;
+    is_active: boolean;
 }
 
 const adminSchema = z.object({
@@ -119,10 +119,10 @@ export default function SuperAdminDashboard() {
             const res = await fetch(`/api/schools/${school.id}/toggle-status`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ isActive: !school.isActive }),
+                body: JSON.stringify({ isActive: !school.is_active }),
             });
             if (res.ok) {
-                toast({ title: "Success", description: `School ${!school.isActive ? 'activated' : 'deactivated'}` });
+                toast({ title: "Success", description: `School ${!school.is_active ? 'activated' : 'deactivated'}` });
                 fetchSchools();
             } else {
                 toast({ title: "Error", description: "Failed to update status", variant: "destructive" });
@@ -356,11 +356,11 @@ export default function SuperAdminDashboard() {
                                         <TableCell>
                                             <div className="flex items-center space-x-2">
                                                 <Switch
-                                                    checked={school.isActive}
+                                                    checked={school.is_active}
                                                     onCheckedChange={() => toggleStatus(school)}
                                                 />
                                                 <span className="text-sm text-muted-foreground">
-                                                    {school.isActive ? "Active" : "Blocked"}
+                                                    {school.is_active ? "Active" : "Blocked"}
                                                 </span>
                                             </div>
                                         </TableCell>

@@ -4,6 +4,7 @@ import { createServer, type Server } from 'http';
 import { pool, ensureTables, genId, genTransactionId } from './db';
 import { insertStudentSchema, insertGradeSchema, insertFeeTransactionSchema, insertSubjectSchema, insertUserSchema, insertTeacherSchema, schools } from '../shared/schema';
 import { ZodError, z } from 'zod';
+import { hashPassword, comparePassword } from './lib/auth';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // ensure DB tables exist (helpful for local Docker)
@@ -30,7 +31,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       yearlyFeeAmount: row.yearly_fee_amount?.toString?.() ?? row.yearly_fee_amount,
       status: row.status || 'active',
       leftDate: formatDateForClient(row.left_date),
-      leavingReason: row.leaving_reason || ''
+      leavingReason: row.leaving_reason || '',
+      category: row.category || 'GEN',
+      gender: row.gender || ''
     };
   }
 
@@ -78,10 +81,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: 'Invalid credentials' });
       }
       const user = result.rows[0];
-      // In a real app, compare hashed password. Here we use plain text as per existing pattern/request.
-      if (user.password !== password) {
+
+      // Check password (supports both hashed and legacy plain text)
+      let isValid = false;
+
+      if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
+        isValid = await comparePassword(password, user.password);
+      } else {
+        // Legacy plain text check
+        isValid = user.password === password;
+      }
+
+      if (!isValid) {
         return res.status(401).json({ message: 'Invalid credentials' });
       }
+
+      // Invalidate existing sessions for this user
+      await pool.query("DELETE FROM session WHERE sess -> 'user' ->> 'id' = $1", [user.id]);
 
       // Set session
       (req.session as any).user = {
@@ -100,8 +116,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.json({
-        user: (req.session as any).user
+      // Explicitly save session before responding to ensure persistence
+      req.session.save((err) => {
+        if (err) {
+          console.error('Session save error:', err);
+          return res.status(500).json({ message: 'Session save failed' });
+        }
+        res.json({
+          user: (req.session as any).user
+        });
       });
     } catch (e) {
       console.error(e);
@@ -504,8 +527,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (strategy === 'upsert') {
               // update
               await client.query(
-                `UPDATE students SET name=$1, date_of_birth=$2, admission_date=$3, aadhar_number=$4, pen_number=$5, aapar_id=$6, mobile_number=$7, address=$8, grade=$9, section=$10, father_name=$11, mother_name=$12, yearly_fee_amount=$13 WHERE admission_number=$14 AND school_id=$15`,
-                [data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount, data.admissionNumber, user.schoolId]
+                `UPDATE students SET name=$1, date_of_birth=$2, admission_date=$3, aadhar_number=$4, pen_number=$5, aapar_id=$6, mobile_number=$7, address=$8, grade=$9, section=$10, father_name=$11, mother_name=$12, yearly_fee_amount=$13, category=$14, gender=$15 WHERE admission_number=$16 AND school_id=$17`,
+                [data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount, (data as any).category || 'GEN', (data as any).gender || null, data.admissionNumber, user.schoolId]
               );
               updated++;
             } else {
@@ -514,8 +537,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           } else {
             const id = genId();
             await client.query(
-              `INSERT INTO students (id, admission_number, name, date_of_birth, admission_date, aadhar_number, pen_number, aapar_id, mobile_number, address, grade, section, father_name, mother_name, yearly_fee_amount, status, school_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'active', $16)`,
-              [id, data.admissionNumber, data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount, user.schoolId]
+              `INSERT INTO students (id, admission_number, name, date_of_birth, admission_date, aadhar_number, pen_number, aapar_id, mobile_number, address, grade, section, father_name, mother_name, yearly_fee_amount, status, category, gender, school_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'active', $16, $17, $18)`,
+              [id, data.admissionNumber, data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount, (data as any).category || 'GEN', (data as any).gender || null, user.schoolId]
             );
             added.push(data.admissionNumber);
           }

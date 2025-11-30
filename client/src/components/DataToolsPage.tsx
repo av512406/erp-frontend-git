@@ -59,6 +59,8 @@ type RawStudentRow = {
   fatherName?: string; // added
   motherName?: string; // added
   yearlyFeeAmount?: string;
+  category?: string;
+  gender?: string;
 };
 
 interface DataToolsPageProps {
@@ -192,6 +194,8 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
               const yearlyFeeAmount = yfaRaw === undefined || yfaRaw === null ? '' : normalizeNumberString(yfaRaw);
               const fatherName = normalize(row.fatherName || row["Father's Name"] || row['Father Name'] || row['father'] || row['Fathers Name']);
               const motherName = normalize(row.motherName || row["Mother's Name"] || row['Mother Name'] || row['mother'] || row['Mothers Name']);
+              const category = normalize(row.category || row['Category'] || 'GEN');
+              const gender = normalize(row.gender || row['Gender'] || '');
               return {
                 admissionNumber,
                 name,
@@ -207,6 +211,8 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 fatherName,
                 motherName,
                 yearlyFeeAmount,
+                category,
+                gender
               };
             });
           // keep a copy of raw parsed rows for review/export/upsert
@@ -324,7 +330,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
       : students.filter(s => s.grade === exportFilter);
 
     const csvContent = [
-      ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount'].join(','),
+      ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'category', 'gender'].join(','),
       ...filteredStudents.map(s => [
         s.admissionNumber,
         s.name,
@@ -339,7 +345,9 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
         s.address,
         s.grade,
         s.section,
-        s.yearlyFeeAmount
+        s.yearlyFeeAmount,
+        (s as any).category || 'GEN',
+        (s as any).gender || ''
       ].join(','))
     ].join('\n');
 
@@ -403,7 +411,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
               onClick={() => {
                 // export skipped rows as CSV if available
                 if (!skippedRows || skippedRows.length === 0) return;
-                const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount'];
+                const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'category', 'gender'];
                 const rows = skippedRows.map(r => [
                   r.admissionNumber,
                   `"${(r.name || '').replace(/"/g, '""')}"`,
@@ -418,7 +426,9 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                   `"${(r.address || '').replace(/"/g, '""')}"`,
                   r.grade || '',
                   r.section || '',
-                  r.yearlyFeeAmount || ''
+                  r.yearlyFeeAmount || '',
+                  r.category || '',
+                  r.gender || ''
                 ].join(','));
                 const csv = [header.join(','), ...rows].join('\n');
                 const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -535,7 +545,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
             </div>
             <div className="text-sm text-muted-foreground">
               <p className="font-medium mb-1">Accepted columns (case-insensitive):</p>
-              <p className="font-mono text-xs">admissionNumber, name, fatherName or "Father's Name", motherName or "Mother's Name", dateOfBirth, admissionDate, aadharNumber, penNumber, aaparId, mobileNumber, address, grade or class, section, yearlyFeeAmount or "Yearly fees"</p>
+              <p className="font-mono text-xs">admissionNumber, name, fatherName or "Father's Name", motherName or "Mother's Name", dateOfBirth, admissionDate, aadharNumber, penNumber, aaparId, mobileNumber, address, grade or class, section, yearlyFeeAmount or "Yearly fees", category, gender</p>
             </div>
             <div className="flex gap-2">
               <Button
@@ -554,7 +564,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 onClick={() => {
                   // generate template for selected templateGrade
                   const filtered = templateGrade === 'all' ? students : students.filter(s => s.grade === templateGrade);
-                  const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount'];
+                  const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'category', 'gender'];
                   // Template with one sample row illustrating date format (YYYY-MM-DD)
                   const sample = [
                     'STU001',
@@ -570,7 +580,9 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                     '123 Sample Street',
                     '10',
                     'A',
-                    '25000'
+                    '25000',
+                    'GEN',
+                    'Male'
                   ].join(',');
                   const csv = [header.join(','), sample].join('\n');
                   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

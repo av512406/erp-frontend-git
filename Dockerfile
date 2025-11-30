@@ -5,9 +5,11 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
+
 # Install dependencies
 RUN apk add --no-cache tzdata
 RUN npm install --legacy-peer-deps
+RUN npm install bcryptjs --legacy-peer-deps
 
 # Copy source code
 COPY . .
