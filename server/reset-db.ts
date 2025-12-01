@@ -1,4 +1,4 @@
-import { pool, ensureTables, genId, genTransactionId } from './db';
+import { pool, ensureTables, genId, genTransactionId, seedDefaults } from './db';
 
 // Reset (truncate) all application tables. Optionally seed with sample data when --sample is passed.
 // Usage:
@@ -7,7 +7,15 @@ import { pool, ensureTables, genId, genTransactionId } from './db';
 
 async function truncateAll() {
   // Order matters due to foreign keys; truncate child tables first.
-  await pool.query('TRUNCATE fee_transactions, grades, class_subjects, subjects, students RESTART IDENTITY CASCADE');
+  await pool.query('TRUNCATE fee_transactions, grades, class_subjects, subjects, students, users, schools RESTART IDENTITY CASCADE');
+
+  // Re-seed default super admin
+  const client = await pool.connect();
+  try {
+    await seedDefaults(client);
+  } finally {
+    client.release();
+  }
 }
 
 async function seedSample() {
@@ -85,7 +93,7 @@ async function main() {
   if (sample) {
     await seedSample();
   }
-  const tables = ['students','subjects','class_subjects','grades','fee_transactions'];
+  const tables = ['students', 'subjects', 'class_subjects', 'grades', 'fee_transactions'];
   const summary: Record<string, number> = {};
   for (const t of tables) summary[t] = await count(t);
   console.log('\n=== Database Reset Complete ===');

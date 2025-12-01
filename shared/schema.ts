@@ -11,6 +11,7 @@ export const schools = pgTable("schools", {
   phone: text("phone"),
   logoUrl: text("logo_url"),
   isActive: boolean("is_active").default(true),
+  currentSessionId: varchar("current_session_id"), // FK to academic_sessions added later to avoid circular dep issues in TS if needed, but for Drizzle it's just a string field unless we use relations.
 });
 
 export const users = pgTable("users", {
@@ -93,6 +94,7 @@ export const feeTransactions = pgTable("fee_transactions", {
   remarks: text("remarks"),
   receiptSerial: integer("receipt_serial"),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
+  sessionId: varchar("session_id"), // FK to academic_sessions
 });
 
 export const insertFeeTransactionSchema = createInsertSchema(feeTransactions).omit({
@@ -112,6 +114,7 @@ export const grades = pgTable("grades", {
   marks: decimal("marks", { precision: 5, scale: 2 }).notNull(),
   term: text("term").notNull(),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
+  sessionId: varchar("session_id"), // FK to academic_sessions
 });
 
 export const insertGradeSchema = createInsertSchema(grades).omit({
@@ -163,3 +166,43 @@ export const insertDocumentTemplateSchema = createInsertSchema(documentTemplates
 
 export type InsertDocumentTemplate = z.infer<typeof insertDocumentTemplateSchema>;
 export type DocumentTemplate = typeof documentTemplates.$inferSelect;
+
+// --- Session Management ---
+
+export const academicSessions = pgTable("academic_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(), // e.g., "2025-2026"
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  isActive: boolean("is_active").default(false),
+  schoolId: varchar("school_id").notNull().references(() => schools.id), // Sessions are per-school or global? Plan said global but per-school gives flexibility. Let's stick to global for now as per plan, but wait, the plan said "Super Admin creates Global Session Definitions". So maybe no schoolId here if it's global.
+  // Actually, usually sessions are global definitions, but schools might activate them at different times.
+  // Let's make it global for now as per plan: "Super Admin creates Global Session Definitions".
+});
+
+// We need to update schools to link to current session
+// This is a circular dependency if we reference academicSessions here directly in the schools definition above.
+// But we can't change the order easily without breaking things.
+// For now, we will add the column in SQL but maybe not enforce the FK constraint strictly in Drizzle if it causes issues, or just define it.
+// Actually, Drizzle handles this fine if we define it. But `schools` is defined at the top.
+// Let's leave `schools` definition as is for now and just know we will add the column.
+// Wait, I should update `schools` definition too.
+
+export const studentSessions = pgTable("student_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: varchar("student_id").notNull().references(() => students.id),
+  sessionId: varchar("session_id").notNull().references(() => academicSessions.id),
+  grade: text("grade").notNull(),
+  section: text("section").notNull(),
+  rollNumber: text("roll_number"),
+  status: text("status").notNull().default('active'), // promoted, detained, active
+  schoolId: varchar("school_id").notNull().references(() => schools.id),
+});
+
+export const insertAcademicSessionSchema = createInsertSchema(academicSessions).omit({ id: true });
+export type InsertAcademicSession = z.infer<typeof insertAcademicSessionSchema>;
+export type AcademicSession = typeof academicSessions.$inferSelect;
+
+export const insertStudentSessionSchema = createInsertSchema(studentSessions).omit({ id: true });
+export type InsertStudentSession = z.infer<typeof insertStudentSessionSchema>;
+export type StudentSession = typeof studentSessions.$inferSelect;

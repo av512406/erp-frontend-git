@@ -1,12 +1,12 @@
 // Centralized school metadata; update here to reflect everywhere.
 // Default (fallback) school configuration; runtime overrides are fetched from server
 export const defaultSchoolConfig = {
-  name: 'GLORIOUS PUBLIC SCHOOL',
-  addressLine: 'Jamoura (Sarkhadi), Distt. LALITPUR (U.P)',
+  name: 'School ERP',
+  addressLine: 'School Address',
   phone: '+91-0000-000000',
   session: '2025-2026',
   logoUrl: '/logo.png',
-  email: 'info@gloriouspublicschool.com'
+  email: 'admin@school.com'
 };
 
 export type SchoolConfig = typeof defaultSchoolConfig & { updatedAt?: string | null };

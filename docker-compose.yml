@@ -6,11 +6,16 @@ services:
     # ports:
     #   - "5000:5000" # Exposed via Nginx now
     environment:
-      - DATABASE_URL=postgres://school_erp:school_erp_pass@postgres:5432/school_erp
-      - PORT=5000
-      - NODE_ENV=production
+      - DATABASE_URL=postgresql://school_erp:school_erp_pass@postgres:5432/school_erp
+      - PORT=${PORT}
+      - NODE_ENV=${NODE_ENV}
+      - SESSION_SECRET=${SESSION_SECRET}
       - SESSION_SECURE=false
-      - TZ=Asia/Kolkata
+      - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL}
+      - SUPER_ADMIN_PASSWORD=${SUPER_ADMIN_PASSWORD}
+      - TZ=${TZ}
+    links:
+      - postgres
     depends_on:
       postgres:
         condition: service_healthy
@@ -24,8 +29,11 @@ services:
       - "443:443" # Open HTTPS port
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      # - /etc/letsencrypt:/etc/letsencrypt:ro # Uncomment when you have SSL certs
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
     depends_on:
+      - app
+    links:
       - app
     restart: always
 
@@ -33,11 +41,11 @@ services:
     image: postgres:16
     container_name: school_erp_db
     environment:
-      POSTGRES_USER: school_erp
-      POSTGRES_PASSWORD: school_erp_pass
-      POSTGRES_DB: school_erp
-      TZ: Asia/Kolkata
-      PGTZ: Asia/Kolkata
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: ${TZ:-UTC}
+      PGTZ: ${TZ:-UTC}
     ports:
       - "15432:5432"
     volumes:
@@ -48,7 +56,45 @@ services:
       timeout: 5s
       retries: 5
 
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    container_name: school_erp_backup
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=school_erp
+      - POSTGRES_DB=school_erp
+      - PGPASSWORD=school_erp_pass
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - BACKUP_FREQUENCY_SECONDS=86400 # 24 hours
+    volumes:
+      - ./db_backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    links:
+      - postgres
+
+  certbot:
+    image: certbot/certbot
+    container_name: school_erp_certbot
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    depends_on:
+      - nginx
+    links:
+      - nginx
+
 volumes:
   postgres_data:
     name: school_erp_postgres_data
-    external: true
+  certbot_conf:
+    name: school_erp_certbot_conf
+  certbot_www:
+    name: school_erp_certbot_www

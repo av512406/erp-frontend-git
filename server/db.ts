@@ -9,7 +9,7 @@ const DATABASE_URL = process.env.DATABASE_URL || 'postgres://school_erp:school_e
 export const pool = new Pool({ connectionString: DATABASE_URL });
 export const db = drizzle(pool, { schema });
 
-export async function ensureTables(retries = 8, delayMs = 1000) {
+export async function ensureTables(retries = 20, delayMs = 2000) {
   // Attempt connection with simple retry to handle 57P03 (database starting up)
   let client;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -24,6 +24,36 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
   if (!client) throw new Error('Could not obtain DB connection');
   try {
     await client.query(`
+      CREATE TABLE IF NOT EXISTS academic_sessions (
+        id text PRIMARY KEY,
+        name text NOT NULL,
+        start_date date NOT NULL,
+        end_date date NOT NULL,
+        is_active boolean DEFAULT false
+      );
+
+      CREATE TABLE IF NOT EXISTS schools (
+        id text PRIMARY KEY,
+        name text NOT NULL,
+        slug text UNIQUE NOT NULL,
+        address text,
+        phone text,
+        logo_url text,
+        is_active boolean DEFAULT true,
+        current_session_id text REFERENCES academic_sessions(id),
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS "session" (
+        "sid" varchar NOT NULL COLLATE "default" PRIMARY KEY,
+        "sess" json NOT NULL,
+        "expire" timestamp(6) NOT NULL
+      )
+      WITH (OIDS=FALSE);
+
+      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
+
       CREATE TABLE IF NOT EXISTS students (
         id text PRIMARY KEY,
         admission_number text UNIQUE NOT NULL,
@@ -44,6 +74,7 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
         left_date date,
         leaving_reason text,
         gender text,
+        school_id text REFERENCES schools(id),
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
@@ -56,6 +87,9 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
         payment_date date NOT NULL,
         payment_mode text,
         remarks text,
+        receipt_serial integer,
+        school_id text REFERENCES schools(id),
+        session_id text REFERENCES academic_sessions(id),
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
@@ -66,6 +100,21 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
         subject text NOT NULL,
         marks numeric(5,2) NOT NULL,
         term text NOT NULL,
+        school_id text REFERENCES schools(id),
+        session_id text REFERENCES academic_sessions(id),
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+      
+      CREATE TABLE IF NOT EXISTS teachers (
+        id text PRIMARY KEY,
+        name text NOT NULL,
+        date_of_joining date NOT NULL,
+        salary numeric(10,2) NOT NULL,
+        address text,
+        mobile_number text,
+        qualification text,
+        school_id text REFERENCES schools(id),
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
@@ -75,6 +124,7 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
         id text PRIMARY KEY,
         code text UNIQUE NOT NULL,
         name text NOT NULL,
+        school_id text REFERENCES schools(id),
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
@@ -85,9 +135,22 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
         grade text NOT NULL,
         subject_id text NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
         max_marks numeric(6,2),
+        school_id text REFERENCES schools(id),
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now(),
         UNIQUE(grade, subject_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS student_sessions (
+        id text PRIMARY KEY,
+        student_id text NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        session_id text NOT NULL REFERENCES academic_sessions(id) ON DELETE CASCADE,
+        grade text NOT NULL,
+        section text NOT NULL,
+        roll_number text,
+        status text NOT NULL DEFAULT 'active',
+        school_id text NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+        UNIQUE(student_id, session_id)
       );
 
       -- add transaction_id column if upgrading existing schema
@@ -106,6 +169,18 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
   ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
   ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
   ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS max_marks numeric(6,2);
+  
+  -- Add school_id to all tables
+  ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
+  ALTER TABLE grades ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
+  ALTER TABLE subjects ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
+  ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
+  
+  -- Add session_id to tables
+  ALTER TABLE schools ADD COLUMN IF NOT EXISTS current_session_id text REFERENCES academic_sessions(id);
+  ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS session_id text REFERENCES academic_sessions(id);
+  ALTER TABLE grades ADD COLUMN IF NOT EXISTS session_id text REFERENCES academic_sessions(id);
+
       -- backfill any null transaction_id values
       UPDATE fee_transactions SET transaction_id = concat('TXN', substr(md5(random()::text),1,8)) WHERE transaction_id IS NULL;
       -- add parent name columns if missing
@@ -115,6 +190,7 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
   ALTER TABLE students ADD COLUMN IF NOT EXISTS left_date date;
   ALTER TABLE students ADD COLUMN IF NOT EXISTS leaving_reason text;
   ALTER TABLE students ADD COLUMN IF NOT EXISTS category text DEFAULT 'GEN';
+  ALTER TABLE students ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
 
       -- ensure payment_mode cannot be null and has a sensible default
       ALTER TABLE fee_transactions ALTER COLUMN payment_mode SET DEFAULT 'cash';
@@ -241,6 +317,7 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
         password text NOT NULL,
         role text NOT NULL DEFAULT 'teacher',
         name text NOT NULL DEFAULT 'User',
+        school_id text REFERENCES schools(id),
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
@@ -250,6 +327,7 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password text;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'teacher';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT 'User';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
       
       -- Ensure unique constraint on username exists for ON CONFLICT to work
       DO $$
@@ -281,66 +359,74 @@ export async function ensureTables(retries = 8, delayMs = 1000) {
         END IF;
       END $$;
 
-      -- Seed default admin if no users exist
-      INSERT INTO users (id, username, password, role, name)
-      VALUES ('admin-seed-id', 'admin@school.edu', 'admin123', 'admin', 'Administrator')
-      ON CONFLICT (username) DO NOTHING;
-
-      -- School configuration (Multi-tenant)
-      CREATE TABLE IF NOT EXISTS schools (
-        id text PRIMARY KEY,
-        name text NOT NULL,
-        slug text UNIQUE NOT NULL,
-        address text,
-        phone text,
-        logo_url text,
-        is_active boolean DEFAULT true,
-        created_at timestamptz NOT NULL DEFAULT now(),
-        updated_at timestamptz NOT NULL DEFAULT now()
-      );
-
-      -- Seed default school if none exists
-      INSERT INTO schools (id, name, slug, address, phone)
-      VALUES ('default-school-id', 'GLORIOUS PUBLIC SCHOOL', 'glorious', 'Jamoura (Sarkhadi), Distt. LALITPUR (U.P)', '+91-0000-000000')
-      ON CONFLICT (slug) DO NOTHING;
-
-      -- Add school_id to all tables
-      ALTER TABLE students ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
-      ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
-      ALTER TABLE grades ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
-      ALTER TABLE subjects ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
-      ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
-
-      -- Backfill school_id for existing data (assign to default school)
-      UPDATE students SET school_id = 'default-school-id' WHERE school_id IS NULL;
-      UPDATE fee_transactions SET school_id = 'default-school-id' WHERE school_id IS NULL;
-      UPDATE grades SET school_id = 'default-school-id' WHERE school_id IS NULL;
-      UPDATE subjects SET school_id = 'default-school-id' WHERE school_id IS NULL;
-      UPDATE class_subjects SET school_id = 'default-school-id' WHERE school_id IS NULL;
-      UPDATE users SET school_id = 'default-school-id' WHERE school_id IS NULL AND role != 'superadmin';
-
-      -- Make school_id NOT NULL after backfill (optional, maybe keep nullable for superadmin or shared resources?)
-      -- For now, we enforce it for data integrity, except maybe users who can be superadmins
-      ALTER TABLE students ALTER COLUMN school_id SET NOT NULL;
-      ALTER TABLE fee_transactions ALTER COLUMN school_id SET NOT NULL;
-      ALTER TABLE grades ALTER COLUMN school_id SET NOT NULL;
-      -- subjects might be shared? Let's assume per-school for now to allow custom subjects
-      ALTER TABLE subjects ALTER COLUMN school_id SET NOT NULL; 
-      ALTER TABLE class_subjects ALTER COLUMN school_id SET NOT NULL;
-
-      -- Indexes for performance
-      CREATE INDEX IF NOT EXISTS idx_students_school_id ON students (school_id);
-      CREATE INDEX IF NOT EXISTS idx_fees_school_id ON fee_transactions (school_id);
-      CREATE INDEX IF NOT EXISTS idx_users_school_id ON users (school_id);
-
-      -- Legacy school_config table support (deprecated but kept for safety if needed, or we can drop it)
-      -- We will migrate data from school_config to schools if needed, but for now we just created a default school.
-
     `);
+
+    // --- Session Management Migration ---
+    await client.query(`
+      -- Backfill Data Strategy
+      DO $$
+      DECLARE
+        default_session_id text;
+      BEGIN
+        -- 1. Create Default Session '2025-2026' if no sessions exist
+        IF NOT EXISTS (SELECT 1 FROM academic_sessions) THEN
+          default_session_id := gen_random_uuid()::text;
+          INSERT INTO academic_sessions (id, name, start_date, end_date, is_active)
+          VALUES (default_session_id, '2025-2026', '2025-04-01', '2026-03-31', true);
+          
+          -- 2. Link all schools to this session
+          UPDATE schools SET current_session_id = default_session_id WHERE current_session_id IS NULL;
+
+          -- 3. Link existing transactions to this session
+          UPDATE fee_transactions SET session_id = default_session_id WHERE session_id IS NULL;
+
+          -- 4. Link existing grades to this session
+          UPDATE grades SET session_id = default_session_id WHERE session_id IS NULL;
+
+          -- 5. Snapshot existing students into student_sessions
+          INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id)
+          SELECT 
+            gen_random_uuid()::text,
+            s.id,
+            default_session_id,
+            s.grade,
+            s.section,
+            s.status,
+            s.school_id
+          FROM students s
+          WHERE NOT EXISTS (
+            SELECT 1 FROM student_sessions ss WHERE ss.student_id = s.id AND ss.session_id = default_session_id
+          );
+        END IF;
+      END $$;
+    `);
+
+    await seedDefaults(client);
   } finally {
     client.release();
   }
+}
+
+export async function seedDefaults(client: any) {
+  // Seed Super Admin from Environment Variables
+  const username = process.env.SUPER_ADMIN_EMAIL;
+  const password = process.env.SUPER_ADMIN_PASSWORD;
+
+  if (!username || !password) {
+    console.warn('Skipping Super Admin seeding: SUPER_ADMIN_EMAIL or SUPER_ADMIN_PASSWORD not set.');
+    return;
+  }
+
+  await client.query(`
+    INSERT INTO users (id, username, password, role, name)
+    VALUES ('super-admin-id', $1, $2, 'superadmin', 'Super Admin')
+    ON CONFLICT (username) DO UPDATE SET 
+      password = EXCLUDED.password,
+      role = 'superadmin';
+  `, [username, password]);
+
+  // We do NOT seed a default school anymore.
+  // The super admin will create schools manually.
 }
 
 export function genId() {

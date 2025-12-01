@@ -66,11 +66,7 @@ export default function LoginPage({ onLogin, errorMessage }: LoginPageProps) {
               Sign In
             </Button>
           </form>
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p>Demo credentials:</p>
-            <p className="font-mono text-xs mt-1">Admin: admin@school.edu / admin123</p>
-            <p className="font-mono text-xs">Teacher: teacher@school.edu / teacher123</p>
-          </div>
+
         </CardContent>
       </Card>
     </div>

@@ -4,3 +4,4 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gzsetup_ec2_docker.md
+update_ec2.sh

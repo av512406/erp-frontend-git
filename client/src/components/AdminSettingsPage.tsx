@@ -196,6 +196,7 @@ function UserManagement() {
 
 function SchoolSettings() {
   const { config, isLoading, updateConfig, isSaving } = useSchoolConfig();
+  const { toast } = useToast();
   const [form, setForm] = useState({
     name: config.name,
     addressLine: config.addressLine,
@@ -205,6 +206,9 @@ function SchoolSettings() {
   });
 
   const [logoError, setLogoError] = useState<string | null>(null);
+  const [availableSessions, setAvailableSessions] = useState<any[]>([]);
+  const [selectedSession, setSelectedSession] = useState("");
+  const [switchOpen, setSwitchOpen] = useState(false);
 
   // Sync form with config when config loads
   useEffect(() => {
@@ -240,44 +244,120 @@ function SchoolSettings() {
     await updateConfig(form);
   };
 
+  useEffect(() => {
+    fetch('/api/sessions')
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch sessions');
+        return res.json();
+      })
+      .then(data => {
+        if (Array.isArray(data)) {
+          setAvailableSessions(data);
+        } else {
+          setAvailableSessions([]);
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        setAvailableSessions([]);
+      });
+  }, []);
+
+  const handleSwitchSession = async () => {
+    if (!selectedSession) return;
+    try {
+      const res = await fetch('/api/schools/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: selectedSession })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        toast({ title: "Session Switched", description: `Promoted ${data.promotedStudents} students.` });
+        setSwitchOpen(false);
+        window.location.reload();
+      } else {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to switch session.");
+      }
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>School Information</CardTitle>
-      </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
-          {isLoading && <p className="text-sm text-muted-foreground">Loading current configuration...</p>}
-          <div className="space-y-2">
-            <Label htmlFor="name">School Name</Label>
-            <Input id="name" name="name" value={form.name} onChange={handleChange} required />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="addressLine">Address Line</Label>
-            <Input id="addressLine" name="addressLine" value={form.addressLine} onChange={handleChange} required />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="phone">Phone</Label>
-            <Input id="phone" name="phone" value={form.phone} onChange={handleChange} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="session">Session</Label>
-            <Input id="session" name="session" value={form.session} onChange={handleChange} required />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="logoFile">Logo Image (optional)</Label>
-            <Input id="logoFile" name="logoFile" type="file" accept="image/*" onChange={handleChange} />
-            {config.logoUrl && <img src={config.logoUrl} alt="Current Logo" className="h-20 mt-2 object-contain border rounded" />}
-            {logoError && <p className="text-xs text-red-600 mt-1">{logoError}</p>}
-            {!logoError && form.logoFile && <p className="text-xs text-muted-foreground mt-1">Selected: {form.logoFile.name} ({Math.round(form.logoFile.size / 1024)} KB)</p>}
-          </div>
-          <div className="text-xs text-muted-foreground">Updating settings immediately affects receipts and other areas using school metadata.</div>
-        </CardContent>
-        <CardFooter className="flex justify-end gap-2">
-          <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Settings'}</Button>
-        </CardFooter>
-      </form>
-    </Card>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>School Information</CardTitle>
+        </CardHeader>
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-4">
+            {isLoading && <p className="text-sm text-muted-foreground">Loading current configuration...</p>}
+            <div className="space-y-2">
+              <Label htmlFor="name">School Name</Label>
+              <Input id="name" name="name" value={form.name} onChange={handleChange} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="addressLine">Address Line</Label>
+              <Input id="addressLine" name="addressLine" value={form.addressLine} onChange={handleChange} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone</Label>
+              <Input id="phone" name="phone" value={form.phone} onChange={handleChange} />
+            </div>
+            <div className="space-y-2">
+              <Label>Current Session</Label>
+              <div className="flex items-center gap-4">
+                <div className="border px-3 py-2 rounded-md bg-muted min-w-[200px]">{config.session || 'Loading...'}</div>
+                <Dialog open={switchOpen} onOpenChange={setSwitchOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline">Switch Session</Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Switch Academic Session</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label>Select New Session</Label>
+                        <Select onValueChange={setSelectedSession}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select session" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableSessions.map(s => (
+                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="text-sm text-muted-foreground bg-yellow-50 p-3 rounded border border-yellow-200">
+                        <strong>Warning:</strong> Switching sessions will automatically promote all active students to the new session.
+                      </div>
+                      <Button onClick={handleSwitchSession} disabled={!selectedSession} className="w-full">
+                        Confirm Switch
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="logoFile">Logo Image (optional)</Label>
+              <Input id="logoFile" name="logoFile" type="file" accept="image/*" onChange={handleChange} />
+              {config.logoUrl && <img src={config.logoUrl} alt="Current Logo" className="h-20 mt-2 object-contain border rounded" />}
+              {logoError && <p className="text-xs text-red-600 mt-1">{logoError}</p>}
+              {!logoError && form.logoFile && <p className="text-xs text-muted-foreground mt-1">Selected: {form.logoFile.name} ({Math.round(form.logoFile.size / 1024)} KB)</p>}
+            </div>
+            <div className="text-xs text-muted-foreground">Updating settings immediately affects receipts and other areas using school metadata.</div>
+          </CardContent>
+          <CardFooter className="flex justify-end gap-2">
+            <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Settings'}</Button>
+          </CardFooter>
+        </form>
+      </Card>
+    </div>
   );
 }
 

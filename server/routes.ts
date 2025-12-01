@@ -184,13 +184,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const user = (req.session as any).user;
     if (!user || user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
 
+    const client = await pool.connect();
     try {
       const { name, slug, address, phone, logoUrl } = req.body;
       // Basic validation
       if (!name || !slug) return res.status(400).json({ message: 'Name and Slug are required' });
 
+      await client.query('BEGIN');
+
       const id = genId();
-      const q = await pool.query(
+      const q = await client.query(
         'INSERT INTO schools (id, name, slug, address, phone, logo_url) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
         [id, name, slug, address, phone, logoUrl]
       );
@@ -200,16 +203,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const adminUsername = `admin@${slug}.com`;
       const adminPassword = `${slug}123`; // Default password
 
-      await pool.query(
+      await client.query(
         'INSERT INTO users (id, username, password, role, name, school_id) VALUES ($1, $2, $3, $4, $5, $6)',
         [adminId, adminUsername, adminPassword, 'admin', 'School Admin', id]
       );
 
+      await client.query('COMMIT');
+
       res.status(201).json({ school: q.rows[0], admin: { username: adminUsername, password: adminPassword } });
     } catch (e: any) {
+      await client.query('ROLLBACK');
       if (e.code === '23505') return res.status(409).json({ message: 'School slug already exists' });
       console.error(e);
       res.status(500).json({ message: 'Failed to create school' });
+    } finally {
+      client.release();
     }
   });
 
@@ -1314,7 +1322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (rows.length === 0) {
         return res.status(404).json({ message: 'School config not found' });
       }
-      res.json(mapConfig(rows[0]));
+      res.json(await mapConfig(rows[0]));
     } catch (e) {
       console.error(e);
       res.status(500).json({ message: 'failed to load school config' });
@@ -1351,7 +1359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (q.rowCount === 0) return res.status(404).json({ message: 'School not found' });
 
-      res.json(mapConfig(q.rows[0]));
+      res.json(await mapConfig(q.rows[0]));
     } catch (e) {
       if (e instanceof ZodError) return res.status(400).json({ message: 'validation', issues: e.format() });
       console.error(e);
@@ -1359,12 +1367,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  function mapConfig(row: any) {
+  async function mapConfig(row: any) {
+    // Fetch session name if current_session_id is present
+    let sessionName = '2025-2026'; // Fallback
+    if (row.current_session_id) {
+      const res = await pool.query('SELECT name FROM academic_sessions WHERE id = $1', [row.current_session_id]);
+      if (res.rows.length > 0) {
+        sessionName = res.rows[0].name;
+      }
+    }
+
     return {
       name: row.name,
       addressLine: row.address, // mapped from address
       phone: row.phone,
-      session: '2025-2026', // Hardcoded for now as it's not in schools table
+      session: sessionName,
       logoUrl: row.logo_url || null,
       updatedAt: row.updated_at
     };
@@ -1445,6 +1462,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error) {
       res.status(500).json({ message: "Failed to save template" });
+    }
+  });
+
+  // --- Session Management Endpoints ---
+
+  // 1. Create Session (Super Admin only)
+  app.post('/api/sessions', requireAuth, async (req, res) => {
+    const user = (req.session as any).user;
+    if (user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
+
+    const schema = z.object({
+      name: z.string().min(1),
+      startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      isActive: z.boolean().optional()
+    });
+
+    try {
+      const data = schema.parse(req.body);
+      const id = genId();
+      const q = await pool.query(
+        `INSERT INTO academic_sessions (id, name, start_date, end_date, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [id, data.name, data.startDate, data.endDate, data.isActive ?? false]
+      );
+      res.status(201).json(q.rows[0]);
+    } catch (e) {
+      if (e instanceof ZodError) return res.status(400).json({ message: 'validation', issues: e.format() });
+      console.error(e);
+      res.status(500).json({ message: 'failed to create session' });
+    }
+  });
+
+  // 2. List Sessions (Authenticated users)
+  app.get('/api/sessions', requireAuth, async (req, res) => {
+    try {
+      const { rows } = await pool.query('SELECT * FROM academic_sessions ORDER BY start_date DESC');
+      res.json(rows);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'failed to list sessions' });
+    }
+  });
+
+  // 3. Switch School Session (School Admin)
+  app.post('/api/schools/session', requireAuth, async (req, res) => {
+    const user = (req.session as any).user;
+    // Allow superadmin to switch for any school if schoolId provided, else use user's schoolId
+    const targetSchoolId = (user.role === 'superadmin' && req.body.schoolId) ? req.body.schoolId : user.schoolId;
+
+    if (!targetSchoolId) return res.status(400).json({ message: 'School ID required' });
+    if (user.role !== 'admin' && user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
+
+    const schema = z.object({
+      sessionId: z.string().uuid().or(z.string().min(1))
+    });
+
+    const client = await pool.connect();
+    try {
+      const { sessionId } = schema.parse(req.body);
+
+      // Verify session exists
+      const sessionCheck = await client.query('SELECT * FROM academic_sessions WHERE id = $1', [sessionId]);
+      if (sessionCheck.rowCount === 0) return res.status(404).json({ message: 'Session not found' });
+
+      await client.query('BEGIN');
+
+      // 1. Update School's Current Session
+      await client.query('UPDATE schools SET current_session_id = $1 WHERE id = $2', [sessionId, targetSchoolId]);
+
+      // 2. Promote/Carry Over Active Students
+      // Find all active students in the school
+      const studentsQ = await client.query(
+        `SELECT * FROM students WHERE school_id = $1 AND status = 'active'`,
+        [targetSchoolId]
+      );
+
+      let promotedCount = 0;
+      for (const student of studentsQ.rows) {
+        // Check if already exists in target session
+        const exists = await client.query(
+          `SELECT 1 FROM student_sessions WHERE student_id = $1 AND session_id = $2`,
+          [student.id, sessionId]
+        );
+
+        if ((exists.rowCount ?? 0) === 0) {
+          // Create session record (Carry over same grade/section for now, user can update later)
+          await client.query(
+            `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [genId(), student.id, sessionId, student.grade, student.section, 'active', targetSchoolId]
+          );
+          promotedCount++;
+        }
+      }
+
+      await client.query('COMMIT');
+      res.json({ message: 'Session switched successfully', promotedStudents: promotedCount });
+
+    } catch (e) {
+      await client.query('ROLLBACK');
+      if (e instanceof ZodError) return res.status(400).json({ message: 'validation', issues: e.format() });
+      console.error(e);
+      res.status(500).json({ message: 'failed to switch session' });
+    } finally {
+      client.release();
     }
   });
 

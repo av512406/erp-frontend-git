@@ -267,73 +267,7 @@ function Router({ user }: { user: User }) {
     return { inserted: 0, skipped: 0, skippedRows: [] };
   };
 
-  const handleLoadDemoData = (count = 50) => {
-    // Generate demo students across grades 1-12 and sections A-C
-    const gradesList = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
-    const sections = ['A', 'B', 'C'];
-    const demoStudents: Student[] = [];
-    const now = Date.now();
-    for (let i = 0; i < count; i++) {
-      const grade = gradesList[i % gradesList.length];
-      const section = sections[i % sections.length];
-      const admissionNumber = `S${new Date().getFullYear().toString().slice(-2)}-${String(i + 1).padStart(4, '0')}`;
-      demoStudents.push({
-        id: `${now}-${i}`,
-        admissionNumber,
-        name: `Student ${i + 1}`,
-        dateOfBirth: '2012-01-01',
-        admissionDate: new Date().toISOString().split('T')[0],
-        aadharNumber: '',
-        penNumber: '',
-        aaparId: '',
-        mobileNumber: '',
-        address: '',
-        grade,
-        section,
-        fatherName: '',
-        motherName: '',
-        yearlyFeeAmount: (20000 + (parseInt(grade) * 1000)).toString(),
-        status: 'active',
-        leftDate: '',
-        leavingReason: '',
-        gender: i % 2 === 0 ? 'Male' : 'Female',
-        category: 'GEN',
-        schoolId: 'demo-school'
-      });
-    }
 
-    // simple demo transactions: a few payments per some students
-    const demoTransactions: any[] = [];
-    for (let i = 0; i < Math.min(80, count * 2); i++) {
-      const stu = demoStudents[i % demoStudents.length];
-      demoTransactions.push({
-        id: `t-${now}-${i}`,
-        studentId: stu.id,
-        studentName: stu.name,
-        amount: Math.floor(500 + Math.random() * 5000),
-        date: new Date(Date.now() - Math.floor(Math.random() * 1000 * 60 * 60 * 24 * 180)).toISOString().split('T')[0],
-        transactionId: `EX-${String(i + 1).padStart(6, '0')}`
-      });
-    }
-
-    // demo grades: random marks for some students
-    const demoGrades: GradeEntry[] = [];
-    const subjects = ['Mathematics', 'Science', 'English', 'History', 'Geography'];
-    const terms = ['Term 1', 'Term 2', 'Final'];
-    for (let i = 0; i < Math.min(200, count * subjects.length); i++) {
-      const stu = demoStudents[i % demoStudents.length];
-      demoGrades.push({
-        studentId: stu.id,
-        subject: subjects[i % subjects.length],
-        marks: Math.floor(40 + Math.random() * 60),
-        term: terms[i % terms.length]
-      });
-    }
-
-    setStudents(demoStudents);
-    setTransactions(demoTransactions as any);
-    setGrades(demoGrades);
-  };
 
   const stats = {
     totalStudents: students.length,

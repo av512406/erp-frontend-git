@@ -2,9 +2,24 @@ node_modules
 dist
 .git
 .env
-db_backups
-attached_assets
+
+# Large files and backups
+*.tar.gz
+db_backups/
+attached_assets/
+
+# Legacy and source directories not needed in context if using multi-stage correctly (though we need source for build)
+# We keep client/server/shared for the build stage, but exclude others
+frontend/
+backend/
+
+# Config and scripts
 .replit
-.github
-tests
+.github/
+tests/
 test_*
+*.sh
+!backup.sh
+*.md
+verify_*.js
+setup_*.sh

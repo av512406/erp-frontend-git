@@ -71,8 +71,7 @@ interface DataToolsPageProps {
   onUpsertStudents: (students: Omit<Student, 'id'>[]) => Promise<{ updated: number }> | { updated: number };
   onImportGrades: (grades: GradeEntry[]) => Promise<void> | void;
   onImportTransactions?: (transactions: { studentId: string; amount: string; paymentDate: string; paymentMode?: string; remarks?: string }[]) => Promise<{ inserted: number; skipped: number; skippedRows?: any[] }> | { inserted: number; skipped: number; skippedRows?: any[] };
-  // optional: load demo data (for admin/testing)
-  onLoadDemoData?: (count?: number) => void;
+
 }
 
 declare global {
@@ -81,7 +80,7 @@ declare global {
   }
 }
 
-export default function DataToolsPage({ students, onImportStudents, onUpsertStudents, onImportGrades, onImportTransactions, onLoadDemoData }: DataToolsPageProps) {
+export default function DataToolsPage({ students, onImportStudents, onUpsertStudents, onImportGrades, onImportTransactions }: DataToolsPageProps) {
   const [isImporting, setIsImporting] = useState(false);
   const [exportFilter, setExportFilter] = useState<string>("all");
   const [templateGrade, setTemplateGrade] = useState<string>("all");
@@ -370,19 +369,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
     <div className="container mx-auto p-6">
       <div className="mb-4">
         {/* Demo data loader for admins/testing. Shown when parent provides handler. */}
-        {typeof onLoadDemoData === 'function' && (
-          <div className="flex justify-end">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                const ok = confirm('Load demo data (adds ~50 sample students, transactions and grades) into your local app state? This will overwrite current in-memory lists.');
-                if (ok) onLoadDemoData();
-              }}
-            >
-              Load Demo Data
-            </Button>
-          </div>
-        )}
+
       </div>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold">Data Tools</h1>
@@ -601,16 +588,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 Download Template
               </Button>
             </div>
-            <Button
-              variant="outline"
-              className="w-full gap-2"
-              onClick={() => studentFileRef.current?.click()}
-              disabled={isImporting}
-              data-testid="button-import-students"
-            >
-              <Upload className="w-4 h-4" />
-              {isImporting ? 'Importing...' : 'Select File'}
-            </Button>
+
           </CardContent>
         </Card>
 
