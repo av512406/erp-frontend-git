@@ -5,3 +5,14 @@ server/public
 vite.config.ts.*
 *.tar.gzsetup_ec2_docker.md
 update_ec2.sh
+.env
+.env.example
+db_backups/
+*.pem
+nginx.conf.ssl
+cookies.txt
+local_cookies.txt
+verify_temp/
+students_export.csv
+test_roundtrip.json
+*.tar.gz
