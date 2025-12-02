@@ -86,7 +86,16 @@ S3_BUCKET_NAME=schoolerpbackupmultiuser
 POSTGRES_USER=school_erp
 POSTGRES_PASSWORD=school_erp_pass
 POSTGRES_DB=school_erp
+TZ=Asia/Kolkata
 EOT
+
+    # Conditionally add AWS credentials if they exist locally
+    if [ ! -z "${AWS_ACCESS_KEY_ID}" ]; then
+        echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" >> .env
+    fi
+    if [ ! -z "${AWS_SECRET_ACCESS_KEY}" ]; then
+        echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> .env
+    fi
 
     # Start Nginx (HTTP only first)
     echo "Starting Docker containers..."

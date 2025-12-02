@@ -21,12 +21,27 @@ fi
 
 mkdir -p "$BACKUP_DIR"
 
-while true; do
+    # Calculate seconds until next 2 AM
+    current_epoch=$(date +%s)
+    current_hour=$(date +%H)
+    
+    if [ "$current_hour" -lt 2 ]; then
+        next_run=$(date -d "today 02:00" +%s)
+    else
+        next_run=$(date -d "tomorrow 02:00" +%s)
+    fi
+    
+    current_now=$(date +%s)
+    sleep_seconds=$((next_run - current_now))
+    
+    echo "Next backup scheduled for $(date -d @$next_run) (in $sleep_seconds seconds)."
+    sleep "$sleep_seconds"
+
     TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
     FILENAME="backup_$TIMESTAMP.sql.gz"
     FILEPATH="$BACKUP_DIR/$FILENAME"
 
-    echo "[$TIMESTAMP] Starting backup..."
+    echo "[$TIMESTAMP] Starting scheduled backup..."
 
     # Run pg_dump
     if pg_dump -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$POSTGRES_DB" | gzip > "$FILEPATH"; then
@@ -36,7 +51,6 @@ while true; do
         echo "[$TIMESTAMP] Uploading to S3..."
         if aws s3 cp "$FILEPATH" "s3://$S3_BUCKET_NAME/$FILENAME"; then
             echo "[$TIMESTAMP] Upload successful!"
-            # Remove local file after successful upload
             rm "$FILEPATH"
         else
             echo "[$TIMESTAMP] Upload failed!"
@@ -45,7 +59,4 @@ while true; do
         echo "[$TIMESTAMP] Backup failed!"
         rm -f "$FILEPATH"
     fi
-
-    echo "Next backup in $BACKUP_FREQUENCY_SECONDS seconds."
-    sleep "$BACKUP_FREQUENCY_SECONDS"
 done

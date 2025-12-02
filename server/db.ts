@@ -56,7 +56,7 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
 
       CREATE TABLE IF NOT EXISTS students (
         id text PRIMARY KEY,
-        admission_number text UNIQUE NOT NULL,
+        admission_number text NOT NULL,
         name text NOT NULL,
         date_of_birth date NOT NULL,
         admission_date date NOT NULL,
@@ -76,7 +76,8 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
         gender text,
         school_id text REFERENCES schools(id),
         created_at timestamptz NOT NULL DEFAULT now(),
-        updated_at timestamptz NOT NULL DEFAULT now()
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE(school_id, admission_number)
       );
 
       CREATE TABLE IF NOT EXISTS fee_transactions (
@@ -91,7 +92,8 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
         school_id text REFERENCES schools(id),
         session_id text REFERENCES academic_sessions(id),
         created_at timestamptz NOT NULL DEFAULT now(),
-        updated_at timestamptz NOT NULL DEFAULT now()
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE(school_id, receipt_serial)
       );
 
       CREATE TABLE IF NOT EXISTS grades (
@@ -122,11 +124,12 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
       -- subjects catalog
       CREATE TABLE IF NOT EXISTS subjects (
         id text PRIMARY KEY,
-        code text UNIQUE NOT NULL,
+        code text NOT NULL,
         name text NOT NULL,
         school_id text REFERENCES schools(id),
         created_at timestamptz NOT NULL DEFAULT now(),
-        updated_at timestamptz NOT NULL DEFAULT now()
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE(school_id, code)
       );
 
       -- per-class subject assignments
@@ -356,6 +359,60 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
           ) THEN
              ALTER TABLE users ADD CONSTRAINT users_username_key UNIQUE (username);
           END IF;
+        END IF;
+      END $$;
+
+      -- MIGRATION: Fix Student Import Across Schools
+      -- Drop global unique constraint on admission_number and add composite unique constraint
+      DO $$
+      BEGIN
+        -- 1. Drop old constraint if exists
+        IF EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'students_admission_number_key'
+        ) THEN
+          ALTER TABLE students DROP CONSTRAINT students_admission_number_key;
+        END IF;
+
+        -- 2. Add new composite constraint if not exists
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'students_school_id_admission_number_key'
+        ) THEN
+          -- Ensure school_id is not null for existing records before adding constraint (optional safety)
+          -- DELETE FROM students WHERE school_id IS NULL; -- Or handle appropriately
+          
+          ALTER TABLE students ADD CONSTRAINT students_school_id_admission_number_key UNIQUE (school_id, admission_number);
+        END IF;
+      END $$;
+
+      -- MIGRATION: Fix Subject Code Across Schools
+      -- Drop global unique constraint on code and add composite unique constraint
+      DO $$
+      BEGIN
+        -- 1. Drop old constraint if exists
+        IF EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'subjects_code_key'
+        ) THEN
+          ALTER TABLE subjects DROP CONSTRAINT subjects_code_key;
+        END IF;
+
+        -- 2. Add new composite constraint if not exists
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'subjects_school_id_code_key'
+        ) THEN
+          ALTER TABLE subjects ADD CONSTRAINT subjects_school_id_code_key UNIQUE (school_id, code);
+        END IF;
+      END $$;
+
+      -- MIGRATION: Fix Receipt Serial Uniqueness
+      -- Add composite unique constraint on (school_id, receipt_serial)
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'fee_transactions_school_id_receipt_serial_key'
+        ) THEN
+          -- Note: This might fail if duplicates exist. User should clean data or we accept failure in dev.
+          -- In production, we'd need a cleanup strategy.
+          ALTER TABLE fee_transactions ADD CONSTRAINT fee_transactions_school_id_receipt_serial_key UNIQUE (school_id, receipt_serial);
         END IF;
       END $$;
 

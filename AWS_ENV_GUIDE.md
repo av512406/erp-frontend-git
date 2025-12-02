@@ -90,3 +90,19 @@ Create a new policy with this JSON (replace `your-bucket-name`):
     ]
 }
 ```
+
+### S3 Cost Optimization
+To minimize costs for your backup bucket:
+
+1.  **Lifecycle Rules (Crucial)**:
+    *   Go to **S3 Console** > **Management** > **Lifecycle rules**.
+    *   Create a rule to **Expire current versions** of objects after **30 days** (or 7 days if you prefer).
+    *   This ensures you don't pay for old backups indefinitely.
+
+2.  **Versioning**:
+    *   **Disable** Bucket Versioning (or Suspend it).
+    *   Since backups have unique timestamps in filenames, versioning is not needed and will only increase costs if you delete files manually.
+
+3.  **Storage Class**:
+    *   For short-term backups (< 30 days), use **Standard** class (default).
+    *   Do **not** use Standard-IA for files you delete within 30 days (you will be charged for the full 30 days anyway).

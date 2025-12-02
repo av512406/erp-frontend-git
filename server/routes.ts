@@ -746,29 +746,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // basic validation ensure student exists in school
       const exists = await pool.query('SELECT id, name FROM students WHERE id=$1 AND school_id=$2', [data.studentId, user.schoolId]);
       if ((exists.rowCount ?? 0) === 0) return res.status(404).json({ message: 'student not found' });
+
       const id = genId();
       const transactionId = genTransactionId();
-      // Obtain receipt serial via sequence; fallback MAX+1 if sequence missing.
-      // Note: Serial should ideally be per-school, but global sequence is easier. 
-      // If per-school serial is needed, we'd need a separate sequence or max+1 logic per school_id.
-      // For now, let's stick to global sequence or max+1 global to avoid collision if we don't have per-school sequences.
-      // Actually, max+1 per school is better for "Receipt No 1" for each school.
 
       let receiptSerial: number | null = null;
-      try {
-        // Try per-school max+1
-        const maxQ = await pool.query('SELECT COALESCE(MAX(receipt_serial),0)+1 as next FROM fee_transactions WHERE school_id=$1', [user.schoolId]);
-        receiptSerial = Number(maxQ.rows[0].next);
-      } catch {
-        receiptSerial = 1;
+      let retries = 3;
+      let lastError = null;
+      let row = null;
+
+      while (retries > 0) {
+        try {
+          // Try per-school max+1
+          const maxQ = await pool.query('SELECT COALESCE(MAX(receipt_serial),0)+1 as next FROM fee_transactions WHERE school_id=$1', [user.schoolId]);
+          receiptSerial = Number(maxQ.rows[0].next);
+
+          const q = await pool.query(
+            `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks, receipt_serial, school_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+            [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null, receiptSerial, user.schoolId]
+          );
+          row = q.rows[0];
+          break; // Success
+        } catch (e: any) {
+          if (e.code === '23505' && e.constraint === 'fee_transactions_school_id_receipt_serial_key') {
+            // Race condition hit, retry
+            retries--;
+            lastError = e;
+            continue;
+          }
+          throw e; // Other errors
+        }
       }
 
-      const q = await pool.query(
-        `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks, receipt_serial, school_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null, receiptSerial, user.schoolId]
-      );
+      if (!row) {
+        throw lastError || new Error('Failed to generate unique receipt serial after retries');
+      }
 
-      const row = q.rows[0];
       res.status(201).json({
         id: row.id,
         studentId: row.student_id,
@@ -836,14 +849,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const id = genId();
           const transactionId = genTransactionId();
 
-          // Per-row sequence consumption (per school)
-          const maxQ = await client.query('SELECT COALESCE(MAX(receipt_serial),0)+1 as next FROM fee_transactions WHERE school_id=$1', [user.schoolId]);
-          const receiptSerial = Number(maxQ.rows[0].next);
+          let retries = 3;
+          let success = false;
+          let lastError = null;
 
-          await client.query(
-            `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks, receipt_serial, school_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-            [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null, receiptSerial, user.schoolId]
-          );
+          while (retries > 0) {
+            try {
+              // Per-row sequence consumption (per school)
+              const maxQ = await client.query('SELECT COALESCE(MAX(receipt_serial),0)+1 as next FROM fee_transactions WHERE school_id=$1', [user.schoolId]);
+              const receiptSerial = Number(maxQ.rows[0].next);
+
+              await client.query(
+                `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks, receipt_serial, school_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+                [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null, receiptSerial, user.schoolId]
+              );
+              success = true;
+              break;
+            } catch (e: any) {
+              if (e.code === '23505' && e.constraint === 'fee_transactions_school_id_receipt_serial_key') {
+                retries--;
+                lastError = e;
+                continue;
+              }
+              throw e;
+            }
+          }
+
+          if (!success) {
+            throw lastError || new Error('Failed to generate unique receipt serial');
+          }
+
           inserted++;
         } catch (e: any) {
           skipped.push({ index: i, reason: e?.message || 'invalid row', row });
