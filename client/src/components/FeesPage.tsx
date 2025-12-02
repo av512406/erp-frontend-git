@@ -50,7 +50,11 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
 
   const [viewStudent, setViewStudent] = useState("all");
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  // Use local date for default
+  const [date, setDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
   // payslip removed; use distribution modal directly
   const [paymentMode, setPaymentMode] = useState<string>('cash');
   const [remarks, setRemarks] = useState<string>('');
@@ -70,7 +74,9 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('filter') === 'today') {
-      setFilterDate(new Date().toISOString().split('T')[0]);
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      setFilterDate(today);
     } else {
       setFilterDate(null);
     }
@@ -128,7 +134,9 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
         setDistributionTx(created);
         // setSelectedStudent(""); // Removed as we use viewStudent now
         setAmount("");
-        setDate(new Date().toISOString().split('T')[0]);
+        // Reset to today (local)
+        const now = new Date();
+        setDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
         setPaymentMode('cash');
         setRemarks('');
       } catch (err: any) {

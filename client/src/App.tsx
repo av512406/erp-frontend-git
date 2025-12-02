@@ -277,7 +277,9 @@ function Router({ user }: { user: User }) {
       return Math.max(Math.round(totalYearly - paid), 0);
     })(),
     feesCollectedToday: (() => {
-      const today = new Date().toISOString().split('T')[0];
+      // Use local date string YYYY-MM-DD
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       return transactions
         .filter(t => t.date === today)
         .reduce((sum, t) => sum + (t.amount || 0), 0);
