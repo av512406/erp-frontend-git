@@ -26,19 +26,15 @@ import { useDocumentTemplate } from '@/hooks/useDocumentTemplate';
 import { useSchoolConfig } from '@/hooks/useSchoolConfig'; // Assuming this hook exists
 
 interface ReportsPageProps {
-  // students: Student[]; // Removed as per instruction
-  // grades: GradeEntry[]; // Removed as per instruction
+  students: Student[];
+  grades: GradeEntry[];
 }
 
 const TERMS = ['Term 1', 'Term 2', 'Final'];
 
-export default function ReportsPage({ /* students, grades */ }: ReportsPageProps) {
+export default function ReportsPage({ students, grades }: ReportsPageProps) {
   const { config } = useSchoolConfig();
   const { data: template } = useDocumentTemplate('report_card');
-
-  // Assuming students and grades will be fetched or come from context now
-  const [students, setStudents] = useState<Student[]>([]); // Placeholder
-  const [grades, setGrades] = useState<GradeEntry[]>([]); // Placeholder
 
   const [selectedStudent, setSelectedStudent] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
