@@ -84,7 +84,7 @@ export default function GradesPage({ students, grades, onSaveGrades, saving = fa
       try {
         const res = await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/subjects`);
         if (res.ok) {
-          const data: { id:string; code:string; name:string; maxMarks?: number | null }[] = await res.json();
+          const data: { id: string; code: string; name: string; maxMarks?: number | null }[] = await res.json();
           setClassSubjects(data);
         } else {
           setClassSubjects([]);
@@ -160,7 +160,7 @@ export default function GradesPage({ students, grades, onSaveGrades, saving = fa
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-  a.download = `${selectedGrade || 'class'}-${selectedSection || 'section'}-${selectedSubject || 'subject'}-${selectedTerm || 'term'}-marks-template.csv`;
+    a.download = `${selectedGrade || 'class'}-${selectedSection || 'section'}-${selectedSubject || 'subject'}-${selectedTerm || 'term'}-marks-template.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -351,7 +351,7 @@ export default function GradesPage({ students, grades, onSaveGrades, saving = fa
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="border rounded-lg overflow-hidden">
+            <div className="border rounded-lg overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -363,16 +363,16 @@ export default function GradesPage({ students, grades, onSaveGrades, saving = fa
                 <TableBody>
                   {filteredStudents.length === 0 ? (
                     <TableRow>
-                        <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
                         No students found for Class {selectedGrade} Section {selectedSection}
                       </TableCell>
                     </TableRow>
                   ) : (
                     filteredStudents.map(student => {
                       const existingGrade = grades.find(
-                        g => g.studentId === student.id && 
-                             g.subject === selectedSubject && 
-                             g.term === selectedTerm
+                        g => g.studentId === student.id &&
+                          g.subject === selectedSubject &&
+                          g.term === selectedTerm
                       );
                       return (
                         <TableRow key={student.id}>

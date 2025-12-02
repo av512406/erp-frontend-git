@@ -141,7 +141,7 @@ export default function StudentsPage({
         </div>
       </div>
 
-      <div className="border rounded-lg">
+      <div className="border rounded-lg overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -157,7 +157,7 @@ export default function StudentsPage({
           <TableBody>
             {filteredStudents.length === 0 ? (
               <TableRow>
-                  <TableCell colSpan={isReadOnly ? 6 : 7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={isReadOnly ? 6 : 7} className="text-center py-8 text-muted-foreground">
                   No students found
                 </TableCell>
               </TableRow>

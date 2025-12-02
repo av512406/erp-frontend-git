@@ -415,7 +415,7 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="border rounded-lg overflow-hidden">
+                <div className="border rounded-lg overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -508,7 +508,7 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
               </div>
             </CardHeader>
             <CardContent>
-              <div className="border rounded-lg overflow-hidden">
+              <div className="border rounded-lg overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>

@@ -11,7 +11,8 @@ import {
   Library,
   LogOut,
   Settings,
-  UserX
+  UserX,
+  Menu
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -19,7 +20,15 @@ import {
   DropdownMenuContent,
   DropdownMenuItem
 } from '@/components/ui/dropdown-menu';
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+  SheetTitle
+} from "@/components/ui/sheet";
 import { useSchoolConfig } from '@/hooks/useSchoolConfig';
+import { useState } from "react";
+import { SchoolLogo } from "@/components/ui/SchoolLogo";
 
 interface NavigationProps {
   userRole: 'admin' | 'teacher' | 'superadmin' | string;
@@ -29,10 +38,10 @@ interface NavigationProps {
 
 export default function Navigation({ userRole, userEmail, onLogout }: NavigationProps) {
   const [location] = useLocation();
-  // Fetch school config globally so logo/phone persist across reloads
   const { config } = useSchoolConfig();
+  const [isOpen, setIsOpen] = useState(false);
 
-  // Core admin links (Students & Withdrawn consolidated into dropdown; Settings & Subjects in another)
+  // Core admin links
   const adminLinks = [
     { path: "/", label: "Dashboard", icon: LayoutDashboard },
     { path: "/fees", label: "Fees", icon: DollarSign },
@@ -53,119 +62,166 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
 
   const links = userRole === 'teacher' ? teacherLinks : (userRole === 'superadmin' ? superAdminLinks : adminLinks);
 
+  const NavLink = ({ link, mobile = false }: { link: any, mobile?: boolean }) => {
+    const Icon = link.icon;
+    const isActive = location === link.path;
+    return (
+      <Link href={link.path} onClick={() => mobile && setIsOpen(false)}>
+        <Button
+          variant={isActive ? "secondary" : "ghost"}
+          size={mobile ? "default" : "sm"}
+          className={`gap-2 justify-start ${mobile ? 'w-full' : ''}`}
+          data-testid={`link-${link.label.toLowerCase().replace(' ', '-')}`}
+        >
+          <Icon className="w-4 h-4" />
+          {link.label}
+        </Button>
+      </Link>
+    );
+  };
+
   return (
     <nav className="border-b bg-background sticky top-0 z-50">
-      <div className="container mx-auto px-4 min-w-[1024px]">
+      <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16 whitespace-nowrap">
-          <div className="flex items-center gap-6">
-            <Link href="/" className="flex items-center gap-2 hover-elevate rounded-md px-3 py-2">
-              {config.logoUrl ? (
-                <img src={config.logoUrl} alt="Logo" className="h-10 w-10 object-contain rounded" />
-              ) : (
-                <div className="w-10 h-10 bg-primary rounded-md flex items-center justify-center">
-                  <GraduationCap className="w-6 h-6 text-primary-foreground" />
-                </div>
-              )}
-              <span className="font-semibold text-lg truncate max-w-[200px]" title={config.name}>{config.name || 'School ERP'}</span>
-            </Link>
 
-            <div className="flex items-center gap-1">
-              {/* Dashboard always first */}
-              {links.filter(l => l.path === '/' || l.path === '/super-admin').map(link => {
-                const Icon = link.icon;
-                const isActive = location === link.path;
-                return (
-                  <Link key={link.path} href={link.path}>
+          {/* Mobile Menu Trigger */}
+          <div className="md:hidden flex items-center">
+            <Sheet open={isOpen} onOpenChange={setIsOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="mr-2">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[300px] sm:w-[400px] overflow-y-auto">
+                <SheetTitle className="text-left mb-4 flex items-center gap-2">
+                  <SchoolLogo url={config.logoUrl} name={config.name} className="h-8 w-8" fallbackClassName="w-8 h-8" />
+                  <span className="font-bold truncate">
+                    {userRole === 'superadmin' ? 'School ERP' : (config.name || 'School ERP')}
+                  </span>
+                </SheetTitle>
+                <div className="flex flex-col gap-2 mt-4">
+                  {/* Dashboard & Main Links */}
+                  {links.filter(l => l.path === '/' || l.path === '/super-admin').map(link => (
+                    <NavLink key={link.path} link={link} mobile />
+                  ))}
+
+                  {(userRole === 'admin' || userRole === 'superadmin') && (
+                    <>
+                      <div className="text-sm font-medium text-muted-foreground mt-4 mb-2 px-2">Students</div>
+                      <NavLink link={{ path: "/students", label: "Enrolled", icon: Users }} mobile />
+                      <NavLink link={{ path: "/students-withdrawn", label: "Withdrawn", icon: UserX }} mobile />
+                    </>
+                  )}
+
+                  {links.filter(l => l.path !== '/' && l.path !== '/super-admin').map(link => (
+                    <NavLink key={link.path} link={link} mobile />
+                  ))}
+
+                  {(userRole === 'admin' || userRole === 'superadmin') && (
+                    <>
+                      <div className="text-sm font-medium text-muted-foreground mt-4 mb-2 px-2">Settings</div>
+                      <NavLink link={{ path: "/admin-settings", label: "Admin Settings", icon: Settings }} mobile />
+                      <NavLink link={{ path: "/subjects", label: "Subjects", icon: Library }} mobile />
+                    </>
+                  )}
+
+                  <div className="border-t my-4 pt-4">
+                    <div className="px-2 mb-2">
+                      <p className="font-medium text-sm truncate">{userEmail}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{userRole}</p>
+                    </div>
                     <Button
-                      variant={isActive ? "secondary" : "ghost"}
-                      size="sm"
-                      className="gap-2"
-                      data-testid={`link-${link.label.toLowerCase().replace(' ', '-')}`}
+                      variant="ghost"
+                      size="default"
+                      onClick={onLogout}
+                      className="gap-2 w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50"
                     >
-                      <Icon className="w-4 h-4" />
-                      {link.label}
+                      <LogOut className="w-4 h-4" />
+                      Logout
                     </Button>
-                  </Link>
-                );
-              })}
-              {(userRole === 'admin' || userRole === 'superadmin') && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant={["/students", "/students-withdrawn"].includes(location) ? "secondary" : "ghost"}
-                      size="sm"
-                      className="gap-2"
-                      data-testid="link-students-dropdown"
-                    >
-                      <Users className="w-4 h-4" />
-                      Students
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem asChild>
-                      <Link href="/students" className="flex items-center gap-2">
-                        <Users className="w-4 h-4" /> Enrolled
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/students-withdrawn" className="flex items-center gap-2">
-                        <UserX className="w-4 h-4" /> Withdrawn
-                      </Link>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              {/* Remaining links (excluding Dashboard and Super Admin) */}
-              {links.filter(l => l.path !== '/' && l.path !== '/super-admin').map(link => {
-                const Icon = link.icon;
-                const isActive = location === link.path;
-                return (
-                  <Link key={link.path} href={link.path}>
-                    <Button
-                      variant={isActive ? "secondary" : "ghost"}
-                      size="sm"
-                      className="gap-2"
-                      data-testid={`link-${link.label.toLowerCase().replace(' ', '-')}`}
-                    >
-                      <Icon className="w-4 h-4" />
-                      {link.label}
-                    </Button>
-                  </Link>
-                );
-              })}
-              {(userRole === 'admin' || userRole === 'superadmin') && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant={["/admin-settings", "/subjects"].includes(location) ? "secondary" : "ghost"}
-                      size="sm"
-                      className="gap-2"
-                      data-testid="link-settings-dropdown"
-                    >
-                      <Settings className="w-4 h-4" />
-                      Settings
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem asChild>
-                      <Link href="/admin-settings" className="flex items-center gap-2">
-                        <Settings className="w-4 h-4" /> Admin Settings
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/subjects" className="flex items-center gap-2">
-                        <Library className="w-4 h-4" /> Subjects
-                      </Link>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
           </div>
 
-          <div className="flex items-center gap-4">
-            {/* Phone number hidden as per requirement */}
-            <div className="text-sm">
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-2 hover-elevate rounded-md px-3 py-2 mr-auto md:mr-0">
+            <SchoolLogo url={config.logoUrl} name={config.name} />
+            <span className="font-semibold text-lg truncate max-w-[150px] md:max-w-[200px]" title={userRole === 'superadmin' ? 'School ERP' : config.name}>
+              {userRole === 'superadmin' ? 'School ERP' : (config.name || 'School ERP')}
+            </span>
+          </Link>
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center gap-1 ml-6">
+            {links.filter(l => l.path === '/' || l.path === '/super-admin').map(link => (
+              <NavLink key={link.path} link={link} />
+            ))}
+
+            {(userRole === 'admin' || userRole === 'superadmin') && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant={["/students", "/students-withdrawn"].includes(location) ? "secondary" : "ghost"}
+                    size="sm"
+                    className="gap-2"
+                  >
+                    <Users className="w-4 h-4" />
+                    Students
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem asChild>
+                    <Link href="/students" className="flex items-center gap-2">
+                      <Users className="w-4 h-4" /> Enrolled
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/students-withdrawn" className="flex items-center gap-2">
+                      <UserX className="w-4 h-4" /> Withdrawn
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+
+            {links.filter(l => l.path !== '/' && l.path !== '/super-admin').map(link => (
+              <NavLink key={link.path} link={link} />
+            ))}
+
+            {(userRole === 'admin' || userRole === 'superadmin') && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant={["/admin-settings", "/subjects"].includes(location) ? "secondary" : "ghost"}
+                    size="sm"
+                    className="gap-2"
+                  >
+                    <Settings className="w-4 h-4" />
+                    Settings
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin-settings" className="flex items-center gap-2">
+                      <Settings className="w-4 h-4" /> Admin Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/subjects" className="flex items-center gap-2">
+                      <Library className="w-4 h-4" /> Subjects
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+
+          {/* User Profile (Desktop) */}
+          <div className="hidden md:flex items-center gap-4 ml-auto">
+            <div className="text-sm text-right">
               <p className="font-medium">{userEmail}</p>
               <p className="text-xs text-muted-foreground capitalize">{userRole}</p>
             </div>
@@ -174,7 +230,6 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
               size="sm"
               onClick={onLogout}
               className="gap-2"
-              data-testid="button-logout"
             >
               <LogOut className="w-4 h-4" />
               Logout
