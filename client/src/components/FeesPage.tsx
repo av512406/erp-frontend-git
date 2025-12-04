@@ -93,6 +93,92 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
   const [cancelReason, setCancelReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
 
+  // Pending Fees Filters
+  const [pendingFilterClass, setPendingFilterClass] = useState<string>("all");
+  const [pendingFilterSection, setPendingFilterSection] = useState<string>("all");
+
+  const studentsWithPendingFees = useMemo(() => {
+    return students.map(s => {
+      const yearly = parseFloat((s as any).yearlyFeeAmount || '0');
+      const paid = transactions.filter(t => t.studentId === s.id).reduce((sum, t) => sum + (t.amount || 0), 0);
+      const pending = yearly - paid;
+      return { ...s, yearly, paid, pending };
+    }).filter(s => s.pending > 0);
+  }, [students, transactions]);
+
+  const uniquePendingClasses = useMemo(() => {
+    return Array.from(new Set(studentsWithPendingFees.map(s => s.grade))).sort((a, b) => Number(a) - Number(b));
+  }, [studentsWithPendingFees]);
+
+  const uniquePendingSections = useMemo(() => {
+    const pool = pendingFilterClass === 'all' ? studentsWithPendingFees : studentsWithPendingFees.filter(s => s.grade === pendingFilterClass);
+    return Array.from(new Set(pool.map(s => s.section))).sort();
+  }, [studentsWithPendingFees, pendingFilterClass]);
+
+  const filteredPendingStudents = useMemo(() => {
+    return studentsWithPendingFees.filter(s => {
+      const classMatch = pendingFilterClass === 'all' || s.grade === pendingFilterClass;
+      const sectionMatch = pendingFilterSection === 'all' || s.section === pendingFilterSection;
+      return classMatch && sectionMatch;
+    });
+  }, [studentsWithPendingFees, pendingFilterClass, pendingFilterSection]);
+
+  // Reset section if class changes
+  useEffect(() => {
+    if (pendingFilterSection !== 'all' && !uniquePendingSections.includes(pendingFilterSection)) {
+      setPendingFilterSection('all');
+    }
+  }, [pendingFilterClass, uniquePendingSections, pendingFilterSection]);
+
+  const handleExportPendingExcel = async () => {
+    try {
+      const ExcelJS = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Pending Fees');
+
+      worksheet.columns = [
+        { header: 'Admission No', key: 'admissionNumber', width: 15 },
+        { header: 'Name', key: 'name', width: 20 },
+        { header: 'Father Name', key: 'fatherName', width: 20 },
+        { header: 'Class', key: 'grade', width: 10 },
+        { header: 'Section', key: 'section', width: 10 },
+        { header: 'Phone', key: 'phone', width: 15 },
+        { header: 'Yearly Fee', key: 'yearly', width: 15 },
+        { header: 'Total Paid', key: 'paid', width: 15 },
+        { header: 'Pending Amount', key: 'pending', width: 15 },
+      ];
+
+      filteredPendingStudents.forEach(s => {
+        worksheet.addRow({
+          admissionNumber: s.admissionNumber,
+          name: s.name,
+          fatherName: s.fatherName || '',
+          grade: s.grade,
+          section: s.section,
+          phone: (s as any).phone || '',
+          yearly: s.yearly,
+          paid: s.paid,
+          pending: s.pending
+        });
+      });
+
+      // Style header
+      worksheet.getRow(1).font = { bold: true };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pending-fees-${pendingFilterClass === 'all' ? 'all' : pendingFilterClass}-${pendingFilterSection === 'all' ? 'all' : pendingFilterSection}-${new Date().toISOString().split('T')[0]}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Export failed", description: "Could not generate Excel file", variant: "destructive" });
+    }
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('filter') === 'today') {
@@ -514,46 +600,50 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
         <TabsContent value="pending">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Pending Fees List</CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => {
-                    const pendingStudents = students.map(s => {
-                      const yearly = parseFloat((s as any).yearlyFeeAmount || '0');
-                      const paid = transactions.filter(t => t.studentId === s.id).reduce((sum, t) => sum + (t.amount || 0), 0);
-                      const pending = yearly - paid;
-                      return { ...s, yearly, paid, pending };
-                    }).filter(s => s.pending > 0);
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle>Pending Fees List</CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={handleExportPendingExcel}
+                  >
+                    <Download className="w-4 h-4" />
+                    Export Excel
+                  </Button>
+                </div>
 
-                    const csvContent = [
-                      ['Admission Number', 'Name', 'Father Name', 'Class', 'Section', 'Yearly Fee', 'Total Paid', 'Pending Amount'].join(','),
-                      ...pendingStudents.map(s => [
-                        s.admissionNumber,
-                        `"${s.name}"`,
-                        `"${s.fatherName || ''}"`,
-                        s.grade,
-                        s.section,
-                        s.yearly,
-                        s.paid,
-                        s.pending
-                      ].join(','))
-                    ].join('\n');
-
-                    const blob = new Blob([csvContent], { type: 'text/csv' });
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `pending-fees-${new Date().toISOString().split('T')[0]}.csv`;
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                  }}
-                >
-                  <Download className="w-4 h-4" />
-                  Export Pending List
-                </Button>
+                <div className="flex gap-4">
+                  <div className="w-40">
+                    <Label htmlFor="pending-class" className="text-xs mb-1 block">Class</Label>
+                    <Select value={pendingFilterClass} onValueChange={setPendingFilterClass}>
+                      <SelectTrigger id="pending-class" className="h-8">
+                        <SelectValue placeholder="All Classes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Classes</SelectItem>
+                        {uniquePendingClasses.map(c => (
+                          <SelectItem key={c} value={c}>Class {c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="w-40">
+                    <Label htmlFor="pending-section" className="text-xs mb-1 block">Section</Label>
+                    <Select value={pendingFilterSection} onValueChange={setPendingFilterSection}>
+                      <SelectTrigger id="pending-section" className="h-8">
+                        <SelectValue placeholder="All Sections" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Sections</SelectItem>
+                        {uniquePendingSections.map(s => (
+                          <SelectItem key={s} value={s}>Section {s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -572,14 +662,14 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {students.map(s => {
-                      const yearly = parseFloat((s as any).yearlyFeeAmount || '0');
-                      const paid = transactions.filter(t => t.studentId === s.id).reduce((sum, t) => sum + (t.amount || 0), 0);
-                      const pending = yearly - paid;
-                      return { ...s, yearly, paid, pending };
-                    })
-                      .filter(s => s.pending > 0)
-                      .map((student) => (
+                    {filteredPendingStudents.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                          No pending fees found for selected filters
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredPendingStudents.map((student) => (
                         <TableRow key={student.id}>
                           <TableCell className="font-mono">{student.admissionNumber}</TableCell>
                           <TableCell className="font-medium">{student.name}</TableCell>
@@ -590,7 +680,8 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                           <TableCell>₹{student.paid.toLocaleString('en-IN')}</TableCell>
                           <TableCell className="font-bold text-red-600">₹{student.pending.toLocaleString('en-IN')}</TableCell>
                         </TableRow>
-                      ))}
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
