@@ -11,7 +11,8 @@ export const schools = pgTable("schools", {
   phone: text("phone"),
   logoUrl: text("logo_url"),
   isActive: boolean("is_active").default(true),
-  currentSessionId: varchar("current_session_id"), // FK to academic_sessions added later to avoid circular dep issues in TS if needed, but for Drizzle it's just a string field unless we use relations.
+  currentSessionId: varchar("current_session_id"),
+  examPattern: text("exam_pattern").default('["Term 1", "Term 2", "Final"]'), // JSON string
 });
 
 export const users = pgTable("users", {
@@ -95,6 +96,8 @@ export const feeTransactions = pgTable("fee_transactions", {
   receiptSerial: integer("receipt_serial"),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
   sessionId: varchar("session_id"), // FK to academic_sessions
+  status: text("status").notNull().default('active'), // 'active', 'cancelled'
+  cancelReason: text("cancel_reason"),
 });
 
 export const insertFeeTransactionSchema = createInsertSchema(feeTransactions).omit({
@@ -102,6 +105,8 @@ export const insertFeeTransactionSchema = createInsertSchema(feeTransactions).om
   transactionId: true,
   receiptSerial: true,
   schoolId: true,
+  status: true,
+  cancelReason: true,
 });
 
 export type InsertFeeTransaction = z.infer<typeof insertFeeTransactionSchema>;

@@ -6,10 +6,11 @@ export const defaultSchoolConfig = {
   phone: '+91-0000-000000',
   session: '2025-2026',
   logoUrl: '/logo.png',
-  email: 'admin@school.com'
+  email: 'admin@school.com',
+  examPattern: ["Term 1", "Term 2", "Final"]
 };
 
-export type SchoolConfig = typeof defaultSchoolConfig & { updatedAt?: string | null };
+export type SchoolConfig = typeof defaultSchoolConfig & { id?: string; updatedAt?: string | null };
 
 // A mutable singleton that components can read; updated by useSchoolConfig hook.
 // Attempt hydrate from localStorage first (helps when session/cookies cleared but user expects last seen branding)

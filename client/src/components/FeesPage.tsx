@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,15 @@ import { printReceipt } from './Receipt';
 import ReceiptDistributionModal from './ReceiptDistributionModal';
 import { schoolConfig } from '@/lib/schoolConfig';
 import type { Student } from '@shared/schema';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 
 export interface FeeTransaction {
   id: string;
@@ -37,6 +47,9 @@ export interface FeeTransaction {
   paymentMode?: string;
   remarks?: string;
   receiptSerial?: number; // persisted server-side; undefined for legacy entries
+  createdAt?: string;
+  status?: string;
+  cancelReason?: string;
 }
 
 interface FeesPageProps {
@@ -44,10 +57,12 @@ interface FeesPageProps {
   transactions: FeeTransaction[];
   // returns the created transaction (with id and transactionId)
   onAddTransaction: (transaction: Omit<FeeTransaction, 'id' | 'transactionId'>) => Promise<FeeTransaction> | FeeTransaction;
+  onCancelTransaction?: (id: string, reason: string) => Promise<void>;
+  userRole?: string;
 }
 
-export default function FeesPage({ students, transactions, onAddTransaction }: FeesPageProps) {
-
+export default function FeesPage({ students, transactions, onAddTransaction, onCancelTransaction, userRole = 'admin' }: FeesPageProps) {
+  const { toast } = useToast();
   const [viewStudent, setViewStudent] = useState("all");
   const [amount, setAmount] = useState("");
   // Use local date for default
@@ -70,6 +85,12 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
   const [exporting, setExporting] = useState(false);
   const [location] = useLocation();
   const [filterDate, setFilterDate] = useState<string | null>(null);
+
+  // Cancellation state
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [transactionToCancel, setTransactionToCancel] = useState<FeeTransaction | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -158,7 +179,7 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
       : studentTransactions;
 
     if (filterDate) {
-      txs = txs.filter(t => t.date === filterDate);
+      txs = txs.filter(t => t.date && t.date.substring(0, 10) === filterDate);
     }
     return txs;
   }, [viewStudent, transactions, filteredTransactionIds, studentTransactions, filterDate]);
@@ -432,6 +453,7 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
                         <TableHead>Student Name</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>Date</TableHead>
+                        <TableHead>Time</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -449,8 +471,26 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
                             <TableCell className="font-mono text-sm">{transaction.transactionId}</TableCell>
                             <TableCell className="font-medium">{transaction.studentName}</TableCell>
                             <TableCell className="font-semibold">₹{transaction.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                            <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
+                            <TableCell>{transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '-'}</TableCell>
+                            <TableCell>{transaction.createdAt ? format(new Date(transaction.createdAt), 'hh:mm a') : '-'}</TableCell>
                             <TableCell className="text-right space-x-2">
+                              {transaction.status === 'cancelled' ? (
+                                <span className="text-red-500 text-sm font-medium mr-2" title={transaction.cancelReason}>Cancelled</span>
+                              ) : (
+                                (userRole === 'admin' || userRole === 'superadmin') && (
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => {
+                                      setTransactionToCancel(transaction);
+                                      setCancelReason("");
+                                      setCancelDialogOpen(true);
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                )
+                              )}
                               <Button
                                 variant="secondary"
                                 size="sm"
@@ -566,6 +606,61 @@ export default function FeesPage({ students, transactions, onAddTransaction }: F
         yearlyFeeAmount={distributionTx ? parseFloat(String((students.find(s => s.id === distributionTx.studentId) as any)?.yearlyFeeAmount || '0')) : undefined}
         paidSoFar={distributionTx ? (transactions.filter(t => t.studentId === distributionTx.studentId).reduce((sum, t) => sum + (t.amount || 0), 0)) : undefined}
       />
+
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Transaction</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel this transaction? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="cancel-reason">Reason for Cancellation</Label>
+            <Input
+              id="cancel-reason"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="Enter reason..."
+              className="mt-2"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>Close</Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!transactionToCancel || !cancelReason) return;
+                setIsCancelling(true);
+                try {
+                  const res = await fetch(`/api/fees/${transactionToCancel.id}/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: cancelReason })
+                  });
+
+                  if (res.ok) {
+                    toast({ title: "Transaction cancelled" });
+                    setCancelDialogOpen(false);
+                    // Force refresh or update local state (ideally passed from parent, but full refresh is safer for now)
+                    window.location.reload();
+                  } else {
+                    const err = await res.json();
+                    toast({ title: "Failed to cancel", description: err.message, variant: "destructive" });
+                  }
+                } catch (e) {
+                  toast({ title: "Error", description: "Network error", variant: "destructive" });
+                } finally {
+                  setIsCancelling(false);
+                }
+              }}
+              disabled={!cancelReason || isCancelling}
+            >
+              {isCancelling ? "Cancelling..." : "Confirm Cancel"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

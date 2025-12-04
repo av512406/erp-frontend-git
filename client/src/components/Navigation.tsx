@@ -31,7 +31,7 @@ import { useState } from "react";
 import { SchoolLogo } from "@/components/ui/SchoolLogo";
 
 interface NavigationProps {
-  userRole: 'admin' | 'teacher' | 'superadmin' | string;
+  userRole: 'admin' | 'teacher' | 'superadmin' | 'accountant' | string;
   userEmail: string;
   onLogout: () => void;
 }
@@ -60,7 +60,14 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
     { path: "/", label: "School Dashboard", icon: LayoutDashboard },
   ];
 
-  const links = userRole === 'teacher' ? teacherLinks : (userRole === 'superadmin' ? superAdminLinks : adminLinks);
+  const accountantLinks = [
+    { path: "/", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/fees", label: "Fees", icon: DollarSign },
+  ];
+
+  const links = userRole === 'teacher' ? teacherLinks :
+    (userRole === 'accountant' ? accountantLinks :
+      (userRole === 'superadmin' ? superAdminLinks : adminLinks));
 
   const NavLink = ({ link, mobile = false }: { link: any, mobile?: boolean }) => {
     const Icon = link.icon;

@@ -1,6 +1,6 @@
 services:
   app:
-    # build: .
+    build: .
     # image: sshatru/erp:latest
     container_name: school_erp_app
     # ports:

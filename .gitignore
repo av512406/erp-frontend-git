@@ -20,3 +20,4 @@ school_erp_latest.tar
 school_erp_deployment.zip
 deployment_bundle/*.tar
 deployment_bundle/*.pem
+deploy_fix.sh

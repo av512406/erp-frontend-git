@@ -416,6 +416,10 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
         END IF;
       END $$;
 
+      -- MIGRATION: Add status and cancel_reason to fee_transactions
+      ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'active';
+      ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS cancel_reason text;
+
     `);
 
     // --- Session Management Migration ---

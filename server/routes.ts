@@ -25,6 +25,10 @@ import { eq, and } from 'drizzle-orm';
 import { ZodError, z } from 'zod';
 import { hashPassword, comparePassword } from './lib/auth';
 
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.SESSION_SECRET || "super_secret_school_erp_key";
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // ensure DB tables exist (helpful for local Docker)
   await ensureTables();
@@ -115,18 +119,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: 'Invalid credentials' });
       }
 
-      // Invalidate existing sessions for this user
-      await pool.query("DELETE FROM session WHERE sess -> 'user' ->> 'id' = $1", [user.id]);
-
-      // Set session
-      (req.session as any).user = {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        name: user.name,
-        schoolId: user.school_id
-      };
-
       // Check if school is active (for non-superadmin)
       if (user.role !== 'superadmin' && user.school_id) {
         const schoolRes = await pool.query('SELECT is_active FROM schools WHERE id = $1', [user.school_id]);
@@ -135,15 +127,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Explicitly save session before responding to ensure persistence
-      req.session.save((err) => {
-        if (err) {
-          console.error('Session save error:', err);
-          return res.status(500).json({ message: 'Session save failed' });
+      // Generate JWT
+      const token = jwt.sign(
+        {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          name: user.name,
+          schoolId: user.school_id
+        },
+        JWT_SECRET,
+        { expiresIn: '1h' }
+      );
+
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          name: user.name,
+          schoolId: user.school_id
         }
-        res.json({
-          user: (req.session as any).user
-        });
       });
     } catch (e) {
       console.error(e);
@@ -152,23 +157,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/logout', (req, res) => {
-    req.session.destroy((err) => {
-      if (err) return res.status(500).json({ message: 'Logout failed' });
-      res.json({ message: 'Logged out' });
-    });
+    // Client-side logout (clear token)
+    res.json({ message: 'Logged out' });
   });
 
-  app.get('/api/me', (req, res) => {
-    if ((req.session as any).user) {
-      res.json({ user: (req.session as any).user });
-    } else {
-      res.status(401).json({ message: 'Not authenticated' });
+  // Middleware to ensure authentication
+  const requireAuth = (req: any, res: any, next: any) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      req.user = decoded; // Attach decoded user to request
+      // Also attach to session for backward compatibility if needed, but better to migrate
+      req.session = { user: decoded };
+      next();
+    } catch (err) {
+      return res.status(401).json({ message: 'Invalid token' });
+    }
+  };
+
+  app.get('/api/me', requireAuth, (req, res) => {
+    res.json({ user: (req as any).user });
+  });
+
+  app.get('/api/school-config', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    try {
+      const { rows } = await pool.query('SELECT id, name, slug, address, phone, logo_url as "logoUrl", exam_pattern as "examPattern" FROM schools WHERE id = $1', [user.schoolId]);
+      if (rows.length === 0) return res.status(404).json({ message: 'School not found' });
+
+      const school = rows[0];
+      // Parse examPattern if it's a string
+      try {
+        if (typeof school.examPattern === 'string') {
+          school.examPattern = JSON.parse(school.examPattern);
+        }
+      } catch (e) {
+        school.examPattern = ["Term 1", "Term 2", "Final"]; // Fallback
+      }
+
+      res.json(school);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Failed to fetch config' });
     }
   });
 
   // Super Admin: School Management
   app.get('/api/schools', async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     if (!user || user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
 
     try {
@@ -181,21 +222,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/schools', async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     if (!user || user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
 
     const client = await pool.connect();
     try {
-      const { name, slug, address, phone, logoUrl } = req.body;
+      const { name, slug, address, phone, logoUrl, examPattern } = req.body;
       // Basic validation
       if (!name || !slug) return res.status(400).json({ message: 'Name and Slug are required' });
 
       await client.query('BEGIN');
 
       const id = genId();
+      const patternStr = examPattern ? JSON.stringify(examPattern) : '["Term 1", "Term 2", "Final"]';
+
       const q = await client.query(
-        'INSERT INTO schools (id, name, slug, address, phone, logo_url) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-        [id, name, slug, address, phone, logoUrl]
+        'INSERT INTO schools (id, name, slug, address, phone, logo_url, exam_pattern) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+        [id, name, slug, address, phone, logoUrl, patternStr]
       );
 
       // Create a default admin for this school
@@ -222,7 +265,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch('/api/schools/:id/toggle-status', async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     if (!user || user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
 
     try {
@@ -237,7 +280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/schools/:id/admin', async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     if (!user || user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
 
     try {
@@ -273,16 +316,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.put('/api/schools/:id', async (req, res) => {
-    const user = (req.session as any).user;
-    if (!user || user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
+    const user = (req as any).user;
+    // Allow superadmin OR the school admin themselves to update settings
+    const isSuperAdmin = user.role === 'superadmin';
+    const isSchoolAdmin = user.role === 'admin' && user.schoolId === req.params.id;
+
+    if (!isSuperAdmin && !isSchoolAdmin) return res.status(403).json({ message: 'Forbidden' });
 
     try {
       const { id } = req.params;
-      const { name, slug, address, phone, logoUrl } = req.body;
+      const { name, slug, address, phone, logoUrl, examPattern } = req.body;
+
+      const updates: string[] = [];
+      const values: any[] = [];
+      let idx = 1;
+
+      if (name) { updates.push(`name = $${idx++}`); values.push(name); }
+      if (slug) { updates.push(`slug = $${idx++}`); values.push(slug); }
+      if (address) { updates.push(`address = $${idx++}`); values.push(address); }
+      if (phone) { updates.push(`phone = $${idx++}`); values.push(phone); }
+      if (logoUrl !== undefined) { updates.push(`logo_url = $${idx++}`); values.push(logoUrl); }
+      if (examPattern) {
+        updates.push(`exam_pattern = $${idx++}`);
+        values.push(JSON.stringify(examPattern));
+      }
+
+      updates.push(`updated_at = now()`);
+
+      values.push(id);
 
       await pool.query(
-        'UPDATE schools SET name = $1, slug = $2, address = $3, phone = $4, logo_url = $5, updated_at = now() WHERE id = $6',
-        [name, slug, address, phone, logoUrl, id]
+        `UPDATE schools SET ${updates.join(', ')} WHERE id = $${idx}`,
+        values
       );
 
       res.json({ message: 'School updated' });
@@ -294,7 +359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete('/api/schools/:id', async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     if (!user || user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
 
     const client = await pool.connect();
@@ -326,21 +391,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Middleware to ensure authentication
-  const requireAuth = (req: any, res: any, next: any) => {
-    if (!req.session.user) {
-      return res.status(401).json({ message: 'Not authenticated' });
-    }
-    next();
-  };
 
-  // Apply to all API routes except login/logout/schools(superadmin)
-  // Note: We'll apply it explicitly or via router structure. For now, let's wrap handlers or check inside.
-  // Better: check inside handlers or use app.use('/api/*', ...) but we have mixed routes.
-  // We will check `req.session.user` in each handler for now or use a middleware for specific groups.
 
   app.get('/api/users', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const result = await pool.query('SELECT id, username, role, name, created_at FROM users WHERE school_id = $1 ORDER BY name', [user.schoolId]);
       res.json(result.rows);
@@ -351,7 +405,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/users', requireAuth, async (req, res) => {
-    const currentUser = (req.session as any).user;
+    const currentUser = (req as any).user;
     try {
       const data = insertUserSchema.parse(req.body);
       const role = data.role || 'teacher';
@@ -366,6 +420,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (role === 'admin' && count >= 5) {
         return res.status(400).json({ message: 'Maximum limit of admins reached.' });
+      }
+      if (role === 'accountant' && count >= 5) {
+        return res.status(400).json({ message: 'Maximum limit of accountants reached.' });
       }
 
       // 2. Format Username (username@schoolname.com)
@@ -396,7 +453,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.put('/api/users/:id', requireAuth, async (req, res) => {
-    const currentUser = (req.session as any).user;
+    const currentUser = (req as any).user;
     try {
       const id = req.params.id;
       const { password, role, name } = req.body;
@@ -443,7 +500,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete('/api/users/:id', requireAuth, async (req, res) => {
-    const currentUser = (req.session as any).user;
+    const currentUser = (req as any).user;
     try {
       const id = req.params.id;
 
@@ -470,14 +527,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Students APIs
   app.get('/api/students', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     // return only active students for this school
     const { rows } = await pool.query("SELECT * FROM students WHERE (status <> 'left' OR status IS NULL) AND school_id = $1 ORDER BY admission_number", [user.schoolId]);
     res.json(rows.map(mapStudent));
   });
 
   app.post('/api/students', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const data = insertStudentSchema.parse(req.body);
       // check exists in THIS school
@@ -498,7 +555,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.put('/api/students/:admissionNumber', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const admissionNumber = req.params.admissionNumber;
       const data = insertStudentSchema.partial().parse(req.body);
@@ -529,7 +586,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete('/api/students/:id', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const id = req.params.id;
     await pool.query('DELETE FROM students WHERE id = $1 AND school_id = $2', [id, user.schoolId]);
     res.json({ deleted: id });
@@ -537,7 +594,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // bulk import: supports strategy=skip|upsert
   app.post('/api/students/import', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const { students: imported, strategy } = req.body as { students: any[]; strategy?: string };
     if (!Array.isArray(imported)) return res.status(400).json({ message: 'students array required' });
     const client = await pool.connect();
@@ -587,20 +644,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // List left students (moved outside import route)
   app.get('/api/students/left', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const { rows } = await pool.query("SELECT * FROM students WHERE status = 'left' AND school_id = $1 ORDER BY left_date DESC NULLS LAST, admission_number", [user.schoolId]);
     res.json(rows.map(mapStudent));
   });
   // Alias with more professional terminology
   app.get('/api/students/withdrawn', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const { rows } = await pool.query("SELECT * FROM students WHERE status = 'left' AND school_id = $1 ORDER BY left_date DESC NULLS LAST, admission_number", [user.schoolId]);
     res.json(rows.map(mapStudent));
   });
 
   // Mark a student as left (moved outside import route)
   app.put('/api/students/:admissionNumber/leave', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const admissionNumber = req.params.admissionNumber;
       const { leftDate, reason } = req.body as { leftDate?: string; reason?: string };
@@ -614,9 +671,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: 'failed to mark left' });
     }
   });
+
+  app.post('/api/fees/:id/cancel', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== 'admin' && user.role !== 'superadmin') {
+      return res.status(403).json({ message: 'Only admins can cancel transactions' });
+    }
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      if (!reason) return res.status(400).json({ message: 'Cancellation reason is required' });
+
+      const result = await pool.query(
+        'UPDATE fee_transactions SET status = $1, cancel_reason = $2 WHERE id = $3 AND school_id = $4 RETURNING *',
+        ['cancelled', reason, id, user.schoolId]
+      );
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({ message: 'Transaction not found' });
+      }
+
+      res.json({ message: 'Transaction cancelled', transaction: result.rows[0] });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Failed to cancel transaction' });
+    }
+  });
   // Professional alias
   app.put('/api/students/:admissionNumber/withdraw', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const admissionNumber = req.params.admissionNumber;
       const { leftDate, reason } = req.body as { leftDate?: string; reason?: string };
@@ -632,7 +715,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   // Restore a withdrawn student to active status
   app.put('/api/students/:admissionNumber/restore', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const admissionNumber = req.params.admissionNumber;
       const existing = await pool.query('SELECT * FROM students WHERE admission_number=$1 AND school_id=$2', [admissionNumber, user.schoolId]);
@@ -652,14 +735,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Grades APIs
   app.get('/api/grades', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const { rows } = await pool.query('SELECT * FROM grades WHERE school_id = $1', [user.schoolId]);
     res.json(rows.map(mapGrade));
   });
 
   // upsert grades in bulk
   app.post('/api/grades', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const incoming = req.body as any[];
     if (!Array.isArray(incoming)) return res.status(400).json({ message: 'grades array required' });
     const client = await pool.connect();
@@ -705,11 +788,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Fee Transactions APIs
   app.get('/api/fees', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const { rows } = await pool.query(`
         SELECT f.id, f.student_id as "studentId", f.transaction_id as "transactionId", f.amount, f.payment_date as "paymentDate", f.payment_mode as "paymentMode", f.remarks,
-               s.name as "studentName", f.created_at as "createdAt", f.updated_at as "updatedAt", f.receipt_serial as "receiptSerial"
+               s.name as "studentName", f.created_at as "createdAt", f.updated_at as "updatedAt", f.receipt_serial as "receiptSerial", f.status, f.cancel_reason as "cancelReason"
         FROM fee_transactions f
         JOIN students s ON s.id = f.student_id
         WHERE f.school_id = $1
@@ -720,13 +803,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         studentId: r.studentId,
         studentName: r.studentName,
         amount: parseFloat(r.amount),
-        date: r.paymentDate,
+        date: formatDateForClient(r.paymentDate),
         transactionId: r.transactionId,
         paymentMode: r.paymentMode,
         remarks: r.remarks || '',
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
-        receiptSerial: r.receiptSerial == null ? undefined : Number(r.receiptSerial)
+        receiptSerial: r.receiptSerial == null ? undefined : Number(r.receiptSerial),
+        status: r.status,
+        cancelReason: r.cancelReason
       }));
       res.json(mapped);
     } catch (e: any) {
@@ -736,7 +821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/fees', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const data = insertFeeTransactionSchema.parse(req.body);
       const amt = parseFloat((data as any).amount);
@@ -787,7 +872,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         studentId: row.student_id,
         studentName: exists.rows[0].name,
         amount: parseFloat(row.amount),
-        date: row.payment_date,
+        date: formatDateForClient(row.payment_date),
         transactionId: row.transaction_id,
         paymentMode: row.payment_mode,
         remarks: row.remarks || '',
@@ -804,7 +889,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Assign a receipt serial to an existing transaction if missing (idempotent).
   app.post('/api/fees/:id/assign-serial', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const id = req.params.id;
     try {
       const existing = await pool.query('SELECT receipt_serial FROM fee_transactions WHERE id=$1 AND school_id=$2', [id, user.schoolId]);
@@ -826,7 +911,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Bulk import fee transactions
   app.post('/api/fees/import', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const incoming = req.body as any[];
     if (!Array.isArray(incoming)) return res.status(400).json({ message: 'transactions array required' });
     const client = await pool.connect();
@@ -896,7 +981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete('/api/fees/:id', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const id = req.params.id;
     await pool.query('DELETE FROM fee_transactions WHERE id=$1 AND school_id=$2', [id, user.schoolId]);
     res.json({ deleted: id });
@@ -905,13 +990,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // --- Subjects Management ---
   // Teachers APIs
   app.get('/api/teachers', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const { rows } = await pool.query('SELECT * FROM teachers WHERE school_id = $1 ORDER BY name', [user.schoolId]);
     res.json(rows);
   });
 
   app.post('/api/teachers', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const data = insertTeacherSchema.parse(req.body);
       const id = genId();
@@ -928,7 +1013,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.put('/api/teachers/:id', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const id = req.params.id;
     try {
       const data = insertTeacherSchema.partial().parse(req.body);
@@ -961,7 +1046,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete('/api/teachers/:id', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const id = req.params.id;
     const q = await pool.query('DELETE FROM teachers WHERE id = $1 AND school_id = $2', [id, user.schoolId]);
     if ((q.rowCount ?? 0) === 0) return res.status(404).json({ message: 'Teacher not found' });
@@ -969,13 +1054,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get('/api/subjects', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const { rows } = await pool.query('SELECT * FROM subjects WHERE school_id = $1 ORDER BY name', [user.schoolId]);
     res.json(rows.map(mapSubject));
   });
 
   app.post('/api/subjects', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const data = insertSubjectSchema.parse(req.body);
       const exists = await pool.query('SELECT id FROM subjects WHERE name = $1 AND school_id = $2', [data.name, user.schoolId]);
@@ -991,7 +1076,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete('/api/subjects/:id', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const id = req.params.id;
     await pool.query('DELETE FROM subjects WHERE id = $1 AND school_id = $2', [id, user.schoolId]);
     res.json({ deleted: id });
@@ -999,7 +1084,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Class-subject assignments
   app.get('/api/classes', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const { rows } = await pool.query(`
       SELECT DISTINCT grade FROM (
         SELECT grade FROM students WHERE grade IS NOT NULL AND school_id = $1
@@ -1013,7 +1098,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get('/api/classes/:grade/subjects', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const grade = req.params.grade;
     const { rows } = await pool.query(
       `SELECT s.*, cs.max_marks FROM class_subjects cs JOIN subjects s ON s.id = cs.subject_id WHERE cs.grade=$1 AND cs.school_id=$2 ORDER BY s.name`,
@@ -1024,7 +1109,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Bulk sync: copy all subjects from a source class to all classes
   app.post('/api/classes/:grade/sync-all', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const sourceGrade = req.params.grade;
     const client = await pool.connect();
     try {
@@ -1072,7 +1157,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/classes/:grade/subjects', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const grade = req.params.grade;
     const { subjectId, maxMarks } = req.body as { subjectId: string; maxMarks?: number };
     if (!subjectId) return res.status(400).json({ message: 'subjectId required' });
@@ -1092,7 +1177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Update max marks for a class-subject assignment
   app.put('/api/classes/:grade/subjects/:subjectId', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const grade = req.params.grade;
     const subjectId = req.params.subjectId;
     const { maxMarks } = req.body as { maxMarks?: number };
@@ -1107,7 +1192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete('/api/classes/:grade/subjects/:subjectId', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     const grade = req.params.grade;
     const subjectId = req.params.subjectId;
     await pool.query('DELETE FROM class_subjects WHERE grade=$1 AND subject_id=$2 AND school_id=$3', [grade, subjectId, user.schoolId]);
@@ -1116,7 +1201,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // --- Export Endpoints (CSV) ---
   app.get('/api/export/students/csv', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const { rows } = await pool.query("SELECT * FROM students WHERE (status <> 'left' OR status IS NULL) AND school_id = $1 ORDER BY admission_number", [user.schoolId]);
       const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount'];
@@ -1148,7 +1233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Real .xlsx export for students with selectable columns via ?cols=col1,col2 using exceljs
   app.get('/api/export/students/excel', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const rawCols = (req.query.cols as string | undefined) || '';
       const requested = rawCols.split(',').map(c => c.trim()).filter(Boolean);
@@ -1217,7 +1302,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get('/api/export/transactions', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const { rows } = await pool.query(`
         SELECT f.transaction_id, f.amount, f.payment_date, f.payment_mode, f.remarks, s.admission_number, s.name
@@ -1246,7 +1331,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Excel export with optional date range filtering (inclusive)
   app.get('/api/export/transactions/excel', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     // Fallback HTML-table based Excel (opens in Excel) to avoid external dependency issues
     try {
       const { start, end } = req.query as { start?: string; end?: string };
@@ -1300,7 +1385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get('/api/export/grades', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const { rows } = await pool.query(`
         SELECT g.subject, g.marks, g.term, s.admission_number
@@ -1351,7 +1436,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get('/api/admin/config', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     try {
       const { rows } = await pool.query('SELECT * FROM schools WHERE id=$1', [user.schoolId]);
       if (rows.length === 0) {
@@ -1365,7 +1450,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/admin/config', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     if (user.role !== 'admin' && user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
     try {
       const parsed = schoolConfigSchema.parse(req.body);
@@ -1424,9 +1509,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Document Templates (Session-based)
   app.get("/api/templates/:type", async (req, res) => {
-    if (!(req.session as any).user) return res.status(401).json({ message: "Unauthorized" });
+    if (!(req as any).user) return res.status(401).json({ message: "Unauthorized" });
     try {
-      const schoolId = (req.session as any).user.schoolId;
+      const schoolId = (req as any).user.schoolId;
       if (!schoolId) return res.status(400).json({ message: "No school associated with user" });
 
       const { type } = req.params;
@@ -1504,7 +1589,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // 1. Create Session (Super Admin only)
   app.post('/api/sessions', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     if (user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
 
     const schema = z.object({
@@ -1542,7 +1627,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // 3. Switch School Session (School Admin)
   app.post('/api/schools/session', requireAuth, async (req, res) => {
-    const user = (req.session as any).user;
+    const user = (req as any).user;
     // Allow superadmin to switch for any school if schoolId provided, else use user's schoolId
     const targetSchoolId = (user.role === 'superadmin' && req.body.schoolId) ? req.body.schoolId : user.schoolId;
 

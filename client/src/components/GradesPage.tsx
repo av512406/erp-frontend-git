@@ -36,9 +36,11 @@ interface GradesPageProps {
   saving?: boolean;
 }
 
-const TERMS = ['Term 1', 'Term 2', 'Final'];
+import { useSchoolConfig } from "@/hooks/useSchoolConfig";
 
 export default function GradesPage({ students, grades, onSaveGrades, saving = false }: GradesPageProps) {
+  const { config } = useSchoolConfig();
+  const TERMS = config.examPattern || ['Term 1', 'Term 2', 'Final'];
   const { toast } = useToast();
   const [selectedGrade, setSelectedGrade] = useState("");
   const [selectedSection, setSelectedSection] = useState("");

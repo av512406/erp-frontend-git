@@ -30,10 +30,9 @@ interface ReportsPageProps {
   grades: GradeEntry[];
 }
 
-const TERMS = ['Term 1', 'Term 2', 'Final'];
-
 export default function ReportsPage({ students, grades }: ReportsPageProps) {
   const { config } = useSchoolConfig();
+  const TERMS = config.examPattern || ['Term 1', 'Term 2', 'Final'];
   const { data: template } = useDocumentTemplate('report_card');
 
   const [selectedStudent, setSelectedStudent] = useState("");

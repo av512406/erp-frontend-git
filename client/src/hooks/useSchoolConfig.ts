@@ -1,16 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { getAuthHeaders } from '@/lib/auth';
 import { schoolConfig as currentConfig, setSchoolConfig, SchoolConfig, defaultSchoolConfig } from '@/lib/schoolConfig';
 import { useEffect } from 'react';
 
-const QUERY_KEY = ['api','admin','config'];
+const QUERY_KEY = ['api', 'admin', 'config'];
 
 export function useSchoolConfig() {
   const qc = useQueryClient();
   const query = useQuery<SchoolConfig>({
     queryKey: QUERY_KEY,
     queryFn: async () => {
-      const res = await fetch('/api/admin/config', { credentials: 'include' });
+      const res = await fetch('/api/school-config', { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Failed to load config');
       return await res.json();
     }
@@ -43,14 +44,21 @@ export function useSchoolConfig() {
       if (payload.logoFile) {
         logoUrl = await fileToOptimizedDataUrl(payload.logoFile);
       }
+
       const body = {
         name: payload.name ?? currentConfig.name,
         addressLine: payload.addressLine ?? currentConfig.addressLine,
         phone: payload.phone ?? currentConfig.phone,
         session: payload.session ?? currentConfig.session,
-        logoUrl: logoUrl ?? currentConfig.logoUrl
+        logoUrl: logoUrl ?? currentConfig.logoUrl,
+        examPattern: payload.examPattern ?? currentConfig.examPattern
       };
-      const res = await apiRequest('POST','/api/admin/config', body);
+
+      // We need the ID to update. It should be in the query data.
+      const id = query.data?.id;
+      if (!id) throw new Error("School ID not found");
+
+      const res = await apiRequest('PUT', `/api/schools/${id}`, body);
       return await res.json();
     },
     onSuccess(data) {

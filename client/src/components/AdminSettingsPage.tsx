@@ -209,6 +209,7 @@ function SchoolSettings() {
   const [availableSessions, setAvailableSessions] = useState<any[]>([]);
   const [selectedSession, setSelectedSession] = useState("");
   const [switchOpen, setSwitchOpen] = useState(false);
+  const [examPattern, setExamPattern] = useState<string[]>([]);
 
   // Sync form with config when config loads
   useEffect(() => {
@@ -219,6 +220,7 @@ function SchoolSettings() {
       phone: config.phone,
       session: config.session
     }));
+    setExamPattern(config.examPattern || ["Term 1", "Term 2", "Final"]);
   }, [config]);
 
   const handleChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
@@ -241,7 +243,7 @@ function SchoolSettings() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await updateConfig(form);
+    await updateConfig({ ...form, examPattern });
   };
 
   useEffect(() => {
@@ -283,6 +285,20 @@ function SchoolSettings() {
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     }
+  };
+
+  const addExamTerm = () => {
+    setExamPattern([...examPattern, `Term ${examPattern.length + 1}`]);
+  };
+
+  const removeExamTerm = (index: number) => {
+    setExamPattern(examPattern.filter((_, i) => i !== index));
+  };
+
+  const updateExamTerm = (index: number, value: string) => {
+    const newPattern = [...examPattern];
+    newPattern[index] = value;
+    setExamPattern(newPattern);
   };
 
   return (
@@ -350,6 +366,28 @@ function SchoolSettings() {
               {logoError && <p className="text-xs text-red-600 mt-1">{logoError}</p>}
               {!logoError && form.logoFile && <p className="text-xs text-muted-foreground mt-1">Selected: {form.logoFile.name} ({Math.round(form.logoFile.size / 1024)} KB)</p>}
             </div>
+
+            <div className="space-y-2">
+              <Label>Exam Configuration</Label>
+              <div className="space-y-2 border p-4 rounded-md">
+                {examPattern.map((term, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <Input
+                      value={term}
+                      onChange={(e) => updateExamTerm(index, e.target.value)}
+                      placeholder={`Term ${index + 1}`}
+                    />
+                    <Button type="button" variant="destructive" size="icon" onClick={() => removeExamTerm(index)}>
+                      <span className="sr-only">Remove</span>
+                      &times;
+                    </Button>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" onClick={addExamTerm}>Add Exam Term</Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Define the exam terms for your school (e.g., Term 1, Term 2, Final).</p>
+            </div>
+
             <div className="text-xs text-muted-foreground">Updating settings immediately affects receipts and other areas using school metadata.</div>
           </CardContent>
           <CardFooter className="flex justify-end gap-2">
