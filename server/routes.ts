@@ -67,11 +67,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // If it's an ISO timestamp string
     if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) return v.slice(0, 10);
     // If it's a Date object
-    if (v instanceof Date && !isNaN(v.getTime())) return v.toISOString().slice(0, 10);
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      const year = v.getFullYear();
+      const month = String(v.getMonth() + 1).padStart(2, '0');
+      const day = String(v.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
     // Fallback: try to parse and format
     try {
       const d = new Date(v);
-      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+      if (!isNaN(d.getTime())) {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
     } catch { }
     return '';
   }
