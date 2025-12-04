@@ -36,6 +36,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { getAuthHeaders } from "@/lib/auth";
 
 export interface FeeTransaction {
   id: string;
@@ -635,7 +636,10 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                 try {
                   const res = await fetch(`/api/fees/${transactionToCancel.id}/cancel`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                      'Content-Type': 'application/json',
+                      ...getAuthHeaders()
+                    },
                     body: JSON.stringify({ reason: cancelReason })
                   });
 
