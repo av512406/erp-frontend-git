@@ -190,6 +190,22 @@ function Router({ user }: { user: User }) {
     setTransactions(prev => [created, ...prev]);
     return created as FeeTransaction;
   };
+
+  const handleCancelTransaction = async (id: string, reason: string) => {
+    const res = await fetch(`/api/fees/${id}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ reason })
+    });
+    if (!res.ok) {
+      const msg = await (async () => { try { const j = await res.json(); return j?.message; } catch { return 'Failed to cancel'; } })();
+      throw new Error(msg);
+    }
+    const result = await res.json();
+    // Update local state
+    setTransactions(prev => prev.map(t => t.id === id ? result.transaction : t));
+  };
+
   const handleSaveGrades = async (newGrades: GradeEntry[]) => {
     setSavingGrades(true);
     try {
@@ -381,6 +397,7 @@ function Router({ user }: { user: User }) {
             students={students}
             transactions={transactions}
             onAddTransaction={handleAddTransaction}
+            onCancelTransaction={handleCancelTransaction}
           />
         </ProtectedRoute>
       </Route>

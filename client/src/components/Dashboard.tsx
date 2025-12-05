@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLocation } from "wouter";
-import { Users, DollarSign, BookOpen, TrendingUp } from "lucide-react";
+import { Users, IndianRupee, BookOpen, TrendingUp } from "lucide-react";
 
 interface DashboardStats {
   totalStudents: number;
@@ -22,18 +22,20 @@ export default function Dashboard({ stats, userRole }: DashboardProps) {
       title: "Total Students",
       value: stats.totalStudents,
       icon: Users,
-      description: "Active enrollments"
+      description: "Active enrollments",
+      link: "/students"
     },
     {
       title: "Pending Fees",
       value: `₹${stats.pendingFees.toLocaleString('en-IN')}`,
-      icon: DollarSign,
-      description: "Outstanding payments"
+      icon: IndianRupee,
+      description: "Outstanding payments",
+      link: "/fees"
     },
     {
       title: "Fees Collected Today",
       value: `₹${stats.feesCollectedToday.toLocaleString('en-IN')}`,
-      icon: DollarSign,
+      icon: IndianRupee,
       description: "Today's collection",
       link: "/fees?filter=today"
     },

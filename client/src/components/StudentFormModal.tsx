@@ -45,7 +45,8 @@ export default function StudentFormModal({
     motherName: '',
     yearlyFeeAmount: '',
     category: 'GEN',
-    gender: 'Male'
+    gender: 'Male',
+    previousYearDue: ''
   });
 
   useEffect(() => {
@@ -66,7 +67,8 @@ export default function StudentFormModal({
         motherName: (student as any).motherName || '',
         yearlyFeeAmount: student.yearlyFeeAmount,
         category: (student as any).category || 'GEN',
-        gender: (student as any).gender || 'Male'
+        gender: (student as any).gender || 'Male',
+        previousYearDue: (student as any).previousYearDue || ''
       });
     } else {
       setFormData({
@@ -85,7 +87,8 @@ export default function StudentFormModal({
         motherName: '',
         yearlyFeeAmount: '',
         category: 'GEN',
-        gender: 'Male'
+        gender: 'Male',
+        previousYearDue: ''
       });
     }
   }, [student, isOpen]);
@@ -326,6 +329,22 @@ export default function StudentFormModal({
                 />
                 <p className="text-xs text-muted-foreground">
                   Total fee amount to be collected for this academic year
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="previousYearDue">Previous Year Due (₹)</Label>
+                <Input
+                  id="previousYearDue"
+                  type="number"
+                  value={(formData as any).previousYearDue}
+                  onChange={(e) => setFormData({ ...formData, previousYearDue: e.target.value } as any)}
+                  data-testid="input-previous-year-due"
+                  placeholder="0"
+                  min="0"
+                  step="1"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Outstanding amount from previous academic years
                 </p>
               </div>
             </fieldset>

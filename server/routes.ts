@@ -218,7 +218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Super Admin: School Management
-  app.get('/api/schools', async (req, res) => {
+  app.get('/api/schools', requireAuth, async (req, res) => {
     const user = (req as any).user;
     if (!user || user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
 
@@ -231,7 +231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/schools', async (req, res) => {
+  app.post('/api/schools', requireAuth, async (req, res) => {
     const user = (req as any).user;
     if (!user || user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
 
@@ -274,7 +274,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/schools/:id/toggle-status', async (req, res) => {
+  app.patch('/api/schools/:id/toggle-status', requireAuth, async (req, res) => {
     const user = (req as any).user;
     if (!user || user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
 
@@ -289,7 +289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/schools/:id/admin', async (req, res) => {
+  app.post('/api/schools/:id/admin', requireAuth, async (req, res) => {
     const user = (req as any).user;
     if (!user || user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
 
@@ -325,7 +325,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/schools/:id', async (req, res) => {
+  app.put('/api/schools/:id', requireAuth, async (req, res) => {
     const user = (req as any).user;
     // Allow superadmin OR the school admin themselves to update settings
     const isSuperAdmin = user.role === 'superadmin';
@@ -337,30 +337,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { name, slug, address, phone, logoUrl, examPattern } = req.body;
 
-      const updates: string[] = [];
-      const values: any[] = [];
-      let idx = 1;
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
 
-      if (name) { updates.push(`name = $${idx++}`); values.push(name); }
-      if (slug) { updates.push(`slug = $${idx++}`); values.push(slug); }
-      if (address) { updates.push(`address = $${idx++}`); values.push(address); }
-      if (phone) { updates.push(`phone = $${idx++}`); values.push(phone); }
-      if (logoUrl !== undefined) { updates.push(`logo_url = $${idx++}`); values.push(logoUrl); }
-      if (examPattern) {
-        updates.push(`exam_pattern = $${idx++}`);
-        values.push(JSON.stringify(examPattern));
+        // If examPattern is being updated, we need to check for renames
+        if (examPattern && Array.isArray(examPattern)) {
+          const currentRes = await client.query('SELECT exam_pattern FROM schools WHERE id = $1', [id]);
+          if (currentRes.rows.length > 0) {
+            let currentPattern = currentRes.rows[0].exam_pattern;
+            if (typeof currentPattern === 'string') {
+              try {
+                currentPattern = JSON.parse(currentPattern);
+              } catch (e) {
+                currentPattern = [];
+              }
+            }
+            if (Array.isArray(currentPattern)) {
+              // Compare by index
+              for (let i = 0; i < Math.min(currentPattern.length, examPattern.length); i++) {
+                const oldTerm = currentPattern[i];
+                const newTerm = examPattern[i];
+                if (oldTerm !== newTerm) {
+                  // Term renamed! Update grades
+                  console.log(`Renaming term '${oldTerm}' to '${newTerm}' for school ${id}`);
+                  await client.query(
+                    'UPDATE grades SET term = $1 WHERE school_id = $2 AND term = $3',
+                    [newTerm, id, oldTerm]
+                  );
+                }
+              }
+            }
+          }
+        }
+
+        const updates: string[] = [];
+        const values: any[] = [];
+        let idx = 1;
+
+        if (name) { updates.push(`name = $${idx++}`); values.push(name); }
+        if (slug) { updates.push(`slug = $${idx++}`); values.push(slug); }
+        if (address) { updates.push(`address = $${idx++}`); values.push(address); }
+        if (phone) { updates.push(`phone = $${idx++}`); values.push(phone); }
+        if (logoUrl !== undefined) { updates.push(`logo_url = $${idx++}`); values.push(logoUrl); }
+        if (examPattern) {
+          updates.push(`exam_pattern = $${idx++}`);
+          values.push(JSON.stringify(examPattern));
+        }
+
+        updates.push(`updated_at = now()`);
+
+        values.push(id);
+
+        await client.query(
+          `UPDATE schools SET ${updates.join(', ')} WHERE id = $${idx}`,
+          values
+        );
+
+        await client.query('COMMIT');
+        res.json({ message: 'School updated' });
+      } catch (e: any) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
       }
-
-      updates.push(`updated_at = now()`);
-
-      values.push(id);
-
-      await pool.query(
-        `UPDATE schools SET ${updates.join(', ')} WHERE id = $${idx}`,
-        values
-      );
-
-      res.json({ message: 'School updated' });
     } catch (e: any) {
       if (e.code === '23505') return res.status(409).json({ message: 'Slug already exists' });
       console.error(e);
@@ -368,7 +409,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/schools/:id', async (req, res) => {
+  app.delete('/api/schools/:id', requireAuth, async (req, res) => {
     const user = (req as any).user;
     if (!user || user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
 

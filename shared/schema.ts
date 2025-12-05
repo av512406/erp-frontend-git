@@ -50,6 +50,7 @@ export const students = pgTable("students", {
   fatherName: text("father_name"),
   motherName: text("mother_name"),
   yearlyFeeAmount: decimal("yearly_fee_amount", { precision: 10, scale: 2 }).notNull(),
+  previousYearDue: decimal("previous_year_due", { precision: 10, scale: 2 }).default('0'),
   status: text("status").notNull().default('active'),
   leftDate: date("left_date"),
   leavingReason: text("leaving_reason"),

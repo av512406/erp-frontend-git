@@ -15,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { getAuthHeaders } from "@/lib/auth";
 
 const schoolSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -78,7 +79,7 @@ export default function SuperAdminDashboard() {
 
     const fetchSchools = async () => {
         try {
-            const res = await fetch("/api/schools");
+            const res = await fetch("/api/schools", { headers: getAuthHeaders() });
             if (res.ok) {
                 const data = await res.json();
                 setSchools(data);
@@ -97,7 +98,7 @@ export default function SuperAdminDashboard() {
 
             const res = await fetch(url, {
                 method: method,
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...getAuthHeaders() },
                 body: JSON.stringify(data),
             });
 
@@ -121,7 +122,7 @@ export default function SuperAdminDashboard() {
         try {
             const res = await fetch(`/api/schools/${school.id}/toggle-status`, {
                 method: "PATCH",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...getAuthHeaders() },
                 body: JSON.stringify({ isActive: !school.is_active }),
             });
             if (res.ok) {
@@ -140,7 +141,7 @@ export default function SuperAdminDashboard() {
         try {
             const res = await fetch(`/api/schools/${selectedSchool.id}/admin`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...getAuthHeaders() },
                 body: JSON.stringify(data),
             });
 
@@ -188,6 +189,7 @@ export default function SuperAdminDashboard() {
         try {
             const res = await fetch(`/api/schools/${selectedSchool.id}`, {
                 method: "DELETE",
+                headers: getAuthHeaders()
             });
             if (res.ok) {
                 toast({ title: "Success", description: "School deleted successfully" });
@@ -236,7 +238,7 @@ export default function SuperAdminDashboard() {
 
     const fetchSessions = async () => {
         try {
-            const res = await fetch("/api/sessions");
+            const res = await fetch("/api/sessions", { headers: getAuthHeaders() });
             if (res.ok) {
                 setSessions(await res.json());
             }
@@ -249,7 +251,7 @@ export default function SuperAdminDashboard() {
         try {
             const res = await fetch("/api/sessions", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...getAuthHeaders() },
                 body: JSON.stringify(data)
             });
             if (res.ok) {

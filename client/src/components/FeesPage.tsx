@@ -100,9 +100,10 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
   const studentsWithPendingFees = useMemo(() => {
     return students.map(s => {
       const yearly = parseFloat((s as any).yearlyFeeAmount || '0');
+      const previousDue = parseFloat((s as any).previousYearDue || '0');
       const paid = transactions.filter(t => t.studentId === s.id).reduce((sum, t) => sum + (t.amount || 0), 0);
-      const pending = yearly - paid;
-      return { ...s, yearly, paid, pending };
+      const pending = (yearly + previousDue) - paid;
+      return { ...s, yearly, previousDue, paid, pending };
     }).filter(s => s.pending > 0);
   }, [students, transactions]);
 
@@ -272,7 +273,8 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
   }, [viewStudent, transactions, filteredTransactionIds, studentTransactions, filterDate]);
   const totalPaid = studentTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
   const yearlyFee = viewedStudent ? parseFloat((viewedStudent as any).yearlyFeeAmount || '0') : 0;
-  const balance = yearlyFee - totalPaid;
+  const previousDue = viewedStudent ? parseFloat((viewedStudent as any).previousYearDue || '0') : 0;
+  const balance = (yearlyFee + previousDue) - totalPaid;
 
   const handleExportExcel = async () => {
     setExporting(true);
@@ -421,10 +423,14 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                               <p className="text-2xl font-bold">₹{yearlyFee.toLocaleString('en-IN')}</p>
                             </div>
                             <div className="p-4 bg-muted rounded-lg">
+                              <p className="text-sm text-muted-foreground">Previous Due</p>
+                              <p className="text-2xl font-bold">₹{previousDue.toLocaleString('en-IN')}</p>
+                            </div>
+                            <div className="p-4 bg-muted rounded-lg">
                               <p className="text-sm text-muted-foreground">Total Paid</p>
                               <p className="text-2xl font-bold">₹{totalPaid.toLocaleString('en-IN')}</p>
                             </div>
-                            <div className="p-4 bg-muted rounded-lg col-span-2">
+                            <div className="p-4 bg-muted rounded-lg">
                               <p className="text-sm text-muted-foreground">Balance Due</p>
                               <p className={`text-3xl font-bold ${balance <= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                 ₹{balance.toLocaleString('en-IN')}
@@ -725,26 +731,32 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                 if (!transactionToCancel || !cancelReason) return;
                 setIsCancelling(true);
                 try {
-                  const res = await fetch(`/api/fees/${transactionToCancel.id}/cancel`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      ...getAuthHeaders()
-                    },
-                    body: JSON.stringify({ reason: cancelReason })
-                  });
-
-                  if (res.ok) {
+                  if (onCancelTransaction) {
+                    await onCancelTransaction(transactionToCancel.id, cancelReason);
                     toast({ title: "Transaction cancelled" });
                     setCancelDialogOpen(false);
-                    // Force refresh or update local state (ideally passed from parent, but full refresh is safer for now)
-                    window.location.reload();
                   } else {
-                    const err = await res.json();
-                    toast({ title: "Failed to cancel", description: err.message, variant: "destructive" });
+                    // Fallback if prop not provided (shouldn't happen with updated App.tsx)
+                    const res = await fetch(`/api/fees/${transactionToCancel.id}/cancel`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...getAuthHeaders()
+                      },
+                      body: JSON.stringify({ reason: cancelReason })
+                    });
+
+                    if (res.ok) {
+                      toast({ title: "Transaction cancelled" });
+                      setCancelDialogOpen(false);
+                      window.location.reload();
+                    } else {
+                      const err = await res.json();
+                      toast({ title: "Failed to cancel", description: err.message, variant: "destructive" });
+                    }
                   }
-                } catch (e) {
-                  toast({ title: "Error", description: "Network error", variant: "destructive" });
+                } catch (e: any) {
+                  toast({ title: "Error", description: e.message || "Network error", variant: "destructive" });
                 } finally {
                   setIsCancelling(false);
                 }
