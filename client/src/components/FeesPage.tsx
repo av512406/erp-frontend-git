@@ -101,7 +101,9 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     return students.map(s => {
       const yearly = parseFloat((s as any).yearlyFeeAmount || '0');
       const previousDue = parseFloat((s as any).previousYearDue || '0');
-      const paid = transactions.filter(t => t.studentId === s.id).reduce((sum, t) => sum + (t.amount || 0), 0);
+      const paid = transactions
+        .filter(t => t.studentId === s.id && t.status !== 'cancelled')
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
       const pending = (yearly + previousDue) - paid;
       return { ...s, yearly, previousDue, paid, pending };
     }).filter(s => s.pending > 0);
@@ -145,6 +147,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
         { header: 'Section', key: 'section', width: 10 },
         { header: 'Phone', key: 'phone', width: 15 },
         { header: 'Yearly Fee', key: 'yearly', width: 15 },
+        { header: 'Prev. Due', key: 'previousDue', width: 15 },
         { header: 'Total Paid', key: 'paid', width: 15 },
         { header: 'Pending Amount', key: 'pending', width: 15 },
       ];
@@ -158,6 +161,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
           section: s.section,
           phone: (s as any).phone || '',
           yearly: s.yearly,
+          previousDue: s.previousDue,
           paid: s.paid,
           pending: s.pending
         });
@@ -271,7 +275,9 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     }
     return txs;
   }, [viewStudent, transactions, filteredTransactionIds, studentTransactions, filterDate]);
-  const totalPaid = studentTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+  const totalPaid = studentTransactions
+    .filter(t => t.status !== 'cancelled')
+    .reduce((sum, t) => sum + (t.amount || 0), 0);
   const yearlyFee = viewedStudent ? parseFloat((viewedStudent as any).yearlyFeeAmount || '0') : 0;
   const previousDue = viewedStudent ? parseFloat((viewedStudent as any).previousYearDue || '0') : 0;
   const balance = (yearlyFee + previousDue) - totalPaid;
@@ -663,6 +669,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                       <TableHead>Class</TableHead>
                       <TableHead>Section</TableHead>
                       <TableHead>Yearly Fee</TableHead>
+                      <TableHead>Prev. Due</TableHead>
                       <TableHead>Total Paid</TableHead>
                       <TableHead>Pending Amount</TableHead>
                     </TableRow>
@@ -683,6 +690,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                           <TableCell>{student.grade}</TableCell>
                           <TableCell>{student.section}</TableCell>
                           <TableCell>₹{student.yearly.toLocaleString('en-IN')}</TableCell>
+                          <TableCell>₹{student.previousDue.toLocaleString('en-IN')}</TableCell>
                           <TableCell>₹{student.paid.toLocaleString('en-IN')}</TableCell>
                           <TableCell className="font-bold text-red-600">₹{student.pending.toLocaleString('en-IN')}</TableCell>
                         </TableRow>
@@ -702,7 +710,8 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
         transaction={distributionTx}
         student={distributionTx ? students.find(s => s.id === distributionTx.studentId) || null : null}
         yearlyFeeAmount={distributionTx ? parseFloat(String((students.find(s => s.id === distributionTx.studentId) as any)?.yearlyFeeAmount || '0')) : undefined}
-        paidSoFar={distributionTx ? (transactions.filter(t => t.studentId === distributionTx.studentId).reduce((sum, t) => sum + (t.amount || 0), 0)) : undefined}
+        previousYearDue={distributionTx ? parseFloat(String((students.find(s => s.id === distributionTx.studentId) as any)?.previousYearDue || '0')) : undefined}
+        paidSoFar={distributionTx ? (transactions.filter(t => t.studentId === distributionTx.studentId && t.status !== 'cancelled').reduce((sum, t) => sum + (t.amount || 0), 0)) : undefined}
       />
 
       <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>

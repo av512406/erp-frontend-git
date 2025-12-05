@@ -22,9 +22,11 @@ export interface ReceiptProps {
 	serial?: number; // if not provided will auto-generate
 	session?: string; // override session
 	// Optional fee summary details
+	// Optional fee summary details
 	yearlyFeeAmount?: number; // total annual fee for student
+	previousYearDue?: number; // amount due from previous years
 	paidSoFar?: number; // cumulative paid INCLUDING current transaction
-	remainingFee?: number; // if not supplied, computed from yearlyFeeAmount - paidSoFar
+	remainingFee?: number; // if not supplied, computed from (yearlyFeeAmount + previousYearDue) - paidSoFar
 }
 
 // Ensure defined order / fallback labels
@@ -37,7 +39,7 @@ const DEFAULT_ORDER = [
 	'Other Fee/Late Fee'
 ];
 
-export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, serial, session, yearlyFeeAmount, paidSoFar, remainingFee }) => {
+export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, serial, session, yearlyFeeAmount, previousYearDue, paidSoFar, remainingFee }) => {
 	// Load dynamic config (will fallback to defaults until fetched)
 	useSchoolConfig();
 	const computedSerial = serial ?? nextReceiptSerial();
@@ -53,7 +55,7 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 	// Two copies (Student & Office) share same data; differentiate by copy label.
 	const copies = ['Student Copy', 'Office Copy'];
 	const showSummary = typeof yearlyFeeAmount === 'number' && typeof paidSoFar === 'number';
-	const computedRemaining = showSummary ? (typeof remainingFee === 'number' ? remainingFee : (yearlyFeeAmount! - paidSoFar!)) : undefined;
+	const computedRemaining = showSummary ? (typeof remainingFee === 'number' ? remainingFee : ((yearlyFeeAmount! + (previousYearDue || 0)) - paidSoFar!)) : undefined;
 
 	return (
 		<div className="print-receipt font-serif">
@@ -75,7 +77,7 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 						</div>
 					</div>
 					<div className="text-[11px] leading-4 space-y-0.5 mb-2">
-						<div className="flex justify-between"><span>Serial No.: <strong>{String(computedSerial).padStart(4,'0')}</strong></span><span>Date: {paymentDate}</span></div>
+						<div className="flex justify-between"><span>Serial No.: <strong>{String(computedSerial).padStart(4, '0')}</strong></span><span>Date: {paymentDate}</span></div>
 						<div>Name of the Student: <strong>{student.name}</strong></div>
 						{student.fatherName && <div>Father's Name: <strong>{student.fatherName}</strong></div>}
 						<div className="flex justify-between"><span>Class: <strong>{cls || '—'}</strong></span><span>Session: <strong>{sessionValue}</strong></span></div>
@@ -108,6 +110,12 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 					{showSummary && (
 						<div className="text-[10px] mb-3 border border-black px-2 py-1 leading-tight">
 							<span className="font-semibold">Yearly:</span> ₹{yearlyFeeAmount!.toFixed(2)}
+							{previousYearDue && previousYearDue > 0 && (
+								<>
+									<span className="mx-1">•</span>
+									<span className="font-semibold">Prev. Due:</span> ₹{previousYearDue.toFixed(2)}
+								</>
+							)}
 							<span className="mx-1">•</span>
 							<span className="font-semibold">Total Paid:</span> ₹{paidSoFar!.toFixed(2)}
 							<span className="mx-1">•</span>
@@ -187,7 +195,7 @@ img { max-height:50px; }
 
 // Build a minimal plain HTML version (no Tailwind dependency) for fallback printing.
 function buildPlainHtml(props: ReceiptProps): string {
-	const serial = String(props.serial ?? nextReceiptSerial()).padStart(4,'0');
+	const serial = String(props.serial ?? nextReceiptSerial()).padStart(4, '0');
 	const sessionValue = props.session || schoolConfig.session;
 	const map: Record<string, number> = {};
 	props.items.forEach(i => { map[i.label] = i.amount; });
@@ -195,9 +203,9 @@ function buildPlainHtml(props: ReceiptProps): string {
 	const total = ordered.reduce((s, r) => s + r.amount, 0);
 	const words = amountToIndianWords(total);
 	const cls = [props.student.grade ? `Class ${props.student.grade}` : '', props.student.section ? `Section ${props.student.section}` : ''].filter(Boolean).join(' ');
-	const copies = ['Student Copy','Office Copy'];
+	const copies = ['Student Copy', 'Office Copy'];
 	const showSummary = typeof props.yearlyFeeAmount === 'number' && typeof props.paidSoFar === 'number';
-	const remaining = showSummary ? (typeof props.remainingFee === 'number' ? props.remainingFee : (props.yearlyFeeAmount! - props.paidSoFar!)) : undefined;
+	const remaining = showSummary ? (typeof props.remainingFee === 'number' ? props.remainingFee : ((props.yearlyFeeAmount! + (props.previousYearDue || 0)) - props.paidSoFar!)) : undefined;
 	const rowsHtml = (copy: string) => `
 	<div style="border:1px solid #000;margin:0 0 4mm 0;font-size:10px;font-family:serif;box-sizing:border-box;padding:4mm;height:134mm;overflow:hidden;">
 		<div style="text-align:center;margin-bottom:6px;">
@@ -224,13 +232,13 @@ function buildPlainHtml(props: ReceiptProps): string {
 				</tr>
 			</thead>
 			<tbody>
-				${ordered.map((r,i)=>`<tr><td style="border:1px solid #000;text-align:center;padding:4px;">${i+1}.</td><td style="border:1px solid #000;padding:4px;">${r.label}</td><td style="border:1px solid #000;text-align:right;padding:4px;">${r.amount? r.amount.toFixed(2): ''}</td></tr>`).join('')}
-				<tr style="font-weight:600;"><td style="border:1px solid #000;text-align:center;padding:4px;">${ordered.length+1}.</td><td style="border:1px solid #000;padding:4px;">Total Amount</td><td style="border:1px solid #000;text-align:right;padding:4px;">${total.toFixed(2)}</td></tr>
+				${ordered.map((r, i) => `<tr><td style="border:1px solid #000;text-align:center;padding:4px;">${i + 1}.</td><td style="border:1px solid #000;padding:4px;">${r.label}</td><td style="border:1px solid #000;text-align:right;padding:4px;">${r.amount ? r.amount.toFixed(2) : ''}</td></tr>`).join('')}
+				<tr style="font-weight:600;"><td style="border:1px solid #000;text-align:center;padding:4px;">${ordered.length + 1}.</td><td style="border:1px solid #000;padding:4px;">Total Amount</td><td style="border:1px solid #000;text-align:right;padding:4px;">${total.toFixed(2)}</td></tr>
 			</tbody>
 		</table>
 		<div style="font-size:10px;margin-bottom:4px;">Amount In Words: <em>${words}</em></div>
 		${showSummary ? `<div style="font-size:10px;border:1px solid #000;padding:3px 6px;margin-bottom:8px;">
-			<strong>Yearly:</strong> ₹${props.yearlyFeeAmount!.toFixed(2)} • <strong>Total Paid:</strong> ₹${props.paidSoFar!.toFixed(2)} • <strong>Remaining:</strong> <span style="color:${remaining! <= 0 ? '#0a7a0a' : '#b10000'};">₹${remaining! >= 0 ? remaining!.toFixed(2) : `${Math.abs(remaining!).toFixed(2)} (Over)`}</span>
+			<strong>Yearly:</strong> ₹${props.yearlyFeeAmount!.toFixed(2)} ${props.previousYearDue && props.previousYearDue > 0 ? `• <strong>Prev. Due:</strong> ₹${props.previousYearDue.toFixed(2)}` : ''} • <strong>Total Paid:</strong> ₹${props.paidSoFar!.toFixed(2)} • <strong>Remaining:</strong> <span style="color:${remaining! <= 0 ? '#0a7a0a' : '#b10000'};">₹${remaining! >= 0 ? remaining!.toFixed(2) : `${Math.abs(remaining!).toFixed(2)} (Over)`}</span>
 		</div>` : ''}
 		<div style="text-align:right;font-size:11px;margin-top:20px;">
 			<div style="height:40px;"></div>
@@ -260,14 +268,14 @@ export function printReceiptInline(props: ReceiptProps & { copies?: number }) {
 	}
 	const physicalPages = props.copies && props.copies > 0 ? props.copies : 1;
 	const plain = buildPlainHtml(props);
-	host.innerHTML = Array.from({ length: physicalPages }).map(()=> plain).join('');
+	host.innerHTML = Array.from({ length: physicalPages }).map(() => plain).join('');
 	// Keep original document title unchanged (static receipt naming reverted)
 	// Attempt React enhancement (optional)
 	try {
 		const reactWrapper = document.createElement('div');
 		host.appendChild(reactWrapper);
 		createRoot(reactWrapper).render(<Receipt {...props} />);
-	} catch {}
+	} catch { }
 	setTimeout(() => window.print(), 200); // slight delay for layout
 }
 

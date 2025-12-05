@@ -317,8 +317,10 @@ function Router({ user }: { user: User }) {
   const stats = {
     totalStudents: students.length,
     pendingFees: (() => {
-      const totalYearly = students.reduce((s, st) => s + (parseFloat(st.yearlyFeeAmount || '0') || 0), 0);
-      const paid = transactions.reduce((s, t) => s + (t.amount || 0), 0);
+      const totalYearly = students.reduce((s, st) => s + (parseFloat(st.yearlyFeeAmount || '0') || 0) + (parseFloat((st as any).previousYearDue || '0') || 0), 0);
+      const paid = transactions
+        .filter(t => t.status !== 'cancelled')
+        .reduce((s, t) => s + (t.amount || 0), 0);
       return Math.max(Math.round(totalYearly - paid), 0);
     })(),
     feesCollectedToday: (() => {

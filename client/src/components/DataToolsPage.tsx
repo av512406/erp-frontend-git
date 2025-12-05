@@ -61,6 +61,7 @@ type RawStudentRow = {
   yearlyFeeAmount?: string;
   category?: string;
   gender?: string;
+  previousYearDue?: string;
 };
 
 interface DataToolsPageProps {
@@ -191,6 +192,8 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
               const section = normalize(row.section || row['Section']);
               const yfaRaw = row.yearlyFeeAmount ?? row['Yearly fees'] ?? row['Yearly Fees'] ?? row['yearly fees'] ?? row['Yearly_Fees'] ?? row['YearlyFee'] ?? row['yearlyFeeAmount'];
               const yearlyFeeAmount = yfaRaw === undefined || yfaRaw === null ? '' : normalizeNumberString(yfaRaw);
+              const pydRaw = row.previousYearDue ?? row['Previous Year Due'] ?? row['Previous Due'] ?? row['previous year due'] ?? row['previous due'] ?? row['previousYearDue'];
+              const previousYearDue = pydRaw === undefined || pydRaw === null ? '' : normalizeNumberString(pydRaw);
               const fatherName = normalize(row.fatherName || row["Father's Name"] || row['Father Name'] || row['father'] || row['Fathers Name']);
               const motherName = normalize(row.motherName || row["Mother's Name"] || row['Mother Name'] || row['mother'] || row['Mothers Name']);
               const category = normalize(row.category || row['Category'] || 'GEN');
@@ -210,6 +213,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 fatherName,
                 motherName,
                 yearlyFeeAmount,
+                previousYearDue,
                 category,
                 gender
               };
@@ -329,7 +333,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
       : students.filter(s => s.grade === exportFilter);
 
     const csvContent = [
-      ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'category', 'gender'].join(','),
+      ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'previousYearDue', 'category', 'gender'].join(','),
       ...filteredStudents.map(s => [
         s.admissionNumber,
         s.name,
@@ -345,6 +349,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
         s.grade,
         s.section,
         s.yearlyFeeAmount,
+        (s as any).previousYearDue || '0',
         (s as any).category || 'GEN',
         (s as any).gender || ''
       ].join(','))
@@ -398,7 +403,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
               onClick={() => {
                 // export skipped rows as CSV if available
                 if (!skippedRows || skippedRows.length === 0) return;
-                const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'category', 'gender'];
+                const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'previousYearDue', 'category', 'gender'];
                 const rows = skippedRows.map(r => [
                   r.admissionNumber,
                   `"${(r.name || '').replace(/"/g, '""')}"`,
@@ -414,6 +419,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                   r.grade || '',
                   r.section || '',
                   r.yearlyFeeAmount || '',
+                  r.previousYearDue || '',
                   r.category || '',
                   r.gender || ''
                 ].join(','));
@@ -532,7 +538,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
             </div>
             <div className="text-sm text-muted-foreground">
               <p className="font-medium mb-1">Accepted columns (case-insensitive):</p>
-              <p className="font-mono text-xs">admissionNumber, name, fatherName or "Father's Name", motherName or "Mother's Name", dateOfBirth, admissionDate, aadharNumber, penNumber, aaparId, mobileNumber, address, grade or class, section, yearlyFeeAmount or "Yearly fees", category, gender</p>
+              <p className="font-mono text-xs">admissionNumber, name, fatherName or "Father's Name", motherName or "Mother's Name", dateOfBirth, admissionDate, aadharNumber, penNumber, aaparId, mobileNumber, address, grade or class, section, yearlyFeeAmount or "Yearly fees", previousYearDue, category, gender</p>
             </div>
             <div className="flex gap-2">
               <Button
@@ -551,7 +557,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 onClick={() => {
                   // generate template for selected templateGrade
                   const filtered = templateGrade === 'all' ? students : students.filter(s => s.grade === templateGrade);
-                  const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'category', 'gender'];
+                  const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'previousYearDue', 'category', 'gender'];
                   // Template with one sample row illustrating date format (YYYY-MM-DD)
                   const sample = [
                     'STU001',
@@ -568,6 +574,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                     '10',
                     'A',
                     '25000',
+                    '5000',
                     'GEN',
                     'Male'
                   ].join(',');

@@ -52,6 +52,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       fatherName: row.father_name,
       motherName: row.mother_name,
       yearlyFeeAmount: row.yearly_fee_amount?.toString?.() ?? row.yearly_fee_amount,
+      previousYearDue: row.previous_year_due?.toString?.() ?? row.previous_year_due,
       status: row.status || 'active',
       leftDate: formatDateForClient(row.left_date),
       leavingReason: row.leaving_reason || '',

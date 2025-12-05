@@ -24,18 +24,19 @@ interface ReceiptDistributionModalProps {
   student: Student | null;
   // Optional summary numbers supplied by parent
   yearlyFeeAmount?: number;
+  previousYearDue?: number;
   paidSoFar?: number; // cumulative INCLUDING current transaction
 }
 
-export default function ReceiptDistributionModal({ open, onClose, transaction, student, yearlyFeeAmount, paidSoFar }: ReceiptDistributionModalProps) {
-  const [amounts, setAmounts] = useState<Record<string,string>>({});
+export default function ReceiptDistributionModal({ open, onClose, transaction, student, yearlyFeeAmount, previousYearDue, paidSoFar }: ReceiptDistributionModalProps) {
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState(false);
   const [receiptSerial, setReceiptSerial] = useState<number | undefined>(transaction?.receiptSerial);
 
   // Initialize default distribution when transaction changes
   useEffect(() => {
     if (transaction) {
-      const initial: Record<string,string> = {};
+      const initial: Record<string, string> = {};
       CATEGORY_ORDER.forEach(c => { initial[c] = ''; });
       // Default behavior: put full amount into Teaching Fee; user can reallocate.
       if (transaction.amount) {
@@ -48,13 +49,13 @@ export default function ReceiptDistributionModal({ open, onClose, transaction, s
   }, [transaction]);
 
   const numericAmounts = useMemo(() => CATEGORY_ORDER.map(c => ({ label: c, amount: parseFloat(amounts[c] || '0') || 0 })), [amounts]);
-  const totalEntered = useMemo(() => numericAmounts.reduce((s,x)=>s+x.amount,0), [numericAmounts]);
+  const totalEntered = useMemo(() => numericAmounts.reduce((s, x) => s + x.amount, 0), [numericAmounts]);
   const targetTotal = transaction?.amount || 0;
   const diff = +(totalEntered - targetTotal).toFixed(2);
   const valid = targetTotal > 0 && Math.abs(diff) < 0.01 && numericAmounts.some(n => n.amount > 0);
 
   function handleAmountChange(label: string, value: string) {
-    setAmounts(a => ({ ...a, [label]: value.replace(/[^0-9.]/g,'') }));
+    setAmounts(a => ({ ...a, [label]: value.replace(/[^0-9.]/g, '') }));
     setTouched(true);
   }
 
@@ -62,10 +63,10 @@ export default function ReceiptDistributionModal({ open, onClose, transaction, s
     if (!transaction) return;
     const remaining = transaction.amount;
     // Simple even distribution across teaching/exam/computer/development if admission already set
-    const baseCategories = ['Teaching Fee','Exam. Fee','Computer Fee','Development'];
+    const baseCategories = ['Teaching Fee', 'Exam. Fee', 'Computer Fee', 'Development'];
     const slice = +(remaining / baseCategories.length).toFixed(2);
-    const newMap: Record<string,string> = { ...amounts };
-    baseCategories.forEach((c,i) => {
+    const newMap: Record<string, string> = { ...amounts };
+    baseCategories.forEach((c, i) => {
       // adjust final slice to account for rounding drift
       if (i === baseCategories.length - 1) {
         const allocated = slice * (baseCategories.length - 1);
@@ -82,7 +83,7 @@ export default function ReceiptDistributionModal({ open, onClose, transaction, s
 
   function fillRemainingInto(label: string) {
     if (!transaction) return;
-    const already = CATEGORY_ORDER.filter(c => c !== label).reduce((s,c)=> s + (parseFloat(amounts[c]||'0')||0),0);
+    const already = CATEGORY_ORDER.filter(c => c !== label).reduce((s, c) => s + (parseFloat(amounts[c] || '0') || 0), 0);
     const remaining = Math.max(transaction.amount - already, 0);
     setAmounts(a => ({ ...a, [label]: remaining.toFixed(2) }));
     setTouched(true);
@@ -97,20 +98,21 @@ export default function ReceiptDistributionModal({ open, onClose, transaction, s
         const resp = await fetch(`/api/fees/${transaction.id}/assign-serial`, { method: 'POST' });
         if (resp.ok) {
           const data = await resp.json();
-            serialToUse = data.receiptSerial;
-            setReceiptSerial(serialToUse);
+          serialToUse = data.receiptSerial;
+          setReceiptSerial(serialToUse);
         }
-      } catch {}
+      } catch { }
     }
     const items = numericAmounts.map(n => ({ label: n.label, amount: n.amount }));
     printReceipt({
       student: { name: student.name, fatherName: (student as any).fatherName || '', grade: student.grade, section: student.section, admissionNumber: student.admissionNumber },
-      paymentDate: transaction.date.slice(0,10),
+      paymentDate: transaction.date.slice(0, 10),
       items,
       session: schoolConfig.session,
       copies: 1,
       serial: serialToUse,
       yearlyFeeAmount: typeof yearlyFeeAmount === 'number' ? yearlyFeeAmount : undefined,
+      previousYearDue: typeof previousYearDue === 'number' ? previousYearDue : undefined,
       paidSoFar: typeof paidSoFar === 'number' ? paidSoFar : undefined
     });
     onClose();
@@ -127,10 +129,10 @@ export default function ReceiptDistributionModal({ open, onClose, transaction, s
             <div className="text-sm">
               <p><strong>Student:</strong> {student.name} ({student.admissionNumber})</p>
               <p><strong>Transaction:</strong> {transaction.transactionId}</p>
-              <p><strong>Receipt Serial:</strong> {receiptSerial != null ? String(receiptSerial).padStart(4,'0') : 'Not Assigned'}</p>
+              <p><strong>Receipt Serial:</strong> {receiptSerial != null ? String(receiptSerial).padStart(4, '0') : 'Not Assigned'}</p>
               <p><strong>Total Amount:</strong> ₹{transaction.amount.toFixed(2)}</p>
               {typeof yearlyFeeAmount === 'number' && typeof paidSoFar === 'number' && (
-                <p><strong>Remaining After Payment:</strong> ₹{(yearlyFeeAmount - paidSoFar).toFixed(2)}</p>
+                <p><strong>Remaining After Payment:</strong> ₹{((yearlyFeeAmount + (previousYearDue || 0)) - paidSoFar).toFixed(2)}</p>
               )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -160,11 +162,11 @@ export default function ReceiptDistributionModal({ open, onClose, transaction, s
               <Button type="button" variant="outline" size="sm" onClick={autoDistribute}>Auto Distribute</Button>
               <Button type="button" variant="outline" size="sm" onClick={() => {
                 // Admission only
-                setAmounts(a => ({ ...a, 'Admission Fee': targetTotal.toFixed(2), 'Teaching Fee': '0', 'Exam. Fee':'0','Computer Fee':'0','Development':'0','Other Fee/Late Fee':'0' }));
+                setAmounts(a => ({ ...a, 'Admission Fee': targetTotal.toFixed(2), 'Teaching Fee': '0', 'Exam. Fee': '0', 'Computer Fee': '0', 'Development': '0', 'Other Fee/Late Fee': '0' }));
                 setTouched(true);
               }}>All Admission</Button>
               <Button type="button" variant="outline" size="sm" onClick={() => {
-                setAmounts(a => ({ ...a, 'Other Fee/Late Fee': targetTotal.toFixed(2), 'Teaching Fee': '0', 'Exam. Fee':'0','Computer Fee':'0','Development':'0','Admission Fee':'0' }));
+                setAmounts(a => ({ ...a, 'Other Fee/Late Fee': targetTotal.toFixed(2), 'Teaching Fee': '0', 'Exam. Fee': '0', 'Computer Fee': '0', 'Development': '0', 'Admission Fee': '0' }));
                 setTouched(true);
               }}>All Other</Button>
             </div>
