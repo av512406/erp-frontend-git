@@ -69,7 +69,7 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 							)}
 							<h1 className="text-2xl font-bold tracking-wide">{schoolConfig.name}</h1>
 						</div>
-						<p className="text-xs italic">{schoolConfig.addressLine}</p>
+						<p className="text-xs italic">{schoolConfig.address}</p>
 						{/* Merge Fee Receipt and copy label to save vertical space */}
 						<div className="inline-flex items-center gap-2 border px-2 py-0.5 text-sm font-semibold mt-1">
 							<span>Fee Receipt</span>
@@ -213,7 +213,7 @@ function buildPlainHtml(props: ReceiptProps): string {
 				${schoolConfig.logoUrl ? `<img src="${schoolConfig.logoUrl}" alt="Logo" style="height:50px;object-fit:contain;"/>` : ''}
 				<div style="font-size:19px;font-weight:700;letter-spacing:.5px;">${schoolConfig.name}</div>
 			</div>
-			<div style="font-size:10px;font-style:italic;">${schoolConfig.addressLine}</div>
+			<div style="font-size:10px;font-style:italic;">${schoolConfig.address}</div>
 			<div style="display:inline-flex;align-items:center;gap:6px;border:1px solid #000;padding:2px 6px;font-size:12px;font-weight:600;margin-top:4px;">Fee Receipt <span style="font-size:10px;font-weight:400;">(${copy})</span></div>
 		</div>
 		<div style="line-height:1.3;margin-bottom:6px;">

@@ -39,6 +39,7 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
         address text,
         phone text,
         logo_url text,
+        exam_pattern jsonb,
         is_active boolean DEFAULT true,
         current_session_id text REFERENCES academic_sessions(id),
         created_at timestamptz NOT NULL DEFAULT now(),
@@ -70,6 +71,7 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
         father_name text,
         mother_name text,
         yearly_fee_amount numeric(10,2) NOT NULL,
+        previous_year_due numeric(10,2) DEFAULT 0,
         status text NOT NULL DEFAULT 'active',
         left_date date,
         leaving_reason text,
@@ -91,6 +93,8 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
         receipt_serial integer,
         school_id text REFERENCES schools(id),
         session_id text REFERENCES academic_sessions(id),
+        status text NOT NULL DEFAULT 'active',
+        cancel_reason text,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now(),
         UNIQUE(school_id, receipt_serial)
@@ -182,7 +186,9 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
   -- Add session_id to tables
   ALTER TABLE schools ADD COLUMN IF NOT EXISTS current_session_id text REFERENCES academic_sessions(id);
   ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS session_id text REFERENCES academic_sessions(id);
+  ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS session_id text REFERENCES academic_sessions(id);
   ALTER TABLE grades ADD COLUMN IF NOT EXISTS session_id text REFERENCES academic_sessions(id);
+  ALTER TABLE schools ADD COLUMN IF NOT EXISTS exam_pattern jsonb;
 
       -- backfill any null transaction_id values
       UPDATE fee_transactions SET transaction_id = concat('TXN', substr(md5(random()::text),1,8)) WHERE transaction_id IS NULL;
@@ -194,6 +200,7 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
   ALTER TABLE students ADD COLUMN IF NOT EXISTS leaving_reason text;
   ALTER TABLE students ADD COLUMN IF NOT EXISTS category text DEFAULT 'GEN';
   ALTER TABLE students ADD COLUMN IF NOT EXISTS school_id text REFERENCES schools(id);
+  ALTER TABLE students ADD COLUMN IF NOT EXISTS previous_year_due numeric(10,2) DEFAULT 0;
 
       -- ensure payment_mode cannot be null and has a sensible default
       ALTER TABLE fee_transactions ALTER COLUMN payment_mode SET DEFAULT 'cash';

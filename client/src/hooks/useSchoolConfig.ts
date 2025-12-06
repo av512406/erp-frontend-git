@@ -47,7 +47,7 @@ export function useSchoolConfig() {
 
       const body = {
         name: payload.name ?? currentConfig.name,
-        addressLine: payload.addressLine ?? currentConfig.addressLine,
+        address: payload.address ?? currentConfig.address,
         phone: payload.phone ?? currentConfig.phone,
         session: payload.session ?? currentConfig.session,
         logoUrl: logoUrl ?? currentConfig.logoUrl,

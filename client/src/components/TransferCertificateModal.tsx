@@ -137,7 +137,7 @@ export default function TransferCertificateModal({ open, onClose, student }: Tra
                         )}
                         <div className="school-info">
                             <div className="school-name" style={{ fontSize: '24px', fontWeight: 'bold', textTransform: 'uppercase' }}>{schoolConfig.name}</div>
-                            <div className="school-address" style={{ fontSize: '12px', fontStyle: 'italic' }}>{schoolConfig.addressLine}</div>
+                            <div className="school-address" style={{ fontSize: '12px', fontStyle: 'italic' }}>{schoolConfig.address}</div>
                             <div className="contact-info" style={{ fontSize: '11px' }}>Phone: {schoolConfig.phone} | Email: {schoolConfig.email}</div>
                         </div>
                     </div>

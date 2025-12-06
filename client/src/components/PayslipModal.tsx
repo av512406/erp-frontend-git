@@ -32,7 +32,7 @@ export default function PayslipModal({ transaction, isOpen, onClose }: PayslipMo
         html = html.replace(/{{studentName}}/g, transaction.studentName);
         html = html.replace(/{{amount}}/g, transaction.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
         html = html.replace(/{{schoolName}}/g, schoolConfig.name);
-        html = html.replace(/{{schoolAddress}}/g, schoolConfig.addressLine);
+        html = html.replace(/{{schoolAddress}}/g, schoolConfig.address);
 
         printWindow.document.write(html);
         printWindow.document.close();

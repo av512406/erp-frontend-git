@@ -342,8 +342,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       // Frontend sends addressLine, map it to address
-      const { name, slug, addressLine, phone, logoUrl, examPattern } = req.body;
-      const address = addressLine || req.body.address;
+      const { name, slug, address, phone, logoUrl, examPattern } = req.body;
 
       const client = await pool.connect();
       try {
@@ -498,9 +497,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const id = genId();
 
+      // Hash password
+      const hashedPassword = await hashPassword(data.password);
+
+      console.log(`Creating user: ${finalUsername} (${role}) for school ${currentUser.schoolId}`);
+
       const q = await pool.query(
         'INSERT INTO users (id, username, password, role, name, school_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, role, name',
-        [id, finalUsername, data.password, role, name, currentUser.schoolId]
+        [id, finalUsername, hashedPassword, role, name, currentUser.schoolId]
       );
       res.status(201).json(q.rows[0]);
     } catch (e) {
@@ -664,6 +668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let updated = 0;
       for (const row of imported) {
         try {
+          await client.query('SAVEPOINT row_sp');
           const data = insertStudentSchema.parse(row);
           const exists = await client.query('SELECT * FROM students WHERE admission_number = $1 AND school_id = $2', [data.admissionNumber, user.schoolId]);
           if ((exists.rowCount ?? 0) > 0) {
@@ -685,7 +690,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             );
             added.push(data.admissionNumber);
           }
+          await client.query('RELEASE SAVEPOINT row_sp');
         } catch (e) {
+          await client.query('ROLLBACK TO SAVEPOINT row_sp');
           // validation error for this row -> skip
           console.error('Import validation error:', e);
         }
@@ -1003,9 +1010,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const maxQ = await client.query('SELECT COALESCE(MAX(receipt_serial),0)+1 as next FROM fee_transactions WHERE school_id=$1', [user.schoolId]);
               const receiptSerial = Number(maxQ.rows[0].next);
 
+              // Get current session
+              const schoolQ = await client.query('SELECT current_session_id FROM schools WHERE id=$1', [user.schoolId]);
+              const sessionId = schoolQ.rows[0]?.current_session_id;
+
               await client.query(
-                `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks, receipt_serial, school_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-                [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null, receiptSerial, user.schoolId]
+                `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks, receipt_serial, school_id, session_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null, receiptSerial, user.schoolId, sessionId]
               );
               success = true;
               break;

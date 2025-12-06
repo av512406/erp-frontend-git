@@ -47,6 +47,7 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
     { path: "/fees", label: "Fees", icon: DollarSign },
     { path: "/reports", label: "Reports", icon: FileText },
     { path: "/grades", label: "Grades", icon: BookOpen },
+
     { path: "/data-tools", label: "Data Tools", icon: Database },
   ];
 

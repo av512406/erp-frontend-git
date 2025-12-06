@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { getAuthHeaders } from "@/lib/auth";
 
 interface User {
   id: string;
@@ -35,7 +36,7 @@ function UserManagement() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/users');
+      const res = await fetch('/api/users', { headers: getAuthHeaders() });
       if (res.ok) {
         setUsers(await res.json());
       }
@@ -58,7 +59,7 @@ function UserManagement() {
 
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(formData)
       });
 
@@ -80,7 +81,7 @@ function UserManagement() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this user?')) return;
     try {
-      const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/users/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
       if (res.ok) {
         toast({ title: "Success", description: "User deleted" });
         fetchUsers();
@@ -128,13 +129,13 @@ function UserManagement() {
                 <Label>Username</Label>
                 <div className="flex items-center gap-2">
                   <Input
-                    value={formData.username.split('@')[0]}
+                    value={formData.username}
                     onChange={e => setFormData({ ...formData, username: e.target.value })}
                     required
                     disabled={!!editingUser}
                     placeholder="jdoe"
                   />
-                  {!editingUser && <span className="text-sm text-muted-foreground whitespace-nowrap">@schoolname.com</span>}
+                  {!editingUser && <span className="text-sm text-muted-foreground whitespace-nowrap">@schoolname.com (auto-appended if omitted)</span>}
                 </div>
                 {!editingUser && <p className="text-xs text-muted-foreground">Login will be username@schoolname.com</p>}
               </div>
@@ -199,7 +200,7 @@ function SchoolSettings() {
   const { toast } = useToast();
   const [form, setForm] = useState({
     name: config.name,
-    addressLine: config.addressLine,
+    address: config.address,
     phone: config.phone,
     session: config.session,
     logoFile: null as File | null
@@ -216,7 +217,7 @@ function SchoolSettings() {
     setForm(f => ({
       ...f,
       name: config.name,
-      addressLine: config.addressLine,
+      address: config.address,
       phone: config.phone,
       session: config.session
     }));
@@ -320,8 +321,8 @@ function SchoolSettings() {
               <Input id="name" name="name" value={form.name} onChange={handleChange} required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="addressLine">Address Line</Label>
-              <Input id="addressLine" name="addressLine" value={form.addressLine} onChange={handleChange} required />
+              <Label htmlFor="address">Address</Label>
+              <Input id="address" name="address" value={form.address} onChange={handleChange} required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Phone</Label>

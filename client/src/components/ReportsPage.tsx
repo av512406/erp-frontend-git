@@ -129,7 +129,7 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
                     ${schoolConfig.logoUrl ? `<img src="${schoolConfig.logoUrl}" alt="Logo" class="logo" />` : ''}
                     <div class="school-info">
                         <div class="school-name">${schoolConfig.name}</div>
-                        <div class="school-address">${schoolConfig.addressLine}</div>
+                        <div class="school-address">${schoolConfig.address}</div>
                         <div class="contact-info">Phone: ${schoolConfig.phone} | Email: ${schoolConfig.email}</div>
                     </div>
                 </div>
