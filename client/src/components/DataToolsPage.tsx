@@ -19,6 +19,7 @@ import {
 import type { Student } from "@shared/schema";
 import StudentsExcelExportModal from './StudentsExcelExportModal';
 import type { GradeEntry } from "./GradesPage";
+import { getAuthHeaders } from "@/lib/auth";
 
 // Utility: consistently format date fields as YYYY-MM-DD for CSV (strip time if present)
 const formatCsvDate = (value: string | undefined | null): string => {
@@ -680,20 +681,45 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 data-testid="input-import-transactions"
               />
             </div>
+
             <div className="text-sm text-muted-foreground">
               <p className="font-medium mb-1">Accepted columns (case-insensitive):</p>
               <p className="font-mono text-xs">studentId or admissionNumber, amount, paymentDate, paymentMode (optional), remarks (optional)</p>
             </div>
-            <Button
-              variant="outline"
-              className="w-full gap-2"
-              onClick={() => transactionsFileRef.current?.click()}
-              disabled={isImporting}
-              data-testid="button-import-transactions"
-            >
-              <Upload className="w-4 h-4" />
-              {isImporting ? 'Importing...' : 'Select File'}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={() => transactionsFileRef.current?.click()}
+                disabled={isImporting}
+                data-testid="button-import-transactions"
+              >
+                <Upload className="w-4 h-4" />
+                {isImporting ? 'Importing...' : 'Select File'}
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full gap-2"
+                onClick={() => {
+                  const header = ['admissionNumber', 'amount', 'paymentDate', 'paymentMode', 'remarks'];
+                  const sample = ['STU001', '5000', '2025-04-01', 'cash', 'Term 1 Fee'].join(',');
+                  const csv = [header.join(','), sample].join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `transactions-template.csv`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  URL.revokeObjectURL(url);
+                }}
+                data-testid="button-download-transactions-template"
+              >
+                <Download className="w-4 h-4" />
+                Download Template
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -749,7 +775,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 className="w-full gap-2"
                 onClick={async () => {
                   try {
-                    const resp = await fetch('/api/export/transactions');
+                    const resp = await fetch('/api/export/transactions', { headers: getAuthHeaders() });
                     if (!resp.ok) throw new Error('Failed');
                     const blob = await resp.blob();
                     const url = URL.createObjectURL(blob);
@@ -771,7 +797,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 className="w-full gap-2"
                 onClick={async () => {
                   try {
-                    const resp = await fetch('/api/export/grades');
+                    const resp = await fetch('/api/export/grades', { headers: getAuthHeaders() });
                     if (!resp.ok) throw new Error('Failed');
                     const blob = await resp.blob();
                     const url = URL.createObjectURL(blob);
@@ -793,6 +819,6 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
         </Card>
       </div>
       <StudentsExcelExportModal open={excelModalOpen} onClose={() => setExcelModalOpen(false)} />
-    </div>
+    </div >
   );
 }

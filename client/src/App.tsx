@@ -202,8 +202,8 @@ function Router({ user }: { user: User }) {
       throw new Error(msg);
     }
     const result = await res.json();
-    // Update local state
-    setTransactions(prev => prev.map(t => t.id === id ? result.transaction : t));
+    // Update local state - merge changes to preserve camelCase fields (studentName etc)
+    setTransactions(prev => prev.map(t => t.id === id ? { ...t, status: 'cancelled', cancelReason: reason } : t));
   };
 
   const handleSaveGrades = async (newGrades: GradeEntry[]) => {

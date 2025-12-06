@@ -341,7 +341,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const { id } = req.params;
-      const { name, slug, address, phone, logoUrl, examPattern } = req.body;
+      // Frontend sends addressLine, map it to address
+      const { name, slug, addressLine, phone, logoUrl, examPattern } = req.body;
+      const address = addressLine || req.body.address;
 
       const client = await pool.connect();
       try {
@@ -668,8 +670,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (strategy === 'upsert') {
               // update
               await client.query(
-                `UPDATE students SET name=$1, date_of_birth=$2, admission_date=$3, aadhar_number=$4, pen_number=$5, aapar_id=$6, mobile_number=$7, address=$8, grade=$9, section=$10, father_name=$11, mother_name=$12, yearly_fee_amount=$13, category=$14, gender=$15 WHERE admission_number=$16 AND school_id=$17`,
-                [data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount, (data as any).category || 'GEN', (data as any).gender || null, data.admissionNumber, user.schoolId]
+                `UPDATE students SET name=$1, date_of_birth=$2, admission_date=$3, aadhar_number=$4, pen_number=$5, aapar_id=$6, mobile_number=$7, address=$8, grade=$9, section=$10, father_name=$11, mother_name=$12, yearly_fee_amount=$13, category=$14, gender=$15, previous_year_due=$16 WHERE admission_number=$17 AND school_id=$18`,
+                [data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount, (data as any).category || 'GEN', (data as any).gender || null, (data as any).previousYearDue || '0', data.admissionNumber, user.schoolId]
               );
               updated++;
             } else {
@@ -678,8 +680,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           } else {
             const id = genId();
             await client.query(
-              `INSERT INTO students (id, admission_number, name, date_of_birth, admission_date, aadhar_number, pen_number, aapar_id, mobile_number, address, grade, section, father_name, mother_name, yearly_fee_amount, status, category, gender, school_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'active', $16, $17, $18)`,
-              [id, data.admissionNumber, data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount, (data as any).category || 'GEN', (data as any).gender || null, user.schoolId]
+              `INSERT INTO students (id, admission_number, name, date_of_birth, admission_date, aadhar_number, pen_number, aapar_id, mobile_number, address, grade, section, father_name, mother_name, yearly_fee_amount, status, category, gender, previous_year_due, school_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'active', $16, $17, $18, $19)`,
+              [id, data.admissionNumber, data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount, (data as any).category || 'GEN', (data as any).gender || null, (data as any).previousYearDue || '0', user.schoolId]
             );
             added.push(data.admissionNumber);
           }
