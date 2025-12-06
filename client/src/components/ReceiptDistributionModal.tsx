@@ -120,7 +120,7 @@ export default function ReceiptDistributionModal({ open, onClose, transaction, s
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Distribute Amount for Receipt</DialogTitle>
         </DialogHeader>

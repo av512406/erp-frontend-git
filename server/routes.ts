@@ -198,7 +198,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/school-config', requireAuth, async (req, res) => {
     const user = (req as any).user;
     try {
-      const { rows } = await pool.query('SELECT id, name, slug, address, phone, logo_url as "logoUrl", exam_pattern as "examPattern" FROM schools WHERE id = $1', [user.schoolId]);
+      const { rows } = await pool.query(`
+        SELECT s.id, s.name, s.slug, s.address, s.phone, s.logo_url as "logoUrl", s.exam_pattern as "examPattern", ac.name as "session"
+        FROM schools s
+        LEFT JOIN academic_sessions ac ON s.current_session_id = ac.id
+        WHERE s.id = $1
+      `, [user.schoolId]);
       if (rows.length === 0) return res.status(404).json({ message: 'School not found' });
 
       const school = rows[0];

@@ -7,6 +7,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import type { Student } from "@shared/schema";
 import { Plus, Trash2, CheckCircle2 } from "lucide-react";
+import { getAuthHeaders } from "@/lib/auth";
 
 type Subject = {
   id: string;
@@ -25,9 +26,9 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/subjects');
+        const res = await fetch('/api/subjects', { headers: getAuthHeaders() });
         if (res.ok) setSubjects(await res.json());
-      } catch {}
+      } catch { }
     })();
   }, []);
 
@@ -37,7 +38,7 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/classes');
+        const res = await fetch('/api/classes', { headers: getAuthHeaders() });
         if (res.ok) {
           const data: string[] = await res.json();
           setAllGrades(data);
@@ -45,13 +46,13 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
         } else {
           // fallback from students if API not available
           const fallback = Array.from(new Set(students.map(s => s.grade))).filter(Boolean) as string[];
-          fallback.sort((a,b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+          fallback.sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
           setAllGrades(fallback);
           setSelectedGrade(prev => prev || fallback[0] || "");
         }
       } catch {
         const fallback = Array.from(new Set(students.map(s => s.grade))).filter(Boolean) as string[];
-        fallback.sort((a,b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+        fallback.sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
         setAllGrades(fallback);
         setSelectedGrade(prev => prev || fallback[0] || "");
       }
@@ -64,7 +65,7 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
     if (!selectedGrade) return;
     (async () => {
       try {
-        const res = await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/subjects`);
+        const res = await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/subjects`, { headers: getAuthHeaders() });
         if (res.ok) setAssigned(await res.json());
         else setAssigned([]);
       } catch { setAssigned([]); }
@@ -82,20 +83,20 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
     if (subjects.some(s => s.code === code)) return;
     (async () => {
       try {
-        const res = await fetch('/api/subjects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, name }) });
+        const res = await fetch('/api/subjects', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }, body: JSON.stringify({ code, name }) });
         if (res.ok) {
           const created = await res.json();
           setSubjects(prev => [...prev, created]);
           setNewCode(""); setNewName("");
         }
-      } catch {}
+      } catch { }
     })();
   };
 
   const handleDeleteSubject = (id: string) => {
     (async () => {
       try {
-        await fetch(`/api/subjects/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        await fetch(`/api/subjects/${encodeURIComponent(id)}`, { method: 'DELETE', headers: getAuthHeaders() });
       } finally {
         setSubjects(prev => prev.filter(s => s.id !== id));
         setAssigned(prev => prev.filter(s => s.id !== id));
@@ -113,7 +114,7 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
     (async () => {
       try {
         const res = await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/subjects`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subjectId: subjectToAssign })
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }, body: JSON.stringify({ subjectId: subjectToAssign })
         });
         if (res.ok) {
           const sub = subjects.find(s => s.id === subjectToAssign);
@@ -128,7 +129,7 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
   const handleUnassign = (sid: string) => {
     (async () => {
       try {
-        await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/subjects/${encodeURIComponent(sid)}`, { method: 'DELETE' });
+        await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/subjects/${encodeURIComponent(sid)}`, { method: 'DELETE', headers: getAuthHeaders() });
       } finally {
         setAssigned(prev => prev.filter(s => s.id !== sid));
       }
@@ -150,7 +151,7 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
             <CardTitle>Subjects Catalog</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="new-code">Code</Label>
                 <Input id="new-code" value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="e.g. MATH" />
@@ -207,14 +208,14 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
                     if (!selectedGrade || assigned.length === 0) return;
                     setSyncingAll(true);
                     try {
-                      const res = await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/sync-all`, { method: 'POST' });
+                      const res = await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/sync-all`, { method: 'POST', headers: getAuthHeaders() });
                       if (!res.ok) {
                         // fallback client-side sync if server endpoint unavailable
                         for (const g of allGrades) {
                           for (const s of assigned) {
                             await fetch(`/api/classes/${encodeURIComponent(g)}/subjects`, {
                               method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
+                              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                               body: JSON.stringify({ subjectId: s.id })
                             });
                           }
@@ -222,9 +223,9 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
                       }
                       // refresh current grade's assignments
                       try {
-                        const r = await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/subjects`);
+                        const r = await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/subjects`, { headers: getAuthHeaders() });
                         if (r.ok) setAssigned(await r.json());
-                      } catch {}
+                      } catch { }
                       window.alert('Synced subjects to all classes');
                     } finally {
                       setSyncingAll(false);

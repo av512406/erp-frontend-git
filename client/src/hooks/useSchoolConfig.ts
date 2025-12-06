@@ -54,9 +54,9 @@ export function useSchoolConfig() {
         examPattern: payload.examPattern ?? currentConfig.examPattern
       };
 
-      // We need the ID to update. It should be in the query data.
-      const id = query.data?.id;
-      if (!id) throw new Error("School ID not found");
+      // We need the ID to update. It should be in the query data or current config.
+      const id = query.data?.id || currentConfig.id;
+      if (!id) throw new Error("School ID not found. Please refresh the page.");
 
       const res = await apiRequest('PUT', `/api/schools/${id}`, body);
       return await res.json();

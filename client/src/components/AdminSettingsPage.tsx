@@ -243,7 +243,12 @@ function SchoolSettings() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await updateConfig({ ...form, examPattern });
+    try {
+      await updateConfig({ ...form, examPattern });
+      toast({ title: "Success", description: "School settings updated" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "Failed to update settings", variant: "destructive" });
+    }
   };
 
   useEffect(() => {
@@ -390,8 +395,15 @@ function SchoolSettings() {
 
             <div className="text-xs text-muted-foreground">Updating settings immediately affects receipts and other areas using school metadata.</div>
           </CardContent>
-          <CardFooter className="flex justify-end gap-2">
-            <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Settings'}</Button>
+          <CardFooter className="flex flex-col items-end gap-2">
+            <Button type="submit" disabled={isSaving || !config.id}>
+              {isSaving ? 'Saving...' : 'Save Settings'}
+            </Button>
+            {!config.id && !isLoading && (
+              <p className="text-xs text-destructive">
+                Error: School ID not loaded. Please refresh the page.
+              </p>
+            )}
           </CardFooter>
         </form>
       </Card>

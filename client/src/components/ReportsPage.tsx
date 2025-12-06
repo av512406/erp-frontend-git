@@ -1,4 +1,6 @@
+
 import { useEffect, useMemo, useState } from "react";
+import { getAuthHeaders } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -58,17 +60,17 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
     if (!printWindow) return;
 
     const rowsHtml = reportRows.map((row, index) => `
-      <tr>
+  < tr >
         <td style="text-align: center;">${index + 1}</td>
         <td>${row.subject}</td>
         <td style="text-align: right;">100</td>
         <td style="text-align: right;">${row.marks ?? '-'}</td>
-      </tr>
-    `).join('');
+      </tr >
+  `).join('');
 
     // Default Template Content
     const defaultContent = `
-      <html>
+  < html >
         <head>
           <title>Report Card - ${student.name}</title>
           <style>
@@ -180,8 +182,8 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
             </div>
           </div>
         </body>
-      </html>
-    `;
+      </html >
+  `;
 
     if (template) {
       let html = template.content;
@@ -212,7 +214,7 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
     if (!student) { setClassSubjects([]); return; }
     (async () => {
       try {
-        const res = await fetch(`/api/classes/${encodeURIComponent(student.grade)}/subjects`);
+        const res = await fetch(`/api/classes/${encodeURIComponent(student.grade)}/subjects`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data: { name: string }[] = await res.json();
           setClassSubjects(data.map(d => d.name));

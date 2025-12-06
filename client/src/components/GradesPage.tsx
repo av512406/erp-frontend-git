@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Save, Download, Upload } from "lucide-react";
 import type { Student } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { getAuthHeaders } from "@/lib/auth";
 
 export interface GradeEntry {
   studentId: string;
@@ -84,7 +85,7 @@ export default function GradesPage({ students, grades, onSaveGrades, saving = fa
     (async () => {
       setLoadingSubjects(true);
       try {
-        const res = await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/subjects`);
+        const res = await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/subjects`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data: { id: string; code: string; name: string; maxMarks?: number | null }[] = await res.json();
           setClassSubjects(data);
@@ -307,7 +308,7 @@ export default function GradesPage({ students, grades, onSaveGrades, saving = fa
                   const subj = classSubjects.find(s => s.name === selectedSubject);
                   if (!subj) return toast({ title: 'Save failed', description: 'Subject not found', variant: 'destructive' });
                   try {
-                    const res = await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/subjects/${encodeURIComponent(subj.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ maxMarks }) });
+                    const res = await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/subjects/${encodeURIComponent(subj.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }, body: JSON.stringify({ maxMarks }) });
                     if (res.ok) {
                       const j = await res.json();
                       setClassSubjects(prev => prev.map(p => p.id === subj.id ? { ...p, maxMarks: j.maxMarks ?? null } : p));
