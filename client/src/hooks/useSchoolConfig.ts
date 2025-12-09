@@ -4,12 +4,15 @@ import { getAuthHeaders } from '@/lib/auth';
 import { schoolConfig as currentConfig, setSchoolConfig, SchoolConfig, defaultSchoolConfig } from '@/lib/schoolConfig';
 import { useEffect } from 'react';
 
-const QUERY_KEY = ['api', 'admin', 'config'];
+import { getToken } from '@/lib/auth';
+
+const BASE_QUERY_KEY = ['api', 'admin', 'config'];
 
 export function useSchoolConfig() {
   const qc = useQueryClient();
+  const token = getToken();
   const query = useQuery<SchoolConfig>({
-    queryKey: QUERY_KEY,
+    queryKey: [...BASE_QUERY_KEY, token],
     queryFn: async () => {
       const res = await fetch('/api/school-config', { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Failed to load config');
@@ -63,7 +66,7 @@ export function useSchoolConfig() {
     },
     onSuccess(data) {
       setSchoolConfig(data);
-      qc.invalidateQueries({ queryKey: QUERY_KEY });
+      qc.invalidateQueries({ queryKey: [...BASE_QUERY_KEY, token] });
     }
   });
 
