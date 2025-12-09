@@ -342,11 +342,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       // Frontend sends addressLine, map it to address
-      const { name, slug, address, phone, logoUrl, examPattern } = req.body;
+      const { name, slug, address, phone, logoUrl, examPattern, session } = req.body;
 
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+
+        // Logic for session update
+        let newSessionId = undefined;
+        if (session) {
+          // Find or create session
+          const sessRes = await client.query('SELECT id FROM academic_sessions WHERE name = $1', [session]);
+          if (sessRes.rows.length > 0) {
+            newSessionId = sessRes.rows[0].id;
+          } else {
+            // Create new session
+            const insRes = await client.query(
+              "INSERT INTO academic_sessions (name, start_date, end_date, is_active) VALUES ($1, '2025-04-01', '2026-03-31', true) RETURNING id",
+              [session]
+            );
+            newSessionId = insRes.rows[0].id;
+          }
+        }
 
         // If examPattern is being updated, we need to check for renames
         if (examPattern && Array.isArray(examPattern)) {
@@ -390,6 +407,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (examPattern) {
           updates.push(`exam_pattern = $${idx++}`);
           values.push(JSON.stringify(examPattern));
+        }
+        if (newSessionId) {
+          updates.push(`current_session_id = $${idx++}`);
+          values.push(newSessionId);
         }
 
         updates.push(`updated_at = now()`);

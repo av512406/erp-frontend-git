@@ -40,8 +40,8 @@ const DEFAULT_ORDER = [
 ];
 
 export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, serial, session, yearlyFeeAmount, previousYearDue, paidSoFar, remainingFee }) => {
-	// Load dynamic config (will fallback to defaults until fetched)
-	useSchoolConfig();
+	// Load dynamic config (reactive)
+	const { config } = useSchoolConfig();
 	const computedSerial = serial ?? nextReceiptSerial();
 	// Normalize item list into ordered rows
 	const map: Record<string, number> = {};
@@ -50,7 +50,7 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 	const total = ordered.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
 	const amountWords = amountToIndianWords(total);
 	const cls = [student.grade ? `Class ${student.grade}` : '', student.section ? `Section ${student.section}` : ''].filter(Boolean).join(' ');
-	const sessionValue = session || schoolConfig.session;
+	const sessionValue = session || config.session;
 
 	// Two copies (Student & Office) share same data; differentiate by copy label.
 	const copies = ['Student Copy', 'Office Copy'];
@@ -63,13 +63,18 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 				<div key={copy} className="receipt border border-black p-3 mb-4 break-inside-avoid">
 					<div className="text-center mb-2">
 						{/* Compact centered header: logo + school name side-by-side to save vertical space */}
+						{/* Compact centered header: logo + school name side-by-side to save vertical space */}
 						<div className="flex items-center justify-center gap-4 mb-1 min-h-[56px]">
-							{schoolConfig.logoUrl && (
-								<img src={schoolConfig.logoUrl} alt="School Logo" className="h-14 object-contain" />
+							{config.logoUrl && (
+								<img src={config.logoUrl} alt="School Logo" className="h-14 object-contain" />
 							)}
-							<h1 className="text-2xl font-bold tracking-wide">{schoolConfig.name}</h1>
+							<h1 className="text-2xl font-bold tracking-wide text-center">{config.name}</h1>
+							{/* Special Layout for Glorious Public School: Double Logo */}
+							{config.logoUrl && config.name.toLowerCase().includes('glorious') && (
+								<img src={config.logoUrl} alt="School Logo" className="h-14 object-contain" />
+							)}
 						</div>
-						<p className="text-xs italic">{schoolConfig.address}</p>
+						<p className="text-xs italic">{config.address}</p>
 						{/* Merge Fee Receipt and copy label to save vertical space */}
 						<div className="inline-flex items-center gap-2 border px-2 py-0.5 text-sm font-semibold mt-1">
 							<span>Fee Receipt</span>
@@ -212,6 +217,7 @@ function buildPlainHtml(props: ReceiptProps): string {
 			<div style="display:flex;align-items:center;justify-content:center;gap:12px;min-height:54px;margin-bottom:2px;">
 				${schoolConfig.logoUrl ? `<img src="${schoolConfig.logoUrl}" alt="Logo" style="height:50px;object-fit:contain;"/>` : ''}
 				<div style="font-size:19px;font-weight:700;letter-spacing:.5px;">${schoolConfig.name}</div>
+				${schoolConfig.logoUrl && schoolConfig.name.toLowerCase().includes('glorious') ? `<img src="${schoolConfig.logoUrl}" alt="Logo" style="height:50px;object-fit:contain;"/>` : ''}
 			</div>
 			<div style="font-size:10px;font-style:italic;">${schoolConfig.address}</div>
 			<div style="display:inline-flex;align-items:center;gap:6px;border:1px solid #000;padding:2px 6px;font-size:12px;font-weight:600;margin-top:4px;">Fee Receipt <span style="font-size:10px;font-weight:400;">(${copy})</span></div>

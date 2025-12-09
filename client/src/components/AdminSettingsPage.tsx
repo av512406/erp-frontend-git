@@ -329,41 +329,15 @@ function SchoolSettings() {
               <Input id="phone" name="phone" value={form.phone} onChange={handleChange} />
             </div>
             <div className="space-y-2">
-              <Label>Current Session</Label>
-              <div className="flex items-center gap-4">
-                <div className="border px-3 py-2 rounded-md bg-muted min-w-[200px]">{config.session || 'Loading...'}</div>
-                <Dialog open={switchOpen} onOpenChange={setSwitchOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline">Switch Session</Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Switch Academic Session</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label>Select New Session</Label>
-                        <Select onValueChange={setSelectedSession}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select session" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableSessions.map(s => (
-                              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="text-sm text-muted-foreground bg-yellow-50 p-3 rounded border border-yellow-200">
-                        <strong>Warning:</strong> Switching sessions will automatically promote all active students to the new session.
-                      </div>
-                      <Button onClick={handleSwitchSession} disabled={!selectedSession} className="w-full">
-                        Confirm Switch
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
+              <Label htmlFor="session">Current Session</Label>
+              <Input
+                id="session"
+                name="session"
+                value={form.session || ''}
+                onChange={handleChange}
+                placeholder="e.g. 2025-2026"
+              />
+              <p className="text-xs text-muted-foreground">Defining the academic year (e.g. "2025-2026"). This will be reflected on receipts and reports.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="logoFile">Logo Image (optional)</Label>
@@ -407,8 +381,8 @@ function SchoolSettings() {
             )}
           </CardFooter>
         </form>
-      </Card>
-    </div>
+      </Card >
+    </div >
   );
 }
 
