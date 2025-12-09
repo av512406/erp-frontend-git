@@ -358,8 +358,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           } else {
             // Create new session
             const insRes = await client.query(
-              "INSERT INTO academic_sessions (name, start_date, end_date, is_active) VALUES ($1, '2025-04-01', '2026-03-31', true) RETURNING id",
-              [session]
+              "INSERT INTO academic_sessions (id, name, start_date, end_date, is_active) VALUES ($1, $2, '2025-04-01', '2026-03-31', true) RETURNING id",
+              [genId(), session]
             );
             newSessionId = insRes.rows[0].id;
           }
