@@ -16,8 +16,10 @@ verify_temp/
 students_export.csv
 test_roundtrip.json
 *.tar.gz
+*.tar.bz2
 school_erp_latest.tar
 school_erp_deployment.zip
 deployment_bundle/*.tar
 deployment_bundle/*.pem
 deploy_fix.sh
+deploy_*.sh

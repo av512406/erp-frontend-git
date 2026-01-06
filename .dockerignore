@@ -5,6 +5,7 @@ dist
 
 # Large files and backups
 *.tar.gz
+*.tar
 db_backups/
 attached_assets/
 

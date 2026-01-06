@@ -6,7 +6,7 @@ http {
     # HTTP - Redirect to HTTPS
     server {
         listen 80;
-        server_name school.edulekha.in localhost;
+        server_name erp.edulekha.in localhost;
 
         location /.well-known/acme-challenge/ {
             root /var/www/certbot;
