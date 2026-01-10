@@ -140,6 +140,7 @@ export default function Navigation({ userRole, userEmail, onLogout, sessions = [
                     <>
                       <div className="text-sm font-medium text-muted-foreground mt-4 mb-2 px-2">Settings</div>
                       <NavLink link={{ path: "/admin-settings", label: "Admin Settings", icon: Settings }} mobile />
+                      <NavLink link={{ path: "/admin/classes", label: "Classes", icon: GraduationCap }} mobile />
                       <NavLink link={{ path: "/subjects", label: "Subjects", icon: Library }} mobile />
                     </>
                   )}
@@ -242,6 +243,11 @@ export default function Navigation({ userRole, userEmail, onLogout, sessions = [
                   <DropdownMenuItem asChild>
                     <Link href="/admin-settings" className="flex items-center gap-2">
                       <Settings className="w-4 h-4" /> Admin Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin/classes" className="flex items-center gap-2">
+                      <GraduationCap className="w-4 h-4" /> Classes
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>

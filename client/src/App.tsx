@@ -16,8 +16,11 @@ import GradesPage from "@/components/GradesPage";
 import ReportsPage from "@/components/ReportsPage";
 import DataToolsPage from "@/components/DataToolsPage";
 import SubjectsPage from "@/components/SubjectsPage";
-import AdminSettingsPage from "./components/AdminSettingsPage";
+import AdminSettingsPage from "@/components/AdminSettingsPage";
 import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+import AdminClassesPage from "@/components/AdminClassesPage";
+import TeacherDashboard from "@/components/TeacherDashboard";
+import AttendancePage from "@/components/AttendancePage";
 
 import type { Student } from "@shared/schema";
 import type { FeeTransaction } from "@/components/FeesPage";
@@ -358,8 +361,18 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
   return (
     <Switch>
       <Route path="/">
-        <Dashboard stats={stats} userRole={user.role as any} />
+        {user.role === 'teacher' ? (
+          <TeacherDashboard />
+        ) : (
+          <Dashboard stats={stats} userRole={user.role as any} />
+        )}
       </Route>
+      <Route path="/attendance">
+        <ProtectedRoute allowedRoles={['teacher']} userRole={user.role}>
+          <AttendancePage />
+        </ProtectedRoute>
+      </Route>
+
       <Route path="/students">
         <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
           <StudentsPage
@@ -461,6 +474,12 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       <Route path="/admin-settings">
         <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
           <AdminSettingsPage />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/classes">
+        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+          <AdminClassesPage />
         </ProtectedRoute>
       </Route>
 

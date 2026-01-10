@@ -38,7 +38,7 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/classes', { headers: getAuthHeaders() });
+        const res = await fetch('/api/classes/grades', { headers: getAuthHeaders() });
         if (res.ok) {
           const data: string[] = await res.json();
           setAllGrades(data);

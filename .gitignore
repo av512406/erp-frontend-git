@@ -23,3 +23,7 @@ deployment_bundle/*.tar
 deployment_bundle/*.pem
 deploy_fix.sh
 deploy_*.sh
+debug_*.ts
+migration_*.ts
+scripts/
+Dockerfile.backup

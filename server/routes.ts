@@ -19,7 +19,11 @@ import {
   insertSubjectSchema,
   insertClassSubjectSchema,
   insertDocumentTemplateSchema,
-  schools
+  schools,
+  classes,
+  attendance,
+  insertClassSchema,
+  insertAttendanceSchema
 } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { ZodError, z } from 'zod';
@@ -639,35 +643,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json([]); // No session defined, empty list
       }
 
-      // Query joining student_sessions to get grade/section for THIS session
-      // Note: We prioritize the status/grade/section from the session record
-      const query = `
-        SELECT 
-          s.*,
-          ss.grade as session_grade,
-          ss.section as session_section,
-          ss.status as session_status,
-          ss.roll_number
-        FROM students s
-        INNER JOIN student_sessions ss ON s.id = ss.student_id
+      const page = req.query.page ? parseInt(req.query.page as string) : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+
+      // Base WHERE clause
+      const whereClause = `
         WHERE ss.session_id = $1 
           AND ss.school_id = $2
           AND (ss.status = 'active' OR ss.status = 'promoted')
-        ORDER BY ss.grade, ss.section, s.name
       `;
 
-      const { rows } = await pool.query(query, [targetSessionId, user.schoolId]);
+      if (page && limit) {
+        // Pagination Mode
+        const offset = (page - 1) * limit;
 
-      const mapped = rows.map(row => ({
-        ...mapStudent(row),
-        // Override with session-specific data
-        grade: row.session_grade || row.grade,
-        section: row.session_section || row.section,
-        status: row.session_status || row.status,
-        rollNumber: row.roll_number
-      }));
+        // 1. Get Total Count
+        const countQuery = `
+          SELECT COUNT(*) as total
+          FROM students s
+          INNER JOIN student_sessions ss ON s.id = ss.student_id
+          ${whereClause}
+        `;
+        const countRes = await pool.query(countQuery, [targetSessionId, user.schoolId]);
+        const total = parseInt(countRes.rows[0].total);
 
-      res.json(mapped);
+        // 2. Get Paginated Data
+        const dataQuery = `
+          SELECT 
+            s.*,
+            ss.grade as session_grade,
+            ss.section as session_section,
+            ss.status as session_status,
+            ss.roll_number
+          FROM students s
+          INNER JOIN student_sessions ss ON s.id = ss.student_id
+          ${whereClause}
+          ORDER BY ss.grade, ss.section, s.name
+          LIMIT $3 OFFSET $4
+        `;
+        const { rows } = await pool.query(dataQuery, [targetSessionId, user.schoolId, limit, offset]);
+
+        const mapped = rows.map(row => ({
+          ...mapStudent(row),
+          grade: row.session_grade || row.grade,
+          section: row.session_section || row.section,
+          status: row.session_status || row.status,
+          rollNumber: row.roll_number
+        }));
+
+        return res.json({
+          data: mapped,
+          meta: {
+            total,
+            page,
+            limit
+          }
+        });
+
+      } else {
+        // Legacy Mode (Return All)
+        const query = `
+          SELECT 
+            s.*,
+            ss.grade as session_grade,
+            ss.section as session_section,
+            ss.status as session_status,
+            ss.roll_number
+          FROM students s
+          INNER JOIN student_sessions ss ON s.id = ss.student_id
+          ${whereClause}
+          ORDER BY ss.grade, ss.section, s.name
+        `;
+        const { rows } = await pool.query(query, [targetSessionId, user.schoolId]);
+
+        const mapped = rows.map(row => ({
+          ...mapStudent(row),
+          grade: row.session_grade || row.grade,
+          section: row.session_section || row.section,
+          status: row.session_status || row.status,
+          rollNumber: row.roll_number
+        }));
+
+        res.json(mapped);
+      }
+
+
     } catch (e) {
       console.error('Error fetching students:', e);
       res.status(500).json({ message: 'Failed to fetch students' });
@@ -871,10 +931,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const added: any[] = [];
       const skipped: string[] = [];
       let updated = 0;
+      // Track classes to avoid spamming DB in this transaction
+      const existingClasses = new Set<string>();
+
       for (const row of imported) {
         try {
           await client.query('SAVEPOINT row_sp');
           const data = insertStudentSchema.parse(row);
+
+          // Auto-create Class if distinct grade/section found
+          if (data.grade && data.section) {
+            const classKey = `${data.grade}-${data.section}`;
+            if (!existingClasses.has(classKey)) {
+              await client.query(
+                `INSERT INTO classes (id, grade, section, school_id) 
+                   VALUES ($1, $2, $3, $4) 
+                   ON CONFLICT (school_id, grade, section) DO NOTHING`,
+                [genId(), data.grade, data.section, user.schoolId]
+              );
+              existingClasses.add(classKey);
+            }
+          }
 
           // Determine session for this row
           const rowSessionName = (row.session || row['Session'] || row['Session Name'] || row.sessionName || '').toString().trim();
@@ -1405,7 +1482,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Class-subject assignments
-  app.get('/api/classes', requireAuth, async (req, res) => {
+  app.get('/api/classes/grades', requireAuth, async (req, res) => {
     const user = (req as any).user;
     const { rows } = await pool.query(`
       SELECT DISTINCT grade FROM (
@@ -2174,7 +2251,219 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ message: 'Session switch handled via settings', promotedStudents: 0 });
   });
 
+  // --- Class Management APIs ---
+
+  app.get('/api/classes', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    try {
+      // Fetch classes with teacher name
+      const query = `
+        SELECT c.*, u.name as teacher_name 
+        FROM classes c
+        LEFT JOIN users u ON c.class_teacher_id = u.id
+        WHERE c.school_id = $1
+        ORDER BY c.grade, c.section
+      `;
+      const { rows } = await pool.query(query, [user.schoolId]);
+      res.json(rows);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Failed to fetch classes' });
+    }
+  });
+
+  app.post('/api/classes', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    try {
+      const data = insertClassSchema.parse(req.body);
+
+      // Check unique (grade, section)
+      const exists = await pool.query(
+        'SELECT 1 FROM classes WHERE grade = $1 AND section = $2 AND school_id = $3',
+        [data.grade, data.section, user.schoolId]
+      );
+      if (exists.rowCount && exists.rowCount > 0) {
+        return res.status(409).json({ message: 'Class already exists' });
+      }
+
+      const id = genId();
+      await pool.query(
+        'INSERT INTO classes (id, grade, section, class_teacher_id, school_id) VALUES ($1, $2, $3, $4, $5)',
+        [id, data.grade, data.section, data.classTeacherId || null, user.schoolId]
+      );
+
+      res.status(201).json({ message: 'Class created' });
+    } catch (e) {
+      if (e instanceof ZodError) return res.status(400).json({ message: 'Validation failed', issues: e.format() });
+      console.error(e);
+      res.status(500).json({ message: 'Failed to create class' });
+    }
+  });
+
+  app.delete('/api/classes/:id', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    try {
+      await pool.query('DELETE FROM classes WHERE id = $1 AND school_id = $2', [req.params.id, user.schoolId]);
+      res.json({ message: 'Class deleted' });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Failed to delete class' });
+    }
+  });
+
+  // Assign Teacher to Class
+  app.put('/api/classes/:id/assign-teacher', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
+
+    const { teacherId } = req.body;
+    try {
+      await pool.query(
+        'UPDATE classes SET class_teacher_id = $1 WHERE id = $2 AND school_id = $3',
+        [teacherId, req.params.id, user.schoolId]
+      );
+      res.json({ message: 'Teacher assigned' });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Failed to assign teacher' });
+    }
+  });
+
+  // --- Teacher Dashboard & Attendance APIs ---
+
+  app.get('/api/teacher/my-class', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    // Removed strict role check to allow testing/admin impersonation if needed, or keep it?
+    // User said "admin will create teacher...", implying role is teacher.
+    if (user.role !== 'teacher' && user.role !== 'admin' && user.role !== 'superadmin') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    try {
+      // Find assigned class directly via user.id (which is now linked in classes table)
+      const classRes = await pool.query('SELECT * FROM classes WHERE class_teacher_id = $1', [user.id]);
+
+      const teacherInfo = { id: user.id, name: user.name };
+
+      if (classRes.rows.length === 0) return res.json({ teacher: teacherInfo, class: null });
+
+      res.json({ teacher: teacherInfo, class: classRes.rows[0] });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Error fetching teacher class' });
+    }
+  });
+
+  // Fetch Attendance for a specific Date & Class
+  app.get('/api/attendance', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    const { date, classId } = req.query;
+
+    if (!date || !classId) return res.status(400).json({ message: 'Date and Class ID required' });
+
+    try {
+      const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+      const sessionId = schoolRes.rows[0]?.current_session_id;
+
+      if (!sessionId) return res.status(400).json({ message: 'No active session' });
+
+      // Get Class Details
+      const clsRes = await pool.query('SELECT grade, section FROM classes WHERE id = $1', [classId]);
+      if (clsRes.rows.length === 0) return res.status(404).json({ message: 'Class not found' });
+      const { grade, section } = clsRes.rows[0];
+
+      // 1. Get Students
+      const studentsQuery = `
+        SELECT s.id, s.name, s.admission_number, s.roll_number
+        FROM students s
+        JOIN student_sessions ss ON s.id = ss.student_id
+        WHERE ss.session_id = $1 AND ss.school_id = $2
+          AND ss.grade = $3 AND ss.section = $4
+          AND ss.status = 'active'
+        ORDER BY s.name
+      `;
+      const students = (await pool.query(studentsQuery, [sessionId, user.schoolId, grade, section])).rows;
+
+      // 2. Get Existing Attendance
+      const attQuery = `
+        SELECT student_id, status FROM attendance 
+        WHERE date = $1 AND school_id = $2 AND student_id = ANY($3)
+      `;
+      const studentIds = students.map(s => s.id);
+      const attendanceMap = new Map();
+      if (studentIds.length > 0) {
+        const attRows = (await pool.query(attQuery, [date, user.schoolId, studentIds])).rows;
+        attRows.forEach(r => attendanceMap.set(r.student_id, r.status));
+      }
+
+      // Merge
+      const result = students.map(s => ({
+        studentId: s.id,
+        name: s.name,
+        admissionNumber: s.admission_number,
+        rollNumber: s.roll_number,
+        status: attendanceMap.get(s.id) || null // null means not marked yet
+      }));
+
+      res.json(result);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Failed to fetch attendance' });
+    }
+  });
+
+  app.post('/api/attendance', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    const { date, classId, records } = req.body;
+    // records: { studentId: string, status: string }[]
+
+    if (!date || !records || !Array.isArray(records)) return res.status(400).json({ message: 'Invalid payload' });
+
+    const client = await pool.connect();
+    try {
+      const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+      const sessionId = schoolRes.rows[0]?.current_session_id;
+
+      await client.query('BEGIN');
+
+      for (const rec of records) {
+        const id = genId();
+        await client.query(`
+          INSERT INTO attendance (id, student_id, date, status, session_id, marked_by, school_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ON CONFLICT (student_id, date) 
+          DO UPDATE SET status = EXCLUDED.status, marked_by = EXCLUDED.marked_by, updated_at = now()
+        `, [id, rec.studentId, date, rec.status, sessionId, user.id, user.schoolId]);
+      }
+
+      await client.query('COMMIT');
+      res.json({ message: 'Attendance saved' });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error(e);
+      res.status(500).json({ message: 'Failed to save attendance' });
+    } finally {
+      client.release();
+    }
+  });
+
   // Register Backup Routes
+  // Fetch potential class teachers (Users with role teacher/admin)
+  app.get('/api/users/teachers', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    try {
+      // We allow admins or teachers to be class teachers
+      const { rows } = await pool.query(
+        "SELECT id, name, role FROM users WHERE school_id = $1 AND role IN ('teacher', 'admin', 'superadmin') ORDER BY name",
+        [user.schoolId]
+      );
+      res.json(rows);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Failed to fetch teachers' });
+    }
+  });
+
   app.use("/api/backup", backupRouter);
 
   const httpServer = createServer(app);

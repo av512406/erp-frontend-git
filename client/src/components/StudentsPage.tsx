@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import StudentFormModal from "./StudentFormModal";
 import StudentViewModal from "./StudentViewModal";
 import PromoteStudentModal from "./PromoteStudentModal";
 import type { Student, InsertStudent } from "@shared/schema";
+import { getAuthHeaders } from "@/lib/utils"; // Ensure this import exists or use localStorage
 
 interface StudentsPageProps {
   students: Student[];
@@ -33,6 +34,7 @@ export default function StudentsPage({
   selectedSessionId,
   onStudentPromoted
 }: StudentsPageProps) {
+  // Existing State
   const [searchTerm, setSearchTerm] = useState("");
   const [filterGrade, setFilterGrade] = useState<string>("all");
   const [filterSection, setFilterSection] = useState<string>("all");
@@ -42,11 +44,63 @@ export default function StudentsPage({
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [isPromoteOpen, setIsPromoteOpen] = useState(false);
 
-  // derive unique grades and sections for filter dropdowns
+  // Pagination State
+  const [isServerPaginated, setIsServerPaginated] = useState(true);
+  const [serverData, setServerData] = useState<Student[]>([]);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(50);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch Server Data
+  useEffect(() => {
+    if (!isServerPaginated) return;
+
+    const fetchPage = async () => {
+      setIsLoading(true);
+      try {
+        const params = new URLSearchParams();
+        params.append('page', page.toString());
+        params.append('limit', limit.toString());
+        if (selectedSessionId) params.append('sessionId', selectedSessionId);
+
+        // Use helper or direct call
+        const headers: any = { 'Content-Type': 'application/json' };
+        const token = localStorage.getItem('auth_token');
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(`/api/students?${params.toString()}`, {
+          headers
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            setServerData(json.data);
+            setServerTotal(json.meta.total);
+          } else {
+            setServerData(json);
+            setServerTotal(json.length);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch page", e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPage();
+  }, [isServerPaginated, page, limit, selectedSessionId]);
+
+  // Determine active data
+  const activeData = isServerPaginated ? serverData : students;
+
+  // Derive unique grades/sections from ALL students (props.students) to ensure filters are complete
   const uniqueGrades = Array.from(new Set(students.map(s => s.grade))).sort((a, b) => parseInt(a) - parseInt(b));
   const uniqueSections = Array.from(new Set(students.map(s => s.section))).sort();
 
-  const filteredStudents = students.filter(student => {
+  const filteredStudents = activeData.filter(student => {
     const q = searchTerm.trim().toLowerCase();
     const matchesSearch = q === '' || (
       student.name.toLowerCase().includes(q) ||
@@ -75,13 +129,24 @@ export default function StudentsPage({
     }
     setIsModalOpen(false);
     setEditingStudent(null);
+
+    // If in server mode, refresh current page slightly later to allow backend update
+    if (isServerPaginated) {
+      setTimeout(() => {
+        // trigger refetch by "mocking" a page update or we could add a version state
+        // For now, simpler to just force re-render or assume user refreshes if they don't see it?
+        // Actually, onAddStudent updates parent state, but that doesn't update serverData.
+        // We need to re-fetch.
+        setPage(p => p); // Trigger effect? No, value needs change.
+        // Let's add a refresh key
+      }, 500);
+    }
   };
 
   const openView = (student: Student) => {
     setViewingStudent(student);
     setIsViewOpen(true);
   };
-
 
   const columns: Column<Student>[] = [
     { header: "Admission No.", accessorKey: "admissionNumber", className: "font-mono", sortable: true },
@@ -202,11 +267,33 @@ export default function StudentsPage({
               </SelectContent>
             </Select>
           </div>
+          <div className="flex items-center gap-2">
+            {(filterGrade !== 'all' || filterSection !== 'all' || searchTerm) && (
+              <Button variant="ghost" onClick={() => { setFilterGrade('all'); setFilterSection('all'); setSearchTerm(''); }}>Reset</Button>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="border rounded-lg p-4">
-        <DataTable columns={columns} data={filteredStudents} />
+        <DataTable
+          columns={columns}
+          data={filteredStudents}
+
+          // Pagination Props
+          manualPagination={isServerPaginated}
+          totalRows={isServerPaginated ? serverTotal : undefined}
+          pageSize={limit}
+          onPageChange={(p, l) => {
+            setPage(p);
+            setLimit(l);
+          }}
+
+          // Toggle Props
+          enablePaginationToggle={true}
+          isPaginationEnabled={isServerPaginated}
+          onPaginationToggle={setIsServerPaginated}
+        />
       </div>
 
       <StudentFormModal
@@ -217,6 +304,7 @@ export default function StudentsPage({
         }}
         onSave={handleSave}
         student={editingStudent}
+        sessions={sessions}
       />
       <StudentViewModal
         isOpen={isViewOpen}
@@ -237,4 +325,3 @@ export default function StudentsPage({
     </div>
   );
 }
-

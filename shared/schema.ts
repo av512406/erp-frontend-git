@@ -75,6 +75,7 @@ export const teachers = pgTable("teachers", {
   address: text("address").notNull(),
   mobileNumber: text("mobile_number").notNull(),
   qualification: text("qualification").notNull(),
+  userId: varchar("user_id").references(() => users.id),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
 });
 
@@ -212,3 +213,55 @@ export type AcademicSession = typeof academicSessions.$inferSelect;
 export const insertStudentSessionSchema = createInsertSchema(studentSessions).omit({ id: true });
 export type InsertStudentSession = z.infer<typeof insertStudentSessionSchema>;
 export type StudentSession = typeof studentSessions.$inferSelect;
+
+// --- Attendance System ---
+
+export const classes = pgTable("classes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  grade: text("grade").notNull(),
+  section: text("section").notNull(),
+  classTeacherId: text("class_teacher_id").references(() => users.id),
+  schoolId: varchar("school_id").notNull().references(() => schools.id),
+  // No unique constraint on (grade, section, schoolId) yet, strictly, but admin usually enforces it.
+  // Let's add it to be safe.
+}, (t) => ({
+  unq: {
+    name: 'classes_school_grade_section_unique',
+    // @ts-ignore
+    columns: [t.schoolId, t.grade, t.section]
+    // Using unique constraint in Drizzle slightly different syntax depending on version but this is standard.
+    // Actually, let's use the t.unique(...) helper if strictly available or use the table 3rd arg array
+  }
+}));
+// Re-doing classes table definition to fix syntax if needed for composite unique
+// Drizzle valid syntax:
+/*
+export const classes = pgTable("classes", {
+  ...
+}, (t) => ({
+  unq: unique().on(t.schoolId, t.grade, t.section),
+}));
+*/
+// But let's stick to simple definition and rely on SQL migration for composite constraints to avoid TS hassle if types mismatch.
+// Actually I'll just add it to `ensureTables` SQL migration.
+
+export const insertClassSchema = createInsertSchema(classes).omit({ id: true, schoolId: true });
+export type InsertClass = z.infer<typeof insertClassSchema>;
+export type Class = typeof classes.$inferSelect;
+
+export const attendance = pgTable("attendance", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: varchar("student_id").notNull().references(() => students.id),
+  date: date("date").notNull(),
+  status: text("status").notNull(), // Present, Absent, Leave, Late
+  sessionId: varchar("session_id").references(() => academicSessions.id),
+  markedBy: varchar("marked_by").references(() => users.id),
+  schoolId: varchar("school_id").notNull().references(() => schools.id),
+}, (t) => ({
+  // Composite unique constraint on student + date to prevent duplicate marking
+  // Again, will ensure in SQL migration for robustness.
+}));
+
+export const insertAttendanceSchema = createInsertSchema(attendance).omit({ id: true, schoolId: true, markedBy: true });
+export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
+export type Attendance = typeof attendance.$inferSelect;

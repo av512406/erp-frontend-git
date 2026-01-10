@@ -427,6 +427,34 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
       ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'active';
       ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS cancel_reason text;
 
+
+      -- MIGRATION: Attendance System
+      CREATE TABLE IF NOT EXISTS classes (
+        id text PRIMARY KEY,
+        grade text NOT NULL,
+        section text NOT NULL,
+        class_teacher_id text REFERENCES teachers(id),
+        school_id text NOT NULL REFERENCES schools(id),
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE(school_id, grade, section)
+      );
+
+      CREATE TABLE IF NOT EXISTS attendance (
+        id text PRIMARY KEY,
+        student_id text NOT NULL REFERENCES students(id),
+        date date NOT NULL,
+        status text NOT NULL,
+        session_id text REFERENCES academic_sessions(id),
+        marked_by text REFERENCES users(id),
+        school_id text NOT NULL REFERENCES schools(id),
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE(student_id, date)
+      );
+
+      ALTER TABLE teachers ADD COLUMN IF NOT EXISTS user_id text REFERENCES users(id);
+
     `);
 
     // --- Session Management Migration ---
