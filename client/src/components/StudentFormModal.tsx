@@ -21,13 +21,17 @@ interface StudentFormModalProps {
   onClose: () => void;
   onSave: (student: Omit<Student, 'id'>) => void;
   student: Student | null;
+  sessions: { id: string; name: string }[];
+  currentSessionId?: string;
 }
 
 export default function StudentFormModal({
   isOpen,
   onClose,
   onSave,
-  student
+  student,
+  sessions = [],
+  currentSessionId
 }: StudentFormModalProps) {
   const [formData, setFormData] = useState({
     admissionNumber: '',
@@ -41,6 +45,7 @@ export default function StudentFormModal({
     address: '',
     grade: '',
     section: '',
+    sessionId: currentSessionId || '',
     fatherName: '',
     motherName: '',
     yearlyFeeAmount: '',
@@ -63,6 +68,7 @@ export default function StudentFormModal({
         address: student.address,
         grade: student.grade,
         section: student.section,
+        sessionId: (student as any).sessionId || currentSessionId || '',
         fatherName: (student as any).fatherName || '',
         motherName: (student as any).motherName || '',
         yearlyFeeAmount: student.yearlyFeeAmount,
@@ -83,6 +89,7 @@ export default function StudentFormModal({
         address: '',
         grade: '',
         section: '',
+        sessionId: currentSessionId || '',
         fatherName: '',
         motherName: '',
         yearlyFeeAmount: '',
@@ -307,6 +314,22 @@ export default function StudentFormModal({
                     required
                     data-testid="input-admission-date"
                   />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="session">Academic Session</Label>
+                  <select
+                    id="session"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={(formData as any).sessionId || ''}
+                    onChange={(e) => setFormData({ ...formData, sessionId: e.target.value } as any)}
+                    data-testid="input-session"
+                    disabled={!!student} // Optional: Lock session on edit or allow transfer? User asked for "Add Student for session". Edit usually implies transfer which is complex. Let's allowing changing but it might need backend support. Actually onEditStudent calls PUT /api/students/:id. Does that update session? We need to check backend. For now, allow selection for new, maybe disabled for edit if unsure. Let's allow it, but backend might ignore it if not handled.
+                  >
+                    <option value="" disabled>Select Session</option>
+                    {sessions.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </fieldset>

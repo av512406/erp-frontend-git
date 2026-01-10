@@ -54,26 +54,37 @@ function ProtectedRoute({ allowedRoles, userRole, children }: ProtectedRouteProp
   return <>{children}</>;
 }
 
-function Router({ user }: { user: User }) {
+interface RouterProps {
+  user: User;
+  sessions: { id: string; name: string }[];
+  selectedSessionId: string;
+}
+
+function Router({ user, sessions, selectedSessionId }: RouterProps) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [students, setStudents] = useState<Student[]>([]);
   const [withdrawnStudents, setWithdrawnStudents] = useState<Student[]>([]);
-  // initial load from backend
+
+  // Fetch students when selectedSessionId changes
   useEffect(() => {
     (async () => {
+      if (!selectedSessionId) return;
       try {
-        const activeRes = await fetch('/api/students', { headers: getAuthHeaders() });
+        const activeRes = await fetch(`/api/students?sessionId=${selectedSessionId}`, { headers: getAuthHeaders() });
         if (activeRes.ok) {
           setStudents(await activeRes.json());
         }
+        // Withdrawn students might be session-independent or dependent. 
+        // For now, keeping original logic or we could filter by date/session too?
+        // Let's assume withdrawn list is global for now, or use the existing endpoint.
         const leftRes = await fetch('/api/students/withdrawn', { headers: getAuthHeaders() });
         if (leftRes.ok) {
           setWithdrawnStudents(await leftRes.json());
         }
       } catch (e) { /* ignore network */ }
     })();
-  }, []);
+  }, [selectedSessionId]);
 
   const [transactions, setTransactions] = useState<FeeTransaction[]>([]);
   useEffect(() => {
@@ -258,12 +269,12 @@ function Router({ user }: { user: User }) {
     }
   };
 
-  const handleImportStudents = async (imported: Omit<Student, 'id'>[]) => {
+  const handleImportStudents = async (imported: Omit<Student, 'id'>[], targetSessionId?: string) => {
     try {
       const res = await fetch('/api/students/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ students: imported, strategy: 'skip' })
+        body: JSON.stringify({ students: imported, strategy: 'skip', targetSessionId: targetSessionId === 'default' ? undefined : targetSessionId })
       });
       if (res.ok) {
         const summary = await res.json();
@@ -313,7 +324,15 @@ function Router({ user }: { user: User }) {
     return { inserted: 0, skipped: 0, skippedRows: [] };
   };
 
-
+  const refetchStudents = async () => {
+    if (!selectedSessionId) return;
+    try {
+      const activeRes = await fetch(`/api/students?sessionId=${selectedSessionId}`, { headers: getAuthHeaders() });
+      if (activeRes.ok) {
+        setStudents(await activeRes.json());
+      }
+    } catch (e) { /* ignore */ }
+  };
 
   const stats = {
     totalStudents: students.length,
@@ -349,6 +368,9 @@ function Router({ user }: { user: User }) {
             onEditStudent={handleEditStudent}
             onDeleteStudent={handleDeleteStudent}
             onMarkWithdrawn={handleMarkWithdrawn}
+            sessions={sessions}
+            selectedSessionId={selectedSessionId}
+            onStudentPromoted={refetchStudents}
           />
         </ProtectedRoute>
       </Route>
@@ -412,6 +434,8 @@ function Router({ user }: { user: User }) {
             onUpsertStudents={handleUpsertStudents}
             onImportGrades={handleImportGrades}
             onImportTransactions={handleImportTransactions}
+            sessions={sessions}
+            selectedSessionId={selectedSessionId}
           />
         </ProtectedRoute>
       </Route>
@@ -456,6 +480,10 @@ function App() {
   const [loginError, setLoginError] = useState<string>("");
   const [, setLocation] = useLocation();
 
+  // Session state
+  const [sessions, setSessions] = useState<{ id: string, name: string }[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('');
+
   // Check for existing token on load
   useEffect(() => {
     const checkAuth = async () => {
@@ -474,6 +502,29 @@ function App() {
     };
     checkAuth();
   }, []);
+
+  // Fetch sessions when user is logged in
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const res = await fetch('/api/sessions', { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          setSessions(data);
+          // Set default to latest session (by end date or just last added if end_date not available/reliable)
+          // Ideally sort by end_date desc
+          if (data.length > 0 && !selectedSessionId) {
+            const sorted = [...data].sort((a: any, b: any) => {
+              // Use local info or string compare if date not present, but schema has dates.
+              return new Date(b.end_date).getTime() - new Date(a.end_date).getTime();
+            });
+            setSelectedSessionId(sorted[0].id);
+          }
+        }
+      } catch (e) { }
+    })();
+  }, [user]);
 
   const handleLogin = async (email: string, password: string) => {
     setLoginError(""); // clear previous errors
@@ -516,6 +567,8 @@ function App() {
   const handleLogout = () => {
     clearToken(); // Clear token
     setUser(null);
+    setSessions([]);
+    setSelectedSessionId('');
     setLoginError("");
     setLocation("/");
   };
@@ -535,8 +588,15 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <div className="min-h-screen bg-background">
-          <Navigation userRole={user.role} userEmail={user.email || ''} onLogout={handleLogout} />
-          <Router user={user} />
+          <Navigation
+            userRole={user.role}
+            userEmail={user.email || ''}
+            onLogout={handleLogout}
+            sessions={sessions}
+            selectedSessionId={selectedSessionId}
+            onSessionChange={setSelectedSessionId}
+          />
+          <Router user={user} sessions={sessions} selectedSessionId={selectedSessionId} />
         </div>
         <Toaster />
       </TooltipProvider>

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataTable, Column } from "@/components/ui/data-table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
@@ -220,51 +220,41 @@ export default function SuperAdminDashboard() {
         }
     };
 
-    const [sessions, setSessions] = useState<any[]>([]);
-    const [sessionOpen, setSessionOpen] = useState(false);
-    const sessionForm = useForm({
-        defaultValues: {
-            name: "",
-            startDate: "",
-            endDate: "",
-            isActive: false
-        }
-    });
 
-    useEffect(() => {
-        fetchSchools();
-        fetchSessions();
-    }, []);
-
-    const fetchSessions = async () => {
-        try {
-            const res = await fetch("/api/sessions", { headers: getAuthHeaders() });
-            if (res.ok) {
-                setSessions(await res.json());
-            }
-        } catch (e) {
-            console.error(e);
+    const columns: Column<School>[] = [
+        { header: "Name", accessorKey: "name", className: "font-medium", sortable: true },
+        { header: "Slug", accessorKey: "slug", sortable: true },
+        { header: "Address", accessorKey: "address", sortable: true },
+        { header: "Phone", accessorKey: "phone", sortable: true },
+        {
+            header: "Status", cell: (school) => (
+                <div className="flex items-center space-x-2">
+                    <Switch
+                        checked={school.is_active}
+                        onCheckedChange={() => toggleStatus(school)}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                        {school.is_active ? "Active" : "Blocked"}
+                    </span>
+                </div>
+            )
+        },
+        {
+            header: "Actions", cell: (school) => (
+                <div className="flex space-x-2">
+                    <Button variant="outline" size="sm" onClick={() => openAdminDialog(school)} title="Manage Admin">
+                        <ShieldCheck className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => openEditDialog(school)} title="Edit School">
+                        <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={() => openDeleteAlert(school)} title="Delete School">
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                </div>
+            )
         }
-    };
-
-    const onSessionSubmit = async (data: any) => {
-        try {
-            const res = await fetch("/api/sessions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-                body: JSON.stringify(data)
-            });
-            if (res.ok) {
-                toast({ title: "Success", description: "Session created" });
-                setSessionOpen(false);
-                fetchSessions();
-            } else {
-                toast({ title: "Error", description: "Failed to create session", variant: "destructive" });
-            }
-        } catch (e) {
-            toast({ title: "Error", description: "Network error", variant: "destructive" });
-        }
-    };
+    ];
 
     return (
         <div className="p-8 space-y-8">
@@ -275,7 +265,7 @@ export default function SuperAdminDashboard() {
             <Tabs defaultValue="schools">
                 <TabsList>
                     <TabsTrigger value="schools">Schools</TabsTrigger>
-                    <TabsTrigger value="sessions">Academic Sessions</TabsTrigger>
+
                 </TabsList>
 
                 <TabsContent value="schools" className="space-y-4">
@@ -349,134 +339,12 @@ export default function SuperAdminDashboard() {
                             <CardTitle>Schools</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Name</TableHead>
-                                        <TableHead>Slug</TableHead>
-                                        <TableHead>Address</TableHead>
-                                        <TableHead>Phone</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {loading ? (
-                                        <TableRow>
-                                            <TableCell colSpan={6} className="text-center">Loading...</TableCell>
-                                        </TableRow>
-                                    ) : schools.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={6} className="text-center">No schools found</TableCell>
-                                        </TableRow>
-                                    ) : (
-                                        schools.map((school) => (
-                                            <TableRow key={school.id}>
-                                                <TableCell className="font-medium">{school.name}</TableCell>
-                                                <TableCell>{school.slug}</TableCell>
-                                                <TableCell>{school.address}</TableCell>
-                                                <TableCell>{school.phone}</TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center space-x-2">
-                                                        <Switch
-                                                            checked={school.is_active}
-                                                            onCheckedChange={() => toggleStatus(school)}
-                                                        />
-                                                        <span className="text-sm text-muted-foreground">
-                                                            {school.is_active ? "Active" : "Blocked"}
-                                                        </span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex space-x-2">
-                                                        <Button variant="outline" size="sm" onClick={() => openAdminDialog(school)} title="Manage Admin">
-                                                            <ShieldCheck className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button variant="outline" size="sm" onClick={() => openEditDialog(school)} title="Edit School">
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button variant="destructive" size="sm" onClick={() => openDeleteAlert(school)} title="Delete School">
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
+                            <DataTable columns={columns} data={schools} searchKey="name" />
                         </CardContent>
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="sessions" className="space-y-4">
-                    <div className="flex justify-end">
-                        <Dialog open={sessionOpen} onOpenChange={setSessionOpen}>
-                            <DialogTrigger asChild>
-                                <Button><Plus className="mr-2 h-4 w-4" /> Create Session</Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Create Academic Session</DialogTitle>
-                                </DialogHeader>
-                                <form onSubmit={sessionForm.handleSubmit(onSessionSubmit)} className="space-y-4">
-                                    <div className="space-y-2">
-                                        <Label>Session Name (e.g. 2025-2026)</Label>
-                                        <Input {...sessionForm.register("name", { required: true })} />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label>Start Date</Label>
-                                            <Input type="date" {...sessionForm.register("startDate", { required: true })} />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>End Date</Label>
-                                            <Input type="date" {...sessionForm.register("endDate", { required: true })} />
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <Switch
-                                            onCheckedChange={(c) => sessionForm.setValue("isActive", c)}
-                                            {...sessionForm.register("isActive")}
-                                        />
-                                        <Label>Set as Active</Label>
-                                    </div>
-                                    <Button type="submit" className="w-full">Create Session</Button>
-                                </form>
-                            </DialogContent>
-                        </Dialog>
-                    </div>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Academic Sessions</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Name</TableHead>
-                                        <TableHead>Start Date</TableHead>
-                                        <TableHead>End Date</TableHead>
-                                        <TableHead>Status</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {sessions.map((s) => (
-                                        <TableRow key={s.id}>
-                                            <TableCell className="font-medium">{s.name}</TableCell>
-                                            <TableCell>{new Date(s.start_date).toLocaleDateString()}</TableCell>
-                                            <TableCell>{new Date(s.end_date).toLocaleDateString()}</TableCell>
-                                            <TableCell>
-                                                {s.is_active ? <Badge className="bg-green-500">Active</Badge> : <Badge variant="outline">Inactive</Badge>}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
             </Tabs>
 
             <Dialog open={adminOpen} onOpenChange={setAdminOpen}>

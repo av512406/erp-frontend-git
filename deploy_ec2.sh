@@ -2,8 +2,8 @@
 set -e # Exit on error
 
 # Configuration
-PEM_FILE="../linux_av.pem"
-EC2_HOST="ubuntu@ec2-3-111-41-254.ap-south-1.compute.amazonaws.com"
+PEM_FILE="/home/anand/Downloads/erp-t3-medium.pem"
+EC2_HOST="ubuntu@ec2-13-201-75-138.ap-south-1.compute.amazonaws.com"
 REMOTE_DIR="~/erp-frontend-git"
 DOMAIN="school.edulekha.in"
 EMAIL="admin@edulekha.in"

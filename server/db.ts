@@ -430,44 +430,10 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
     `);
 
     // --- Session Management Migration ---
-    await client.query(`
-      -- Backfill Data Strategy
-      DO $$
-      DECLARE
-        default_session_id text;
-      BEGIN
-        -- 1. Create Default Session '2025-2026' if no sessions exist
-        IF NOT EXISTS (SELECT 1 FROM academic_sessions) THEN
-          default_session_id := gen_random_uuid()::text;
-          INSERT INTO academic_sessions (id, name, start_date, end_date, is_active)
-          VALUES (default_session_id, '2025-2026', '2025-04-01', '2026-03-31', true);
-          
-          -- 2. Link all schools to this session
-          UPDATE schools SET current_session_id = default_session_id WHERE current_session_id IS NULL;
-
-          -- 3. Link existing transactions to this session
-          UPDATE fee_transactions SET session_id = default_session_id WHERE session_id IS NULL;
-
-          -- 4. Link existing grades to this session
-          UPDATE grades SET session_id = default_session_id WHERE session_id IS NULL;
-
-          -- 5. Snapshot existing students into student_sessions
-          INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id)
-          SELECT 
-            gen_random_uuid()::text,
-            s.id,
-            default_session_id,
-            s.grade,
-            s.section,
-            s.status,
-            s.school_id
-          FROM students s
-          WHERE NOT EXISTS (
-            SELECT 1 FROM student_sessions ss WHERE ss.student_id = s.id AND ss.session_id = default_session_id
-          );
-        END IF;
-      END $$;
-    `);
+    // --- Session Management Migration (REMOVED) ---
+    // Legacy logic removed as it violated school_id not-null constraint and
+    // conflicted with multi-school session management.
+    // Admin must create sessions manually via Dashboard.
 
     await seedDefaults(client);
   } finally {

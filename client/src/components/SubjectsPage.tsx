@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
+import { DataTable, Column } from "@/components/ui/data-table";
 import type { Student } from "@shared/schema";
 import { Plus, Trash2, CheckCircle2 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
@@ -137,6 +137,34 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
   };
   const currentAssigned = assigned;
 
+  const subjectColumns: Column<Subject>[] = [
+    { header: "Code", accessorKey: "code", className: "font-mono text-xs", sortable: true },
+    { header: "Name", accessorKey: "name", sortable: true },
+    {
+      header: "Actions", className: "text-right", cell: (s) => (
+        <div className="flex justify-end">
+          <Button size="icon" variant="ghost" onClick={() => handleDeleteSubject(s.id)} aria-label={`Delete ${s.name}`}>
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      )
+    }
+  ];
+
+  const assignedColumns: Column<Subject>[] = [
+    { header: "Subject", accessorKey: "name", sortable: true },
+    { header: "Code", accessorKey: "code", className: "font-mono text-xs", sortable: true },
+    {
+      header: "Actions", className: "text-right", cell: (s) => (
+        <div className="flex justify-end">
+          <Button size="icon" variant="ghost" onClick={() => handleUnassign(s.id)} aria-label={`Unassign ${s.name}`}>
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      )
+    }
+  ];
+
   return (
     <div className="container mx-auto p-6">
       <div className="mb-6">
@@ -165,31 +193,8 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
               </Button>
             </div>
 
-            <div className="border rounded-md overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {subjects.length === 0 ? (
-                    <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No subjects</TableCell></TableRow>
-                  ) : subjects.map(s => (
-                    <TableRow key={s.id}>
-                      <TableCell className="font-mono text-xs">{s.code}</TableCell>
-                      <TableCell>{s.name}</TableCell>
-                      <TableCell className="text-right">
-                        <Button size="icon" variant="ghost" onClick={() => handleDeleteSubject(s.id)} aria-label={`Delete ${s.name}`}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <div className="border rounded-md">
+              <DataTable columns={subjectColumns} data={subjects} searchKey="name" />
             </div>
           </CardContent>
         </Card>
@@ -274,31 +279,8 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
               </div>
             </div>
 
-            <div className="border rounded-md overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Code</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {currentAssigned.length === 0 ? (
-                    <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No subjects assigned yet</TableCell></TableRow>
-                  ) : currentAssigned.map(s => (
-                    <TableRow key={s.id}>
-                      <TableCell>{s.name}</TableCell>
-                      <TableCell className="font-mono text-xs">{s.code}</TableCell>
-                      <TableCell className="text-right">
-                        <Button size="icon" variant="ghost" onClick={() => handleUnassign(s.id)} aria-label={`Unassign ${s.name}`}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <div className="border rounded-md">
+              <DataTable columns={assignedColumns} data={currentAssigned} searchKey="name" />
             </div>
 
             <p className="text-xs text-muted-foreground">Changes here are saved to the server. Clearing local storage won’t affect the class-subject assignments.</p>

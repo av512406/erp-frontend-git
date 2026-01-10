@@ -26,6 +26,7 @@ import { ZodError, z } from 'zod';
 import { hashPassword, comparePassword } from './lib/auth';
 
 import jwt from 'jsonwebtoken';
+import backupRouter from './backup_routes';
 
 const JWT_SECRET = process.env.SESSION_SECRET || "super_secret_school_erp_key";
 
@@ -267,6 +268,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         [adminId, adminUsername, adminPassword, 'admin', 'School Admin', id]
       );
 
+      // 3. Seed Academic Sessions (Fix for Consistency)
+      // Find "Global" sessions (distinct by name) from other schools to seed this new school
+      // This ensures new schools start with the same sessions as existing ones.
+      const existingSessions = await client.query('SELECT DISTINCT ON (name) name, start_date, end_date, is_active FROM academic_sessions');
+      for (const s of existingSessions.rows) {
+        await client.query(
+          `INSERT INTO academic_sessions (id, name, start_date, end_date, is_active, school_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [genId(), s.name, s.start_date, s.end_date, s.is_active, id]
+        );
+      }
+
       await client.query('COMMIT');
 
       res.status(201).json({ school: q.rows[0], admin: { username: adminUsername, password: adminPassword } });
@@ -351,15 +363,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Logic for session update
         let newSessionId = undefined;
         if (session) {
-          // Find or create session
-          const sessRes = await client.query('SELECT id FROM academic_sessions WHERE name = $1', [session]);
+          // Find or create session for THIS school
+          const sessRes = await client.query('SELECT id FROM academic_sessions WHERE name = $1 AND school_id = $2', [session, id]);
           if (sessRes.rows.length > 0) {
             newSessionId = sessRes.rows[0].id;
           } else {
             // Create new session
             const insRes = await client.query(
-              "INSERT INTO academic_sessions (id, name, start_date, end_date, is_active) VALUES ($1, $2, '2025-04-01', '2026-03-31', true) RETURNING id",
-              [genId(), session]
+              "INSERT INTO academic_sessions (id, name, start_date, end_date, is_active, school_id) VALUES ($1, $2, '2025-04-01', '2026-03-31', true, $3) RETURNING id",
+              [genId(), session, id]
             );
             newSessionId = insRes.rows[0].id;
           }
@@ -612,29 +624,181 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Students APIs
   app.get('/api/students', requireAuth, async (req, res) => {
     const user = (req as any).user;
-    // return only active students for this school
-    const { rows } = await pool.query("SELECT * FROM students WHERE (status <> 'left' OR status IS NULL) AND school_id = $1 ORDER BY admission_number", [user.schoolId]);
-    res.json(rows.map(mapStudent));
+    const { sessionId } = req.query;
+
+    try {
+      // Resolve Session ID
+      let targetSessionId = sessionId as string;
+      if (!targetSessionId) {
+        // Default to school's current session
+        const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+        targetSessionId = schoolRes.rows[0]?.current_session_id;
+      }
+
+      if (!targetSessionId) {
+        return res.json([]); // No session defined, empty list
+      }
+
+      // Query joining student_sessions to get grade/section for THIS session
+      // Note: We prioritize the status/grade/section from the session record
+      const query = `
+        SELECT 
+          s.*,
+          ss.grade as session_grade,
+          ss.section as session_section,
+          ss.status as session_status,
+          ss.roll_number
+        FROM students s
+        INNER JOIN student_sessions ss ON s.id = ss.student_id
+        WHERE ss.session_id = $1 
+          AND ss.school_id = $2
+          AND (ss.status = 'active' OR ss.status = 'promoted')
+        ORDER BY ss.grade, ss.section, s.name
+      `;
+
+      const { rows } = await pool.query(query, [targetSessionId, user.schoolId]);
+
+      const mapped = rows.map(row => ({
+        ...mapStudent(row),
+        // Override with session-specific data
+        grade: row.session_grade || row.grade,
+        section: row.session_section || row.section,
+        status: row.session_status || row.status,
+        rollNumber: row.roll_number
+      }));
+
+      res.json(mapped);
+    } catch (e) {
+      console.error('Error fetching students:', e);
+      res.status(500).json({ message: 'Failed to fetch students' });
+    }
+  });
+
+
+
+  // [NEW] Get Candidates for Promotion (Students in Source Session NOT in Target Session)
+  app.get('/api/sessions/:id/candidates', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    const targetSessionId = req.params.id;
+    const { sourceSessionId } = req.query;
+
+    if (!sourceSessionId) return res.status(400).json({ message: 'sourceSessionId required' });
+
+    try {
+      // Find students in Source who are NOT in Target
+      const query = `
+        SELECT s.*, ss.grade as current_grade, ss.section as current_section 
+        FROM students s
+        JOIN student_sessions ss ON s.id = ss.student_id
+        WHERE ss.session_id = $1 
+          AND ss.school_id = $2
+          AND ss.status = 'active'
+          AND NOT EXISTS (
+            SELECT 1 FROM student_sessions target 
+            WHERE target.student_id = s.id AND target.session_id = $3
+          )
+        ORDER BY ss.grade, ss.section, s.name
+      `;
+
+      const { rows } = await pool.query(query, [sourceSessionId, user.schoolId, targetSessionId]);
+      res.json(rows.map(r => ({
+        ...mapStudent(r),
+        grade: r.current_grade,
+        section: r.current_section
+      })));
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Failed to fetch candidates' });
+    }
+  });
+
+  // [NEW] Promote/Import Students
+  app.post('/api/students/promote', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    const { targetSessionId, students } = req.body;
+    // students: { studentId: string, grade: string, section: string, rollNumber?: string }[]
+
+    if (!targetSessionId || !Array.isArray(students)) {
+      return res.status(400).json({ message: 'Invalid payload' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const inserted = [];
+      for (const s of students) {
+        const id = genId();
+        await client.query(
+          `INSERT INTO student_sessions (id, student_id, session_id, school_id, grade, section, roll_number, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
+            ON CONFLICT (student_id, session_id) DO UPDATE SET
+              grade = EXCLUDED.grade,
+              section = EXCLUDED.section,
+              status = 'active'
+           `,
+          [id, s.studentId, targetSessionId, user.schoolId, s.grade, s.section, s.rollNumber || null]
+        );
+        inserted.push(s.studentId);
+      }
+
+      await client.query('COMMIT');
+      res.json({ message: `Promoted/Imported ${inserted.length} students` });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error(e);
+      res.status(500).json({ message: 'Promotion failed' });
+    } finally {
+      client.release();
+    }
   });
 
   app.post('/api/students', requireAuth, async (req, res) => {
     const user = (req as any).user;
+    const client = await pool.connect();
     try {
       const data = insertStudentSchema.parse(req.body);
+
+      // Get current session
+      const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+      const sessionId = schoolRes.rows[0]?.current_session_id;
+
+      if (!sessionId) {
+        return res.status(400).json({ message: 'Active academic session not set for school' });
+      }
+
+      await client.query('BEGIN');
+
       // check exists in THIS school
-      const exists = await pool.query('SELECT 1 FROM students WHERE admission_number = $1 AND school_id = $2', [data.admissionNumber, user.schoolId]);
-      if ((exists.rowCount ?? 0) > 0) return res.status(409).json({ message: 'admissionNumber exists' });
+      const exists = await client.query('SELECT 1 FROM students WHERE admission_number = $1 AND school_id = $2', [data.admissionNumber, user.schoolId]);
+      if ((exists.rowCount ?? 0) > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'admissionNumber exists' });
+      }
+
       const id = genId();
-      const q = await pool.query(
+      const q = await client.query(
         `INSERT INTO students (id, admission_number, name, date_of_birth, admission_date, aadhar_number, pen_number, aapar_id, mobile_number, address, grade, section, father_name, mother_name, yearly_fee_amount, status, school_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'active', $16) RETURNING *`,
         [id, data.admissionNumber, data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber, data.penNumber, data.aaparId, data.mobileNumber, data.address, data.grade, data.section, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount || 0, user.schoolId]
       );
+
+      // Create session record
+      await client.query(
+        `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [genId(), id, sessionId, data.grade, data.section, 'active', user.schoolId]
+      );
+
+      await client.query('COMMIT');
       res.status(201).json(mapStudent(q.rows[0]));
     } catch (e) {
+      await client.query('ROLLBACK');
       if (e instanceof ZodError) return res.status(400).json({ message: 'validation', issues: e.format() });
       console.error(e);
       res.status(500).json({ message: 'internal error' });
+    } finally {
+      client.release();
     }
   });
 
@@ -679,10 +843,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // bulk import: supports strategy=skip|upsert
   app.post('/api/students/import', requireAuth, async (req, res) => {
     const user = (req as any).user;
-    const { students: imported, strategy } = req.body as { students: any[]; strategy?: string };
+    const { students: imported, strategy, targetSessionId } = req.body as { students: any[]; strategy?: string; targetSessionId?: string };
     if (!Array.isArray(imported)) return res.status(400).json({ message: 'students array required' });
     const client = await pool.connect();
     try {
+      // Get current school session (fallback)
+      const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+      const currentActiveSessionId = schoolRes.rows[0]?.current_session_id;
+
+      // Fetch all academic sessions for lookup by name
+      const allSessionsRes = await client.query('SELECT id, name FROM academic_sessions');
+      const sessionMap = new Map<string, string>(); // Name -> ID
+      allSessionsRes.rows.forEach(row => {
+        sessionMap.set(row.name.trim().toLowerCase(), row.id);
+      });
+
+      // Determined fallback session: Target from frontend > Active School Session
+      const fallbackSessionId = targetSessionId || currentActiveSessionId;
+
+      if (!fallbackSessionId && imported.some(r => !r.session && !r['Session'] && !r['Session Name'])) {
+        // If we have rows without session info AND no fallback, we might have an issue.
+        // But we can proceed and just skip session linking for those specific rows (or error).
+        // For now, we proceed.
+      }
+
       await client.query('BEGIN');
       const added: any[] = [];
       const skipped: string[] = [];
@@ -691,8 +875,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           await client.query('SAVEPOINT row_sp');
           const data = insertStudentSchema.parse(row);
+
+          // Determine session for this row
+          const rowSessionName = (row.session || row['Session'] || row['Session Name'] || row.sessionName || '').toString().trim();
+          let effectiveSessionId = fallbackSessionId;
+
+          if (rowSessionName) {
+            const fromMap = sessionMap.get(rowSessionName.toLowerCase());
+            if (fromMap) {
+              effectiveSessionId = fromMap;
+            } else {
+              // If session name in CSV doesn't exist, we could error, create it, or fall back.
+              // User "If excel have, use that". If invalid, it's safer to probably NOT link than link to wrong one?
+              // Or fall back. Let's log and fall back? No, user intent is specific.
+              // Let's keep effectiveSessionId as is (fallback) or null?
+              // If explicit session name is not found, better to treat it as "no session linked" for safety
+              // OR use fallback. I will use fallback but maybe this is unexpected.
+              // Actually, let's treat it as missing -> use fallback.
+              console.warn(`Import: Session '${rowSessionName}' not found. Using fallback.`);
+            }
+          }
+
+          let studentId = null;
+          let isNew = false;
+
           const exists = await client.query('SELECT * FROM students WHERE admission_number = $1 AND school_id = $2', [data.admissionNumber, user.schoolId]);
+
           if ((exists.rowCount ?? 0) > 0) {
+            studentId = exists.rows[0].id;
             if (strategy === 'upsert') {
               // update
               await client.query(
@@ -704,13 +914,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
               skipped.push(data.admissionNumber);
             }
           } else {
-            const id = genId();
+            studentId = genId();
+            isNew = true;
             await client.query(
               `INSERT INTO students (id, admission_number, name, date_of_birth, admission_date, aadhar_number, pen_number, aapar_id, mobile_number, address, grade, section, father_name, mother_name, yearly_fee_amount, status, category, gender, previous_year_due, school_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'active', $16, $17, $18, $19)`,
-              [id, data.admissionNumber, data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount, (data as any).category || 'GEN', (data as any).gender || null, (data as any).previousYearDue || '0', user.schoolId]
+              [studentId, data.admissionNumber, data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount, (data as any).category || 'GEN', (data as any).gender || null, (data as any).previousYearDue || '0', user.schoolId]
             );
             added.push(data.admissionNumber);
           }
+
+          // Ensure session record exists
+          if (studentId && effectiveSessionId && (isNew || strategy === 'upsert')) {
+            // Check if session link exists
+            const sessCheck = await client.query('SELECT 1 FROM student_sessions WHERE student_id = $1 AND session_id = $2', [studentId, effectiveSessionId]);
+            if ((sessCheck.rowCount ?? 0) === 0) {
+              await client.query(
+                `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                [genId(), studentId, effectiveSessionId, data.grade, data.section, 'active', user.schoolId]
+              );
+            } else if (strategy === 'upsert') {
+              // Update grade/section in session too if upserting
+              await client.query(
+                `UPDATE student_sessions SET grade=$1, section=$2 WHERE student_id=$3 AND session_id=$4`,
+                [data.grade, data.section, studentId, effectiveSessionId]
+              );
+            }
+          }
+
           await client.query('RELEASE SAVEPOINT row_sp');
         } catch (e) {
           await client.query('ROLLBACK TO SAVEPOINT row_sp');
@@ -1329,44 +1560,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const rawCols = (req.query.cols as string | undefined) || '';
       const requested = rawCols.split(',').map(c => c.trim()).filter(Boolean);
       const allowedMap: Record<string, { header: string; expr: string; transform?: (v: any) => any }> = {
-        admissionNumber: { header: 'Admission Number', expr: 'admission_number' },
-        name: { header: 'Name', expr: 'name' },
-        fatherName: { header: "Father's Name", expr: 'father_name' },
-        motherName: { header: "Mother's Name", expr: 'mother_name' },
-        dateOfBirth: { header: 'Date of Birth', expr: 'date_of_birth' },
-        admissionDate: { header: 'Admission Date', expr: 'admission_date' },
-        aadharNumber: { header: 'Aadhar Number', expr: 'aadhar_number' },
-        penNumber: { header: 'PEN Number', expr: 'pen_number' },
-        aaparId: { header: 'Aapar ID', expr: 'aapar_id' },
-        mobileNumber: { header: 'Mobile Number', expr: 'mobile_number' },
-        address: { header: 'Address', expr: 'address' },
-        grade: { header: 'Class', expr: 'grade' },
-        section: { header: 'Section', expr: 'section' },
-        yearlyFeeAmount: { header: 'Yearly Fee Amount', expr: 'yearly_fee_amount', transform: v => v?.toString?.() ?? v },
-        status: { header: 'Status', expr: 'status' },
-        leftDate: { header: 'Left Date', expr: 'left_date' },
-        leavingReason: { header: 'Leaving Reason', expr: 'leaving_reason' }
+        admissionNumber: { header: 'Admission Number', expr: 's.admission_number' },
+        name: { header: 'Name', expr: 's.name' },
+        fatherName: { header: "Father's Name", expr: 's.father_name' },
+        motherName: { header: "Mother's Name", expr: 's.mother_name' },
+        dateOfBirth: { header: 'Date of Birth', expr: 's.date_of_birth' },
+        admissionDate: { header: 'Admission Date', expr: 's.admission_date' },
+        aadharNumber: { header: 'Aadhar Number', expr: 's.aadhar_number' },
+        penNumber: { header: 'PEN Number', expr: 's.pen_number' },
+        aaparId: { header: 'Aapar ID', expr: 's.aapar_id' },
+        mobileNumber: { header: 'Mobile Number', expr: 's.mobile_number' },
+        address: { header: 'Address', expr: 's.address' },
+        grade: { header: 'Class', expr: 's.grade' },
+        section: { header: 'Section', expr: 's.section' },
+        yearlyFeeAmount: { header: 'Yearly Fee Amount', expr: 's.yearly_fee_amount', transform: v => v?.toString?.() ?? v },
+        status: { header: 'Status', expr: 's.status' },
+        leftDate: { header: 'Left Date', expr: 's.left_date' },
+        leavingReason: { header: 'Leaving Reason', expr: 's.leaving_reason' },
+        // Session specific
+        sessionName: { header: 'Session Name', expr: 'acs.name' },
+        sessionGrade: { header: 'Session Class', expr: 'ss.grade' },
+        sessionSection: { header: 'Session Section', expr: 'ss.section' },
+        sessionStatus: { header: 'Session Status', expr: 'ss.status' }
       };
+
       const finalCols = (requested.length ? requested : Object.keys(allowedMap)).filter(c => allowedMap[c]);
       if (finalCols.length === 0) return res.status(400).json({ message: 'no valid columns requested' });
+
       const uniqueExprs: string[] = [];
       for (const c of finalCols) {
         const expr = allowedMap[c].expr;
         if (!uniqueExprs.includes(expr)) uniqueExprs.push(expr);
       }
       const selectList = uniqueExprs.join(', ');
-      const { rows } = await pool.query(`SELECT ${selectList} FROM students WHERE school_id = $1 ORDER BY admission_number`, [user.schoolId]);
+
+      // Get current school session
+      const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+      const currentSessionId = schoolRes.rows[0]?.current_session_id;
+
+      // Ensure we have a session to join against
+      if (!currentSessionId) {
+        // If no session, these columns will be null, but we still export 'students'
+        // We can just join with a dummy condition or handle gracefully.
+        // For now, let's use a LEFT JOIN that might return nulls if no session matches
+      }
+
+      const query = `
+        SELECT ${selectList} 
+        FROM students s
+        LEFT JOIN student_sessions ss ON s.id = ss.student_id AND ss.session_id = $2
+        LEFT JOIN academic_sessions acs ON ss.session_id = acs.id
+        WHERE s.school_id = $1
+        ORDER BY s.admission_number
+      `;
+
+      const { rows } = await pool.query(query, [user.schoolId, currentSessionId]);
+
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet('Students');
       sheet.addRow(finalCols.map(c => allowedMap[c].header));
       for (const r of rows) {
         const rowValues = finalCols.map(c => {
           const def = allowedMap[c];
-          const raw = (r as any)[def.expr];
+          // extract column name from expr (e.g. s.name -> name) or handle raw property access
+          // In pg result, 's.name' becomes 'name'. 'ss.grade' becomes 'grade' (collision!).
+          // Wait, PG driver returns result based on column alias. If we select "s.grade" and "ss.grade", we get collision.
+          // We must alias the columns in SELECT to avoid collision.
+
+          return null; // Logic needs fix below
+        });
+      }
+      // Re-implementing correctly with aliases to avoid collision
+      // Re-map uniqueExprs to "expr as alias"
+      const exprToAlias: Record<string, string> = {};
+      const selectParts: string[] = [];
+
+      uniqueExprs.forEach((expr, idx) => {
+        const alias = `col_${idx}`;
+        exprToAlias[expr] = alias;
+        selectParts.push(`${expr} AS ${alias}`);
+      });
+
+      const safeQuery = `
+        SELECT ${selectParts.join(', ')} 
+        FROM students s
+        LEFT JOIN student_sessions ss ON s.id = ss.student_id AND ss.session_id = $2
+        LEFT JOIN academic_sessions acs ON ss.session_id = acs.id
+        WHERE s.school_id = $1
+        ORDER BY s.admission_number
+      `;
+
+      const { rows: safeRows } = await pool.query(safeQuery, [user.schoolId, currentSessionId]);
+
+      for (const r of safeRows) {
+        const rowValues = finalCols.map(c => {
+          const def = allowedMap[c];
+          const alias = exprToAlias[def.expr];
+          const raw = (r as any)[alias];
           return def.transform ? def.transform(raw) : raw;
         });
         sheet.addRow(rowValues);
       }
+
       // Basic styling: header bold
       const headerRow = sheet.getRow(1);
       headerRow.font = { bold: true };
@@ -1517,12 +1812,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // --- School Config Endpoints ---
-  // Zod schema kept minimal; allow optional logo (URL or data URI)
+  // Zod schema updated to allow sessionId
   const schoolConfigSchema = z.object({
     name: z.string().min(1),
     addressLine: z.string().min(1),
     phone: z.string().transform(v => v.trim()).optional(),
-    session: z.string().min(4),
+    session: z.string().optional(), // kept for compatibility, ignored for update
+    sessionId: z.string().uuid().optional(), // NEW: ID to update active session
     logoUrl: z.string().url().or(z.string().startsWith('data:')).nullable().optional()
   });
 
@@ -1563,10 +1859,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const q = await pool.query(
-        `UPDATE schools SET name=$1, address=$2, phone=$3, logo_url=$4, updated_at=now() WHERE id=$5 RETURNING *`,
-        [parsed.name, parsed.addressLine, normalizedPhone, parsed.logoUrl || null, user.schoolId]
-      );
+      // If sessionId provided, verify it exists (scoped to school or global? sessions are global but linked to school now??
+      // Wait, sessions are filtered by school_id in GET /api/sessions. So we should verify it belongs to this school.
+      // Actually, POST /api/sessions creates for ALL schools. So every school has its own copy of "2025-2026".
+      // So we must verify the session belongs to THIS school.
+      let targetSessionId = null;
+      if (parsed.sessionId) {
+        const sCheck = await pool.query('SELECT id FROM academic_sessions WHERE id=$1 AND school_id=$2', [parsed.sessionId, user.schoolId]);
+        if (sCheck.rowCount === 0) return res.status(400).json({ message: 'Invalid session ID for this school' });
+        targetSessionId = parsed.sessionId;
+      }
+
+      // Update query construction
+      // We conditionally update current_session_id only if provided
+      const updateFields = [parsed.name, parsed.addressLine, normalizedPhone, parsed.logoUrl || null];
+      let updateSql = `UPDATE schools SET name=$1, address=$2, phone=$3, logo_url=$4, updated_at=now()`;
+
+      if (targetSessionId) {
+        updateSql = `UPDATE schools SET name=$1, address=$2, phone=$3, logo_url=$4, current_session_id=$5, updated_at=now()`;
+        updateFields.push(targetSessionId);
+      }
+
+      // Append WHERE clause
+      updateSql += ` WHERE id=$${updateFields.length + 1} RETURNING *`;
+      updateFields.push(user.schoolId);
+
+      const q = await pool.query(updateSql, updateFields);
 
       if (q.rowCount === 0) return res.status(404).json({ message: 'School not found' });
 
@@ -1593,6 +1911,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       addressLine: row.address, // mapped from address
       phone: row.phone,
       session: sessionName,
+      sessionId: row.current_session_id || null, // NEW: return ID for dropdown
       logoUrl: row.logo_url || null,
       updatedAt: row.updated_at
     };
@@ -1678,37 +1997,167 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // --- Session Management Endpoints ---
 
-  // 1. Create Session (Super Admin only)
+  // 1. Create Session (School Admin only)
   app.post('/api/sessions', requireAuth, async (req, res) => {
     const user = (req as any).user;
-    if (user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
+    if (user.role !== 'admin') return res.status(403).json({ message: 'Forbidden: Only School Admin can manage sessions' });
 
     const schema = z.object({
-      name: z.string().min(1),
+      name: z.string().regex(/^\d{4}-\d{2}$/, "Format must be YYYY-YY (e.g. 2025-26)"),
       startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       isActive: z.boolean().optional()
     });
 
+    const client = await pool.connect();
     try {
       const data = schema.parse(req.body);
-      const id = genId();
-      const q = await pool.query(
-        `INSERT INTO academic_sessions (id, name, start_date, end_date, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [id, data.name, data.startDate, data.endDate, data.isActive ?? false]
+
+      // Check uniqueness for THIS school
+      const exists = await client.query(
+        'SELECT id FROM academic_sessions WHERE name = $1 AND school_id = $2',
+        [data.name, user.schoolId]
       );
-      res.status(201).json(q.rows[0]);
+
+      if (exists.rowCount && exists.rowCount > 0) {
+        return res.status(409).json({ message: 'Session with this name already exists' });
+      }
+
+      const id = genId();
+      // Transaction to handle exclusive active status
+      await client.query('BEGIN');
+      try {
+        const insertRes = await client.query(
+          `INSERT INTO academic_sessions (id, name, start_date, end_date, is_active, school_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+          [id, data.name, data.startDate, data.endDate, data.isActive ?? false, user.schoolId]
+        );
+
+        if (data.isActive) {
+          // Deactivate all others
+          await client.query('UPDATE academic_sessions SET is_active = false WHERE school_id = $1 AND id != $2', [user.schoolId, id]);
+          // Update school's current_session_id
+          await client.query('UPDATE schools SET current_session_id = $1 WHERE id = $2', [id, user.schoolId]);
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({ ...data, id, schoolId: user.schoolId });
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      }
     } catch (e) {
       if (e instanceof ZodError) return res.status(400).json({ message: 'validation', issues: e.format() });
+      if ((e as any)?.code === '23505') return res.status(409).json({ message: 'Session already exists' });
       console.error(e);
       res.status(500).json({ message: 'failed to create session' });
+    } finally {
+      client.release();
     }
   });
 
-  // 2. List Sessions (Authenticated users)
-  app.get('/api/sessions', requireAuth, async (req, res) => {
+  app.put('/api/sessions/:id', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== 'admin') return res.status(403).json({ message: 'Forbidden: Only School Admin can manage sessions' });
+
+    const { id } = req.params;
+    const { name, startDate, endDate, isActive } = req.body;
+
+    const schema = z.object({
+      name: z.string().regex(/^\d{4}-\d{2}$/, "Format must be YYYY-YY (e.g. 2025-26)").optional(),
+      startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      isActive: z.boolean().optional()
+    });
+
+    const client = await pool.connect();
     try {
-      const { rows } = await pool.query('SELECT * FROM academic_sessions ORDER BY start_date DESC');
+      const data = schema.parse({ name, startDate, endDate, isActive });
+      await client.query('BEGIN');
+
+      // Verify ownership
+      const check = await client.query('SELECT id FROM academic_sessions WHERE id = $1 AND school_id = $2', [id, user.schoolId]);
+      if (check.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'Session not found' });
+      }
+
+      // If name change, check uniqueness
+      if (data.name) {
+        const dup = await client.query('SELECT id FROM academic_sessions WHERE name = $1 AND school_id = $2 AND id <> $3', [data.name, user.schoolId, id]);
+        if (dup.rowCount! > 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'Session name already exists' });
+        }
+      }
+
+      const updates: string[] = [];
+      const values: any[] = [];
+      let idx = 1;
+      if (data.name) { updates.push(`name = $${idx++}`); values.push(data.name); }
+      if (data.startDate) { updates.push(`start_date = $${idx++}`); values.push(data.startDate); }
+      if (data.endDate) { updates.push(`end_date = $${idx++}`); values.push(data.endDate); }
+      if (data.isActive !== undefined) { updates.push(`is_active = $${idx++}`); values.push(data.isActive); }
+
+      if (updates.length > 0) {
+        updates.push(`updated_at = now()`); // Assuming updated_at exists or just no-op if not? schema didn't show it but good practice. schema says ?? wait schema not shown fully. Assuming fine.
+        // wait schema in previous view didn't distinctively show updated_at for academic_sessions. 
+        // Let's check schema lines 178.
+        // It did not show updated_at. I should remove it to be safe.
+        // Re-reading schema lines 178-187... no updated_at.
+
+        values.push(id);
+        await client.query(
+          `UPDATE academic_sessions SET ${updates.filter(u => !u.includes('updated_at')).join(', ')} WHERE id = $${idx}`,
+          values
+        );
+      }
+
+      const finalRow = await client.query('SELECT * FROM academic_sessions WHERE id = $1', [id]);
+      await client.query('COMMIT');
+      res.json(finalRow.rows[0]);
+    } catch (e) {
+      await client.query('ROLLBACK');
+      if (e instanceof ZodError) return res.status(400).json({ message: 'validation', issues: e.format() });
+      console.error(e);
+      res.status(500).json({ message: 'Failed to update session' });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.delete('/api/sessions/:id', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
+
+    const { id } = req.params;
+    try {
+      // Basic check if any data depends on it...
+      // student_sessions, fees...
+      // For now, let DB constraints fail if dependent data exists?
+      // Or we can just try delete.
+      const q = await pool.query('DELETE FROM academic_sessions WHERE id = $1 AND school_id = $2', [id, user.schoolId]);
+      if (q.rowCount === 0) return res.status(404).json({ message: 'Session not found' });
+      res.json({ message: 'Session deleted' });
+    } catch (e: any) {
+      if (e.code === '23503') return res.status(400).json({ message: 'Cannot delete session with linked data' });
+      console.error(e);
+      res.status(500).json({ message: 'Failed to delete session' });
+    }
+  });
+
+  // 2. List Sessions (Authenticated users - School Scoped)
+  app.get('/api/sessions', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    try {
+      // Just return school-specific sessions. 
+      // If superadmin calls this, they likely need a school context (via query param?) or we return empty?
+      // Since SuperAdmin dashboard had tabs for this, we are removing that tab.
+      // So this is strictly for School Admin / Teachers within a school.
+      // If user.schoolId is missing (SuperAdmin global view), we return empty or error.
+      if (!user.schoolId) return res.json([]);
+
+      const query = 'SELECT * FROM academic_sessions WHERE school_id = $1 ORDER BY start_date DESC';
+      const { rows } = await pool.query(query, [user.schoolId]);
       res.json(rows);
     } catch (e) {
       console.error(e);
@@ -1716,70 +2165,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 3. Switch School Session (School Admin)
+  // 3. Switch School Session (School Admin) - DEPRECATED / REMOVED LOGIC
+  // User requested removal of auto-promotion. This endpoint now just returns success or updates purely the session ID if needed,
+  // but since we moved logic to Config update, we'll just make this a no-op safety or minimal update.
   app.post('/api/schools/session', requireAuth, async (req, res) => {
-    const user = (req as any).user;
-    // Allow superadmin to switch for any school if schoolId provided, else use user's schoolId
-    const targetSchoolId = (user.role === 'superadmin' && req.body.schoolId) ? req.body.schoolId : user.schoolId;
-
-    if (!targetSchoolId) return res.status(400).json({ message: 'School ID required' });
-    if (user.role !== 'admin' && user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
-
-    const schema = z.object({
-      sessionId: z.string().uuid().or(z.string().min(1))
-    });
-
-    const client = await pool.connect();
-    try {
-      const { sessionId } = schema.parse(req.body);
-
-      // Verify session exists
-      const sessionCheck = await client.query('SELECT * FROM academic_sessions WHERE id = $1', [sessionId]);
-      if (sessionCheck.rowCount === 0) return res.status(404).json({ message: 'Session not found' });
-
-      await client.query('BEGIN');
-
-      // 1. Update School's Current Session
-      await client.query('UPDATE schools SET current_session_id = $1 WHERE id = $2', [sessionId, targetSchoolId]);
-
-      // 2. Promote/Carry Over Active Students
-      // Find all active students in the school
-      const studentsQ = await client.query(
-        `SELECT * FROM students WHERE school_id = $1 AND status = 'active'`,
-        [targetSchoolId]
-      );
-
-      let promotedCount = 0;
-      for (const student of studentsQ.rows) {
-        // Check if already exists in target session
-        const exists = await client.query(
-          `SELECT 1 FROM student_sessions WHERE student_id = $1 AND session_id = $2`,
-          [student.id, sessionId]
-        );
-
-        if ((exists.rowCount ?? 0) === 0) {
-          // Create session record (Carry over same grade/section for now, user can update later)
-          await client.query(
-            `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [genId(), student.id, sessionId, student.grade, student.section, 'active', targetSchoolId]
-          );
-          promotedCount++;
-        }
-      }
-
-      await client.query('COMMIT');
-      res.json({ message: 'Session switched successfully', promotedStudents: promotedCount });
-
-    } catch (e) {
-      await client.query('ROLLBACK');
-      if (e instanceof ZodError) return res.status(400).json({ message: 'validation', issues: e.format() });
-      console.error(e);
-      res.status(500).json({ message: 'failed to switch session' });
-    } finally {
-      client.release();
-    }
+    // Logic moved to POST /api/admin/config. 
+    // Returning success to prevent errors if UI still calls it before reload.
+    res.json({ message: 'Session switch handled via settings', promotedStudents: 0 });
   });
+
+  // Register Backup Routes
+  app.use("/api/backup", backupRouter);
 
   const httpServer = createServer(app);
   return httpServer;

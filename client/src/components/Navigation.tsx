@@ -1,6 +1,13 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   GraduationCap,
   LayoutDashboard,
   Users,
@@ -34,9 +41,12 @@ interface NavigationProps {
   userRole: 'admin' | 'teacher' | 'superadmin' | 'accountant' | string;
   userEmail: string;
   onLogout: () => void;
+  sessions?: { id: string; name: string }[];
+  selectedSessionId?: string;
+  onSessionChange?: (id: string) => void;
 }
 
-export default function Navigation({ userRole, userEmail, onLogout }: NavigationProps) {
+export default function Navigation({ userRole, userEmail, onLogout, sessions = [], selectedSessionId, onSessionChange }: NavigationProps) {
   const [location] = useLocation();
   const { config } = useSchoolConfig();
   const [isOpen, setIsOpen] = useState(false);
@@ -134,6 +144,23 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
                     </>
                   )}
 
+                  {/* Mobile Session Selector */}
+                  {sessions.length > 0 && onSessionChange && (
+                    <div className="px-2 mt-4">
+                      <div className="text-sm font-medium text-muted-foreground mb-2">Academic Session</div>
+                      <Select value={selectedSessionId} onValueChange={onSessionChange}>
+                        <SelectTrigger className="w-full bg-background border-input">
+                          <SelectValue placeholder="Session" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sessions.map(s => (
+                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   <div className="border-t my-4 pt-4">
                     <div className="px-2 mb-2">
                       <p className="font-medium text-sm truncate">{userEmail}</p>
@@ -227,12 +254,28 @@ export default function Navigation({ userRole, userEmail, onLogout }: Navigation
             )}
           </div>
 
-          {/* User Profile (Desktop) */}
-          <div className="hidden md:flex items-center gap-4 ml-auto">
+          {/* Right Side Items (Desktop Only) */}
+          <div className="hidden md:flex items-center gap-4">
+            {/* User Profile */}
             <div className="text-sm text-right">
               <p className="font-medium">{userEmail}</p>
               <p className="text-xs text-muted-foreground capitalize">{userRole}</p>
             </div>
+
+            {/* Session Selector */}
+            {sessions.length > 0 && onSessionChange && (
+              <Select value={selectedSessionId} onValueChange={onSessionChange}>
+                <SelectTrigger className="w-[140px] h-8 bg-background border-input">
+                  <SelectValue placeholder="Session" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sessions.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
             <Button
               variant="ghost"
               size="sm"

@@ -12,14 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable, Column } from "@/components/ui/data-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, Download } from "lucide-react";
@@ -306,6 +299,60 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     }
   };
 
+
+  const startEditing = (transaction: FeeTransaction) => { /* Placeholder if needed */ };
+
+  const historyColumns: Column<FeeTransaction>[] = [
+    { header: "Receipt Serial", accessorKey: "receiptSerial", cell: (t) => t.receiptSerial != null ? String(t.receiptSerial).padStart(4, '0') : '—', className: "font-mono text-sm", sortable: true },
+    { header: "Transaction ID", accessorKey: "transactionId", className: "font-mono text-sm", sortable: true },
+    { header: "Student Name", accessorKey: "studentName", className: "font-medium", sortable: true },
+    { header: "Amount", accessorKey: "amount", cell: (t) => `₹${t.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, className: "font-semibold", sortable: true },
+    { header: "Date", accessorKey: "date", cell: (t) => t.date ? format(new Date(t.date), 'dd/MM/yyyy') : '-', sortable: true },
+    { header: "Time", cell: (t) => t.createdAt ? format(new Date(t.createdAt), 'hh:mm a') : '-' },
+    {
+      header: "Actions", className: "text-right", cell: (t) => (
+        <div className="flex justify-end space-x-2">
+          {t.status === 'cancelled' ? (
+            <span className="text-red-500 text-sm font-medium mr-2" title={t.cancelReason}>Cancelled</span>
+          ) : (
+            (userRole === 'admin' || userRole === 'superadmin') && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setTransactionToCancel(t);
+                  setCancelReason("");
+                  setCancelDialogOpen(true);
+                }}
+              >
+                Cancel
+              </Button>
+            )
+          )}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setDistributionTx(t)}
+          >
+            Print Receipt
+          </Button>
+        </div>
+      )
+    }
+  ];
+
+  const pendingColumns: Column<any>[] = [
+    { header: "Admission No", accessorKey: "admissionNumber", className: "font-mono", sortable: true },
+    { header: "Name", accessorKey: "name", className: "font-medium", sortable: true },
+    { header: "Father Name", accessorKey: "fatherName", sortable: true },
+    { header: "Class", accessorKey: "grade", sortable: true },
+    { header: "Section", accessorKey: "section", sortable: true },
+    { header: "Yearly Fee", accessorKey: "yearly", cell: (s) => `₹${s.yearly.toLocaleString('en-IN')}`, sortable: true },
+    { header: "Prev. Due", accessorKey: "previousDue", cell: (s) => `₹${s.previousDue.toLocaleString('en-IN')}`, sortable: true },
+    { header: "Total Paid", accessorKey: "paid", cell: (s) => `₹${s.paid.toLocaleString('en-IN')}`, sortable: true },
+    { header: "Pending Amount", accessorKey: "pending", cell: (s) => `₹${s.pending.toLocaleString('en-IN')}`, className: "font-bold text-red-600", sortable: true }
+  ];
+
   return (
     <div className="container mx-auto p-6">
       <div className="mb-6">
@@ -543,66 +590,8 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="border rounded-lg overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Receipt Serial</TableHead>
-                        <TableHead>Transaction ID</TableHead>
-                        <TableHead>Student Name</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Time</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {transactions.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                            No transactions recorded yet
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        displayedTransactions.map((transaction) => (
-                          <TableRow key={transaction.id} data-testid={`row-transaction-${transaction.id}`}>
-                            <TableCell className="font-mono text-sm">{transaction.receiptSerial != null ? String(transaction.receiptSerial).padStart(4, '0') : '—'}</TableCell>
-                            <TableCell className="font-mono text-sm">{transaction.transactionId}</TableCell>
-                            <TableCell className="font-medium">{transaction.studentName}</TableCell>
-                            <TableCell className="font-semibold">₹{transaction.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                            <TableCell>{transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy') : '-'}</TableCell>
-                            <TableCell>{transaction.createdAt ? format(new Date(transaction.createdAt), 'hh:mm a') : '-'}</TableCell>
-                            <TableCell className="text-right space-x-2">
-                              {transaction.status === 'cancelled' ? (
-                                <span className="text-red-500 text-sm font-medium mr-2" title={transaction.cancelReason}>Cancelled</span>
-                              ) : (
-                                (userRole === 'admin' || userRole === 'superadmin') && (
-                                  <Button
-                                    variant="destructive"
-                                    size="sm"
-                                    onClick={() => {
-                                      setTransactionToCancel(transaction);
-                                      setCancelReason("");
-                                      setCancelDialogOpen(true);
-                                    }}
-                                  >
-                                    Cancel
-                                  </Button>
-                                )
-                              )}
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => setDistributionTx(transaction)}
-                              >
-                                Print Receipt
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
+                <div className="border rounded-lg p-4">
+                  <DataTable columns={historyColumns} data={displayedTransactions} />
                 </div>
               </CardContent>
             </Card>
@@ -659,45 +648,8 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
               </div>
             </CardHeader>
             <CardContent>
-              <div className="border rounded-lg overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Admission No</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Father Name</TableHead>
-                      <TableHead>Class</TableHead>
-                      <TableHead>Section</TableHead>
-                      <TableHead>Yearly Fee</TableHead>
-                      <TableHead>Prev. Due</TableHead>
-                      <TableHead>Total Paid</TableHead>
-                      <TableHead>Pending Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredPendingStudents.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                          No pending fees found for selected filters
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredPendingStudents.map((student) => (
-                        <TableRow key={student.id}>
-                          <TableCell className="font-mono">{student.admissionNumber}</TableCell>
-                          <TableCell className="font-medium">{student.name}</TableCell>
-                          <TableCell>{student.fatherName}</TableCell>
-                          <TableCell>{student.grade}</TableCell>
-                          <TableCell>{student.section}</TableCell>
-                          <TableCell>₹{student.yearly.toLocaleString('en-IN')}</TableCell>
-                          <TableCell>₹{student.previousDue.toLocaleString('en-IN')}</TableCell>
-                          <TableCell>₹{student.paid.toLocaleString('en-IN')}</TableCell>
-                          <TableCell className="font-bold text-red-600">₹{student.pending.toLocaleString('en-IN')}</TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+              <div className="border rounded-lg p-4">
+                <DataTable columns={pendingColumns} data={filteredPendingStudents} />
               </div>
             </CardContent>
           </Card>

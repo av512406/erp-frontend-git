@@ -3,17 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Search, UserX, Eye } from "lucide-react";
+import { DataTable, Column } from "@/components/ui/data-table";
+import { Plus, Pencil, Trash2, Search, UserX, Eye, GraduationCap } from "lucide-react";
 import StudentFormModal from "./StudentFormModal";
 import StudentViewModal from "./StudentViewModal";
+import PromoteStudentModal from "./PromoteStudentModal";
 import type { Student, InsertStudent } from "@shared/schema";
 
 interface StudentsPageProps {
@@ -23,6 +17,9 @@ interface StudentsPageProps {
   onDeleteStudent: (id: string) => void;
   onMarkWithdrawn?: (admissionNumber: string, payload: { leftDate?: string; reason?: string }) => Promise<void> | void;
   isReadOnly?: boolean;
+  sessions?: { id: string, name: string }[];
+  selectedSessionId?: string;
+  onStudentPromoted?: () => void;
 }
 
 export default function StudentsPage({
@@ -31,7 +28,10 @@ export default function StudentsPage({
   onEditStudent,
   onDeleteStudent,
   onMarkWithdrawn,
-  isReadOnly = false
+  isReadOnly = false,
+  sessions = [],
+  selectedSessionId,
+  onStudentPromoted
 }: StudentsPageProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterGrade, setFilterGrade] = useState<string>("all");
@@ -40,6 +40,7 @@ export default function StudentsPage({
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
   const [isViewOpen, setIsViewOpen] = useState(false);
+  const [isPromoteOpen, setIsPromoteOpen] = useState(false);
 
   // derive unique grades and sections for filter dropdowns
   const uniqueGrades = Array.from(new Set(students.map(s => s.grade))).sort((a, b) => parseInt(a) - parseInt(b));
@@ -81,6 +82,64 @@ export default function StudentsPage({
     setIsViewOpen(true);
   };
 
+
+  const columns: Column<Student>[] = [
+    { header: "Admission No.", accessorKey: "admissionNumber", className: "font-mono", sortable: true },
+    { header: "Name", accessorKey: "name", className: "font-medium", sortable: true },
+    { header: "Class", accessorKey: "grade", sortable: true },
+    { header: "Section", accessorKey: "section", sortable: true },
+    { header: "Mobile", accessorKey: "mobileNumber", className: "font-mono" },
+    { header: "Yearly Fee", cell: (s: Student) => `₹${(Number(s.yearlyFeeAmount) || 0).toLocaleString('en-IN')}` },
+    !isReadOnly && {
+      header: "Actions",
+      className: "text-right",
+      cell: (student: Student) => (
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => openView(student)}
+            title="View Details"
+          >
+            <Eye className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleEdit(student)}
+          >
+            <Pencil className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onDeleteStudent(student.id)}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+          {onMarkWithdrawn && student.status !== 'left' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                const reason = window.prompt('Withdrawal reason (optional):', '');
+                if (reason === null) return;
+                try {
+                  await onMarkWithdrawn(student.admissionNumber, { reason: reason || '' });
+                } catch (e: any) {
+                  alert(e?.message || 'Failed to mark student as withdrawn');
+                }
+              }}
+              title="Mark as Withdrawn"
+            >
+              <UserX className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      )
+    }
+  ].filter(Boolean) as Column<Student>[];
+
   return (
     <div className="container mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
@@ -91,10 +150,15 @@ export default function StudentsPage({
           </p>
         </div>
         {!isReadOnly && (
-          <Button onClick={handleAdd} className="gap-2" data-testid="button-add-student">
-            <Plus className="w-4 h-4" />
-            Add Student
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsPromoteOpen(true)} className="gap-2">
+              <GraduationCap className="w-4 h-4" /> Import/Promote
+            </Button>
+            <Button onClick={handleAdd} className="gap-2" data-testid="button-add-student">
+              <Plus className="w-4 h-4" />
+              Add Student
+            </Button>
+          </div>
         )}
       </div>
 
@@ -141,90 +205,8 @@ export default function StudentsPage({
         </div>
       </div>
 
-      <div className="border rounded-lg overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Admission No.</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Class</TableHead>
-              <TableHead>Section</TableHead>
-              <TableHead>Mobile</TableHead>
-              <TableHead>Yearly Fee</TableHead>
-              {!isReadOnly && <TableHead className="text-right">Actions</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredStudents.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={isReadOnly ? 6 : 7} className="text-center py-8 text-muted-foreground">
-                  No students found
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredStudents.map((student) => (
-                <TableRow key={student.id} data-testid={`row-student-${student.id}`}>
-                  <TableCell className="font-mono">{student.admissionNumber}</TableCell>
-                  <TableCell className="font-medium">{student.name}</TableCell>
-                  <TableCell>{student.grade}</TableCell>
-                  <TableCell>{student.section}</TableCell>
-                  <TableCell className="font-mono text-sm">{student.mobileNumber}</TableCell>
-                  <TableCell>₹{(Number(student.yearlyFeeAmount) || 0).toLocaleString('en-IN')}</TableCell>
-                  {!isReadOnly && (
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openView(student)}
-                          title="View Details"
-                          data-testid={`button-view-${student.id}`}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(student)}
-                          data-testid={`button-edit-${student.id}`}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onDeleteStudent(student.id)}
-                          data-testid={`button-delete-${student.id}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                        {onMarkWithdrawn && student.status !== 'left' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={async () => {
-                              const reason = window.prompt('Withdrawal reason (optional):', '');
-                              // If user cancels prompt (returns null), abort without withdrawing
-                              if (reason === null) return;
-                              try {
-                                await onMarkWithdrawn(student.admissionNumber, { reason: reason || '' });
-                              } catch (e: any) {
-                                alert(e?.message || 'Failed to mark student as withdrawn');
-                              }
-                            }}
-                            title="Mark as Withdrawn"
-                          >
-                            <UserX className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+      <div className="border rounded-lg p-4">
+        <DataTable columns={columns} data={filteredStudents} />
       </div>
 
       <StudentFormModal
@@ -241,6 +223,17 @@ export default function StudentsPage({
         onClose={() => { setIsViewOpen(false); setViewingStudent(null); }}
         student={viewingStudent}
       />
+      {selectedSessionId && (
+        <PromoteStudentModal
+          isOpen={isPromoteOpen}
+          onClose={() => setIsPromoteOpen(false)}
+          targetSessionId={selectedSessionId}
+          sessions={sessions}
+          onSuccess={() => {
+            if (onStudentPromoted) onStudentPromoted();
+          }}
+        />
+      )}
     </div>
   );
 }

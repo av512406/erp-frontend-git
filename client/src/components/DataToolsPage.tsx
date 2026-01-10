@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -68,12 +68,13 @@ type RawStudentRow = {
 interface DataToolsPageProps {
   students: Student[];
   // returns a summary of import (added/skipped)
-  onImportStudents: (students: Omit<Student, 'id'>[]) => Promise<ImportSummary> | ImportSummary;
+  onImportStudents: (students: Omit<Student, 'id'>[], targetSessionId?: string) => Promise<ImportSummary> | ImportSummary;
   // upsert existing students (update existing records by admissionNumber)
   onUpsertStudents: (students: Omit<Student, 'id'>[]) => Promise<{ updated: number }> | { updated: number };
   onImportGrades: (grades: GradeEntry[]) => Promise<void> | void;
   onImportTransactions?: (transactions: { studentId: string; amount: string; paymentDate: string; paymentMode?: string; remarks?: string }[]) => Promise<{ inserted: number; skipped: number; skippedRows?: any[] }> | { inserted: number; skipped: number; skippedRows?: any[] };
-
+  sessions: { id: string; name: string }[];
+  selectedSessionId?: string;
 }
 
 declare global {
@@ -82,10 +83,11 @@ declare global {
   }
 }
 
-export default function DataToolsPage({ students, onImportStudents, onUpsertStudents, onImportGrades, onImportTransactions }: DataToolsPageProps) {
+export default function DataToolsPage({ students, onImportStudents, onUpsertStudents, onImportGrades, onImportTransactions, sessions, selectedSessionId }: DataToolsPageProps) {
   const [isImporting, setIsImporting] = useState(false);
   const [exportFilter, setExportFilter] = useState<string>("all");
   const [templateGrade, setTemplateGrade] = useState<string>("all");
+  const [importSessionId, setImportSessionId] = useState<string>(selectedSessionId || "");
   const studentFileRef = useRef<HTMLInputElement>(null);
   const gradesFileRef = useRef<HTMLInputElement>(null);
   const transactionsFileRef = useRef<HTMLInputElement>(null);
@@ -95,7 +97,21 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
   const [skippedRows, setSkippedRows] = useState<RawStudentRow[] | null>(null);
   const [skippedTransactions, setSkippedTransactions] = useState<any[] | null>(null);
   const [lastImportedTransactions, setLastImportedTransactions] = useState<any[] | null>(null);
+
   const [excelModalOpen, setExcelModalOpen] = useState(false);
+
+  // Backup & Restore State
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+  const [backupFile, setBackupFile] = useState<File | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const restoreFileRef = useRef<HTMLInputElement>(null);
+
+  // Sync importSessionId with selectedSessionId prop
+  useEffect(() => {
+    if (selectedSessionId) {
+      setImportSessionId(selectedSessionId);
+    }
+  }, [selectedSessionId]);
 
   // Get unique grades for filter dropdown
   const uniqueGrades = Array.from(new Set(students.map(s => s.grade)))
@@ -221,7 +237,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
             });
           // keep a copy of raw parsed rows for review/export/upsert
           setLastImportedRows(importedStudents as RawStudentRow[]);
-          const summary = await onImportStudents(importedStudents);
+          const summary = await onImportStudents(importedStudents, importSessionId);
           toast({
             title: "Import Finished",
             description: `Added ${summary.added} students, skipped ${summary.skipped} duplicates`,
@@ -327,6 +343,61 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
     reader.readAsText(file);
   };
 
+
+  const handleDownloadBackup = async () => {
+    try {
+      const res = await fetch('/api/backup/export', { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to download backup");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `school_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast({ title: "Backup Downloaded", description: "Your school data has been saved." });
+    } catch (e: any) {
+      toast({ title: "Backup Error", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleRestoreBackup = async () => {
+    if (!backupFile) return;
+    setIsRestoring(true);
+    try {
+      const text = await backupFile.text();
+      const json = JSON.parse(text);
+
+      const res = await fetch('/api/backup/restore', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify(json)
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Restore failed");
+      }
+
+      const data = await res.json();
+      toast({ title: "Restore Successful", description: "System data has been restored." });
+      setRestoreDialogOpen(false);
+      setBackupFile(null);
+      // Optional: Refresh page to show new data
+      setTimeout(() => window.location.reload(), 1500);
+
+    } catch (e: any) {
+      toast({ title: "Restore Failed", description: e.message, variant: "destructive" });
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
   const handleExportStudents = () => {
     // Filter students based on selected filter
     const filteredStudents = exportFilter === "all"
@@ -334,7 +405,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
       : students.filter(s => s.grade === exportFilter);
 
     const csvContent = [
-      ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'previousYearDue', 'category', 'gender'].join(','),
+      ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'previousYearDue', 'category', 'gender', 'session'].join(','),
       ...filteredStudents.map(s => [
         s.admissionNumber,
         s.name,
@@ -352,7 +423,9 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
         s.yearlyFeeAmount,
         (s as any).previousYearDue || '0',
         (s as any).category || 'GEN',
-        (s as any).gender || ''
+        (s as any).category || 'GEN',
+        (s as any).gender || '',
+        (s as any).sessionName || '' // We might need to fetch this or it might be on the student object if joined
       ].join(','))
     ].join('\n');
 
@@ -539,8 +612,25 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
             </div>
             <div className="text-sm text-muted-foreground">
               <p className="font-medium mb-1">Accepted columns (case-insensitive):</p>
-              <p className="font-mono text-xs">admissionNumber, name, fatherName or "Father's Name", motherName or "Mother's Name", dateOfBirth, admissionDate, aadharNumber, penNumber, aaparId, mobileNumber, address, grade or class, section, yearlyFeeAmount or "Yearly fees", previousYearDue, category, gender</p>
+              <p className="font-mono text-xs">admissionNumber, name, fatherName or "Father's Name", motherName or "Mother's Name", dateOfBirth, admissionDate, aadharNumber, penNumber, aaparId, mobileNumber, address, grade or class, section, yearlyFeeAmount or "Yearly fees", previousYearDue, category, gender, session or "Session Name"</p>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="import-session">Target Session (optional)</Label>
+              <Select value={importSessionId} onValueChange={setImportSessionId}>
+                <SelectTrigger id="import-session">
+                  <SelectValue placeholder="Use default / from file" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Use default / from file</SelectItem>
+                  {sessions.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">If selected, students without a 'Session' column in CSV will be added to this session.</p>
+            </div>
+
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -558,7 +648,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 onClick={() => {
                   // generate template for selected templateGrade
                   const filtered = templateGrade === 'all' ? students : students.filter(s => s.grade === templateGrade);
-                  const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'previousYearDue', 'category', 'gender'];
+                  const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'previousYearDue', 'category', 'gender', 'session'];
                   // Template with one sample row illustrating date format (YYYY-MM-DD)
                   const sample = [
                     'STU001',
@@ -577,14 +667,17 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                     '25000',
                     '5000',
                     'GEN',
-                    'Male'
+                    'Male',
+                    '2025-26'
                   ].join(',');
                   const csv = [header.join(','), sample].join('\n');
-                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+
+                  const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
-                  a.download = `students-template-${templateGrade === 'all' ? 'all' : 'class-' + templateGrade}.csv`;
+                  const safeGrade = (templateGrade === 'all' ? 'all' : 'class-' + templateGrade).replace(/[^a-z0-9\-_]/gi, '_');
+                  a.download = `students-template-${safeGrade}.csv`;
                   document.body.appendChild(a);
                   a.click();
                   a.remove();
@@ -642,7 +735,8 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                   const header = ['admissionNumber', 'subject', 'marks', 'term'];
                   const sample = ['STU001', 'Mathematics', '85.5', 'Term 1'].join(',');
                   const csv = [header.join(','), sample].join('\n');
-                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+
+                  const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
@@ -704,7 +798,8 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                   const header = ['admissionNumber', 'amount', 'paymentDate', 'paymentMode', 'remarks'];
                   const sample = ['STU001', '5000', '2025-04-01', 'cash', 'Term 1 Fee'].join(',');
                   const csv = [header.join(','), sample].join('\n');
-                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+
+                  const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
@@ -721,7 +816,78 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
               </Button>
             </div>
           </CardContent>
+
         </Card>
+
+        <Card className="border-red-200 dark:border-red-900 border-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <span className="text-red-600">⚠</span> System Backup & Restore
+            </CardTitle>
+            <CardDescription>
+              Create a full snapshot of your school's data or restore from a previous backup.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Button onClick={handleDownloadBackup} className="w-full gap-2">
+                <Download className="w-4 h-4" /> Download Full Backup
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Downloads a JSON file containing all students, fees, grades, and settings.
+              </p>
+            </div>
+
+            <div className="border-t pt-4 space-y-2">
+              <Label>Restore from Backup</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="file"
+                  accept=".json"
+                  ref={restoreFileRef}
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) {
+                      setBackupFile(e.target.files[0]);
+                      setRestoreDialogOpen(true);
+                      // Reset input so same file selection triggers change again if needed
+                      e.target.value = '';
+                    }
+                  }}
+                />
+              </div>
+              <p className="text-xs text-red-500 font-medium">
+                Warning: Restoring will REPLACE all current data.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Restore Confirmation Dialog */}
+        <AlertDialog open={restoreDialogOpen} onOpenChange={setRestoreDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-red-600">Unknown Danger: Data Overwrite</AlertDialogTitle>
+              <AlertDialogDescription>
+                You are about to restore a backup from <strong>{backupFile?.name}</strong>.
+                <br /><br />
+                <span className="font-bold text-red-600">WARNING:</span> This action is destructive.
+                All current students, fee records, and grades will be <strong>PERMANENTLY DELETED</strong> and replaced by the backup data.
+                <br /><br />
+                Are you absolutely sure you want to proceed?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setBackupFile(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleRestoreBackup}
+                className="bg-red-600 hover:bg-red-700 text-white"
+                disabled={isRestoring}
+              >
+                {isRestoring ? 'Restoring...' : 'Yes, Overwrite Everything'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <Card>
           <CardHeader>

@@ -5,11 +5,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataTable, Column } from "@/components/ui/data-table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/auth";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, Pencil, Trash2, Plus } from "lucide-react";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 interface User {
   id: string;
@@ -102,6 +109,25 @@ function UserManagement() {
     setIsOpen(true);
   };
 
+
+  const columns: Column<User>[] = [
+    { header: "Name", accessorKey: "name", sortable: true },
+    { header: "Username", accessorKey: "username", sortable: true },
+    { header: "Role", accessorKey: "role", sortable: true, cell: (u) => <Badge variant="secondary" className="capitalize">{u.role}</Badge> },
+    {
+      header: "Actions", cell: (user) => (
+        <div className="space-x-2">
+          <Button variant="outline" size="sm" onClick={() => openEdit(user)}>
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button variant="destructive" size="sm" onClick={() => handleDelete(user.id)}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      )
+    }
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -161,35 +187,198 @@ function UserManagement() {
         </Dialog>
       </div>
 
-      <div className="border rounded-md">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Username</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map(user => (
-              <TableRow key={user.id}>
-                <TableCell>{user.name}</TableCell>
-                <TableCell>{user.username}</TableCell>
-                <TableCell className="capitalize">{user.role}</TableCell>
-                <TableCell className="space-x-2">
-                  <Button variant="outline" size="sm" onClick={() => openEdit(user)}>Edit</Button>
-                  <Button variant="destructive" size="sm" onClick={() => handleDelete(user.id)}>Delete</Button>
-                </TableCell>
-              </TableRow>
-            ))}
-            {users.length === 0 && !loading && (
-              <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">No users found</TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+      <div className="border rounded-md p-4">
+        <DataTable columns={columns} data={users} searchKey="name" />
+      </div>
+    </div>
+  );
+}
+
+const sessionSchema = z.object({
+  name: z.string().regex(/^\d{4}-\d{2}$/, "Format must be YYYY-YY (e.g. 2025-26)"),
+  startDate: z.string().min(1, "Start Date is required"),
+  endDate: z.string().min(1, "End Date is required"),
+});
+
+type SessionFormValues = z.infer<typeof sessionSchema>;
+
+function SessionManagement() {
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [editingSession, setEditingSession] = useState<any>(null);
+  const { toast } = useToast();
+
+  const form = useForm<SessionFormValues>({
+    resolver: zodResolver(sessionSchema),
+    defaultValues: {
+      name: "",
+      startDate: "",
+      endDate: "",
+    }
+  });
+
+  const fetchSessions = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/sessions', { headers: getAuthHeaders() });
+      if (res.ok) {
+        setSessions(await res.json());
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSessions();
+  }, []);
+
+  const onSubmit = async (data: SessionFormValues) => {
+    try {
+      const url = editingSession ? `/api/sessions/${editingSession.id}` : '/api/sessions';
+      const method = editingSession ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(data)
+      });
+
+      if (res.ok) {
+        toast({ title: "Success", description: `Session ${editingSession ? 'updated' : 'created'} successfully` });
+        setIsOpen(false);
+        setEditingSession(null);
+        setEditingSession(null);
+        form.reset({ name: "", startDate: "", endDate: "" });
+        fetchSessions();
+      } else {
+        const err = await res.json();
+        toast({ title: "Error", description: err.message || "Operation failed", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Error", description: "Network error", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this session?')) return;
+    try {
+      const res = await fetch(`/api/sessions/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+      if (res.ok) {
+        toast({ title: "Success", description: "Session deleted" });
+        fetchSessions();
+      } else {
+        const err = await res.json();
+        toast({ title: "Error", description: err.message || "Failed to delete", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Error", description: "Network error", variant: "destructive" });
+    }
+  };
+
+
+  const columns: Column<any>[] = [
+    { header: "Name", accessorKey: "name", sortable: true },
+    { header: "Start Date", cell: (s) => new Date(s.start_date).toLocaleDateString() },
+    { header: "End Date", cell: (s) => new Date(s.end_date).toLocaleDateString() },
+    {
+      header: "Actions", cell: (s) => (
+        <div className="space-x-2">
+          <Button variant="outline" size="sm" onClick={() => {
+            setEditingSession(s);
+            form.reset({
+              name: s.name,
+              startDate: new Date(s.start_date).toISOString().split('T')[0],
+              endDate: new Date(s.end_date).toISOString().split('T')[0],
+            });
+            setIsOpen(true);
+          }}>
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button variant="destructive" size="sm" onClick={() => handleDelete(s.id)}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      )
+    }
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-medium">Academic Sessions</h3>
+        <Button onClick={() => {
+          setEditingSession(null);
+          setEditingSession(null);
+          form.reset({ name: '', startDate: '', endDate: '' });
+          setIsOpen(true);
+        }}>
+          <Plus className="mr-2 h-4 w-4" /> Create Session
+        </Button>
+      </div>
+
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingSession ? 'Edit Session' : 'Create Session'}</DialogTitle>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Session Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="YYYY-YY" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="startDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Start Date</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="endDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>End Date</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {editingSession ? 'Update Session' : 'Create Session'}
+              </Button>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <div className="border rounded-md p-4">
+        <DataTable columns={columns} data={sessions} searchKey="name" />
       </div>
     </div>
   );
@@ -202,14 +391,10 @@ function SchoolSettings() {
     name: config.name,
     address: config.address,
     phone: config.phone,
-    session: config.session,
     logoFile: null as File | null
   });
 
   const [logoError, setLogoError] = useState<string | null>(null);
-  const [availableSessions, setAvailableSessions] = useState<any[]>([]);
-  const [selectedSession, setSelectedSession] = useState("");
-  const [switchOpen, setSwitchOpen] = useState(false);
   const [examPattern, setExamPattern] = useState<string[]>([]);
 
   // Sync form with config when config loads
@@ -219,7 +404,6 @@ function SchoolSettings() {
       name: config.name,
       address: config.address,
       phone: config.phone,
-      session: config.session
     }));
     setExamPattern(config.examPattern || ["Term 1", "Term 2", "Final"]);
   }, [config]);
@@ -252,46 +436,7 @@ function SchoolSettings() {
     }
   };
 
-  useEffect(() => {
-    fetch('/api/sessions')
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch sessions');
-        return res.json();
-      })
-      .then(data => {
-        if (Array.isArray(data)) {
-          setAvailableSessions(data);
-        } else {
-          setAvailableSessions([]);
-        }
-      })
-      .catch(err => {
-        console.error(err);
-        setAvailableSessions([]);
-      });
-  }, []);
 
-  const handleSwitchSession = async () => {
-    if (!selectedSession) return;
-    try {
-      const res = await fetch('/api/schools/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: selectedSession })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        toast({ title: "Session Switched", description: `Promoted ${data.promotedStudents} students.` });
-        setSwitchOpen(false);
-        window.location.reload();
-      } else {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to switch session.");
-      }
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    }
-  };
 
   const addExamTerm = () => {
     setExamPattern([...examPattern, `Term ${examPattern.length + 1}`]);
@@ -328,17 +473,7 @@ function SchoolSettings() {
               <Label htmlFor="phone">Phone</Label>
               <Input id="phone" name="phone" value={form.phone} onChange={handleChange} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="session">Current Session</Label>
-              <Input
-                id="session"
-                name="session"
-                value={form.session || ''}
-                onChange={handleChange}
-                placeholder="e.g. 2025-2026"
-              />
-              <p className="text-xs text-muted-foreground">Defining the academic year (e.g. "2025-2026"). This will be reflected on receipts and reports.</p>
-            </div>
+
             <div className="space-y-2">
               <Label htmlFor="logoFile">Logo Image (optional)</Label>
               <Input id="logoFile" name="logoFile" type="file" accept="image/*" onChange={handleChange} />
@@ -393,10 +528,14 @@ export default function AdminSettingsPage() {
       <Tabs defaultValue="school">
         <TabsList className="mb-4">
           <TabsTrigger value="school">School Settings</TabsTrigger>
+          <TabsTrigger value="sessions">Academic Sessions</TabsTrigger>
           <TabsTrigger value="users">User Management</TabsTrigger>
         </TabsList>
         <TabsContent value="school">
           <SchoolSettings />
+        </TabsContent>
+        <TabsContent value="sessions">
+          <SessionManagement />
         </TabsContent>
         <TabsContent value="users">
           <UserManagement />

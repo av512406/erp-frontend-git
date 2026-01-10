@@ -14,6 +14,10 @@ const COLUMN_OPTIONS: { key: string; label: string; default?: boolean }[] = [
   { key: 'name', label: 'Name', default: true },
   { key: 'grade', label: 'Class', default: true },
   { key: 'section', label: 'Section', default: true },
+  { key: 'sessionName', label: 'Session Name', default: true },
+  { key: 'sessionGrade', label: 'Session Class', default: true },
+  { key: 'sessionSection', label: 'Session Section', default: true },
+  { key: 'sessionStatus', label: 'Session Status', default: true },
   { key: 'fatherName', label: "Father's Name" },
   { key: 'motherName', label: "Mother's Name" },
   { key: 'dateOfBirth', label: 'Date of Birth' },
@@ -24,7 +28,7 @@ const COLUMN_OPTIONS: { key: string; label: string; default?: boolean }[] = [
   { key: 'mobileNumber', label: 'Mobile Number' },
   { key: 'address', label: 'Address' },
   { key: 'yearlyFeeAmount', label: 'Yearly Fee Amount' },
-  { key: 'status', label: 'Status' },
+  { key: 'status', label: 'Student Status (Global)' },
   { key: 'leftDate', label: 'Left Date' },
   { key: 'leavingReason', label: 'Leaving Reason' }
 ];
