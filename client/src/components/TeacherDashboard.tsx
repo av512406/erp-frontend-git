@@ -7,7 +7,8 @@ import { getAuthHeaders } from "@/lib/auth";
 import { Loader2, Users, CalendarCheck, ClipboardList, TrendingUp, IndianRupee, RefreshCcw, Filter } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast"; // Ensure hook exists or use standard Toast
+import { useToast } from "@/hooks/use-toast";
+import { useSchoolConfig } from "@/hooks/useSchoolConfig";
 import {
     Table,
     TableBody,
@@ -54,6 +55,8 @@ export default function TeacherDashboard({ selectedSessionId }: { selectedSessio
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
     const { toast } = useToast();
+    const { config } = useSchoolConfig();
+    const showAttendance = config.features?.attendance;
 
     // Fetch Report with Date Filter
     const fetchReport = async () => {
@@ -158,7 +161,7 @@ export default function TeacherDashboard({ selectedSessionId }: { selectedSessio
                     <TabsList>
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="students" disabled={!info.class}>My Students</TabsTrigger>
-                        <TabsTrigger value="attendance" disabled={!info.class}>Attendance Report</TabsTrigger>
+                        {showAttendance && <TabsTrigger value="attendance" disabled={!info.class}>Attendance Report</TabsTrigger>}
                     </TabsList>
 
                     <TabsContent value="overview" className="space-y-4">
@@ -178,12 +181,14 @@ export default function TeacherDashboard({ selectedSessionId }: { selectedSessio
                                             <p className="text-sm text-muted-foreground">
                                                 Active students in {info.class.grade}-{info.class.section}
                                             </p>
-                                            <Link href={`/attendance?classId=${info.class.id}${selectedSessionId ? `&sessionId=${selectedSessionId}` : ''}`}>
-                                                <Button className="w-full mt-2">
-                                                    <CalendarCheck className="mr-2 h-4 w-4" />
-                                                    Mark Today's Attendance
-                                                </Button>
-                                            </Link>
+                                            {showAttendance && (
+                                                <Link href={`/attendance?classId=${info.class.id}${selectedSessionId ? `&sessionId=${selectedSessionId}` : ''}`}>
+                                                    <Button className="w-full mt-2">
+                                                        <CalendarCheck className="mr-2 h-4 w-4" />
+                                                        Mark Today's Attendance
+                                                    </Button>
+                                                </Link>
+                                            )}
                                         </div>
                                     ) : (
                                         <div className="text-muted-foreground">
@@ -325,6 +330,6 @@ export default function TeacherDashboard({ selectedSessionId }: { selectedSessio
                     </TabsContent>
                 </Tabs>
             </div>
-        </div>
+        </div >
     );
 }

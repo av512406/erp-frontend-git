@@ -7,7 +7,8 @@ export const defaultSchoolConfig = {
   session: '2025-2026',
   logoUrl: '/logo.png',
   email: 'admin@school.com',
-  examPattern: ["Term 1", "Term 2", "Final"]
+  examPattern: ["Term 1", "Term 2", "Final"],
+  features: { attendance: false } as Record<string, boolean>
 };
 
 export type SchoolConfig = typeof defaultSchoolConfig & { id?: string; updatedAt?: string | null };

@@ -23,6 +23,9 @@ const schoolSchema = z.object({
     address: z.string().optional(),
     phone: z.string().optional(),
     logoUrl: z.string().optional(),
+    features: z.object({
+        attendance: z.boolean().default(false),
+    }).optional(),
 });
 
 type SchoolFormValues = z.infer<typeof schoolSchema>;
@@ -35,6 +38,7 @@ interface School {
     phone?: string;
     logoUrl?: string;
     is_active: boolean;
+    features?: { attendance: boolean };
 }
 
 const adminSchema = z.object({
@@ -62,6 +66,7 @@ export default function SuperAdminDashboard() {
             address: "",
             phone: "",
             logoUrl: "",
+            features: { attendance: false },
         },
     });
 
@@ -175,6 +180,7 @@ export default function SuperAdminDashboard() {
             address: school.address || "",
             phone: school.phone || "",
             logoUrl: school.logoUrl || "",
+            features: school.features || { attendance: false },
         });
         setOpen(true);
     };
@@ -321,6 +327,26 @@ export default function SuperAdminDashboard() {
                                                     <FormLabel>Phone</FormLabel>
                                                     <FormControl><Input {...field} /></FormControl>
                                                     <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="features.attendance"
+                                            render={({ field }) => (
+                                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                                                    <div className="space-y-0.5">
+                                                        <FormLabel>Enable Attendance (Pro)</FormLabel>
+                                                        <div className="text-[0.8rem] text-muted-foreground">
+                                                            Allow this school to track student attendance.
+                                                        </div>
+                                                    </div>
+                                                    <FormControl>
+                                                        <Switch
+                                                            checked={field.value}
+                                                            onCheckedChange={field.onChange}
+                                                        />
+                                                    </FormControl>
                                                 </FormItem>
                                             )}
                                         />

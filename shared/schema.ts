@@ -13,6 +13,7 @@ export const schools = pgTable("schools", {
   isActive: boolean("is_active").default(true),
   currentSessionId: varchar("current_session_id"),
   examPattern: text("exam_pattern").default('["Term 1", "Term 2", "Final"]'), // JSON string
+  features: text("features").default('{"attendance": false}'), // JSON string: { "attendance": boolean, ... }
 });
 
 export const users = pgTable("users", {

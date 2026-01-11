@@ -209,11 +209,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ user: (req as any).user });
   });
 
+  // Middleware for Feature Checks
+  const requireFeature = (featureName: string) => {
+    return async (req: any, res: any, next: any) => {
+      try {
+        const user = req.user;
+        if (user.role === 'superadmin') return next(); // Superadmin bypass? Maybe not, usually they want to see what user sees. But for management, yes. Let's allow bypass or strictly enforce school context.
+        // Usually superadmin managing a school acts AS that school admin.
+
+        const schoolId = user.schoolId;
+        if (!schoolId) return res.status(403).json({ message: 'Feature restricted: No school context' });
+
+        const schoolRes = await pool.query('SELECT features FROM schools WHERE id = $1', [schoolId]);
+        if (schoolRes.rows.length === 0) return res.status(404).json({ message: 'School not found' });
+
+        let features = schoolRes.rows[0].features;
+        // Handle text or jsonb
+        if (typeof features === 'string') {
+          try { features = JSON.parse(features); } catch { features = {}; }
+        } else if (!features) {
+          features = {};
+        }
+
+        if (features[featureName]) {
+          next();
+        } else {
+          res.status(403).json({ message: `Feature '${featureName}' is not enabled for your plan.` });
+        }
+      } catch (e) {
+        console.error('Feature Check Failed:', e);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    };
+  };
+
   app.get('/api/school-config', requireAuth, async (req, res) => {
     const user = (req as any).user;
     try {
       const { rows } = await pool.query(`
-        SELECT s.id, s.name, s.slug, s.address, s.phone, s.logo_url as "logoUrl", s.exam_pattern as "examPattern", ac.name as "session"
+        SELECT s.id, s.name, s.slug, s.address, s.phone, s.logo_url as "logoUrl", s.exam_pattern as "examPattern", s.features, ac.name as "session"
         FROM schools s
         LEFT JOIN academic_sessions ac ON s.current_session_id = ac.id
         WHERE s.id = $1
@@ -221,14 +255,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (rows.length === 0) return res.status(404).json({ message: 'School not found' });
 
       const school = rows[0];
-      // Parse examPattern if it's a string
+      // Parse JSON fields
       try {
-        if (typeof school.examPattern === 'string') {
-          school.examPattern = JSON.parse(school.examPattern);
-        }
-      } catch (e) {
-        school.examPattern = ["Term 1", "Term 2", "Final"]; // Fallback
-      }
+        if (typeof school.examPattern === 'string') school.examPattern = JSON.parse(school.examPattern);
+      } catch { school.examPattern = ["Term 1", "Term 2", "Final"]; }
+
+      try {
+        if (typeof school.features === 'string') school.features = JSON.parse(school.features);
+      } catch { school.features = { attendance: false }; }
+
+      // Default if null
+      if (!school.features) school.features = { attendance: false };
 
       res.json(school);
     } catch (e) {
@@ -266,9 +303,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = genId();
       const patternStr = examPattern ? JSON.stringify(examPattern) : '["Term 1", "Term 2", "Final"]';
 
+      const featuresStr = req.body.features ? JSON.stringify(req.body.features) : '{"attendance": false}';
+
       const q = await client.query(
-        'INSERT INTO schools (id, name, slug, address, phone, logo_url, exam_pattern) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-        [id, name, slug, address, phone, logoUrl, patternStr]
+        'INSERT INTO schools (id, name, slug, address, phone, logo_url, exam_pattern, features) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+        [id, name, slug, address, phone, logoUrl, patternStr, featuresStr]
       );
 
       // Create a default admin for this school
@@ -436,6 +475,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (newSessionId) {
           updates.push(`current_session_id = $${idx++}`);
           values.push(newSessionId);
+        }
+
+        if (req.body.features) {
+          updates.push(`features = $${idx++}`);
+          values.push(JSON.stringify(req.body.features));
         }
 
         updates.push(`updated_at = now()`);
@@ -1170,14 +1214,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Grades APIs
   app.get('/api/grades', requireAuth, async (req, res) => {
     const user = (req as any).user;
-    
+
     // [RESTRICTION] Teacher can only see grades for their own class
     if (user.role === 'teacher') {
       const classRes = await pool.query('SELECT grade, section FROM classes WHERE class_teacher_id = $1', [user.id]);
       if (classRes.rows.length === 0) return res.json([]);
-      
+
       const { grade, section } = classRes.rows[0];
-      
+
       // Join with student_sessions to filter by current class
       const query = `
         SELECT g.* 
@@ -1197,7 +1241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Let's refine the join to ensure we don't get duplicates if student has multiple sessions.
       // We can use the school's current session or just use ANY active session.
       // Simple approach: Filter by ss.status = 'active'.
-      
+
       const { rows } = await pool.query(query, [user.schoolId, grade, section]);
       return res.json(rows.map(mapGrade));
     }
@@ -1238,7 +1282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 AND ss.student_id = $2
                 AND ss.status = 'active'
             `, [user.id, data.studentId]);
-            
+
             if ((allowed.rowCount ?? 0) === 0) {
               console.warn(`Teacher ${user.username} attempted to grade student ${data.studentId} not in their class.`);
               continue; // Skip
@@ -2572,7 +2616,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Fetch Attendance for a specific Date & Class (Fix: List all students, even if not marked)
-  app.get('/api/attendance', requireAuth, async (req, res) => {
+  app.get('/api/attendance', requireAuth, requireFeature('attendance'), async (req, res) => {
     const user = (req as any).user;
     const { date, classId, sessionId } = req.query;
 
@@ -2661,7 +2705,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/attendance', requireAuth, async (req, res) => {
+  app.post('/api/attendance', requireAuth, requireFeature('attendance'), async (req, res) => {
     const user = (req as any).user;
     const { date, classId, records } = req.body;
     // records: { studentId: string, status: string }[]

@@ -189,6 +189,7 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
   ALTER TABLE fee_transactions ADD COLUMN IF NOT EXISTS session_id text REFERENCES academic_sessions(id);
   ALTER TABLE grades ADD COLUMN IF NOT EXISTS session_id text REFERENCES academic_sessions(id);
   ALTER TABLE schools ADD COLUMN IF NOT EXISTS exam_pattern jsonb;
+  ALTER TABLE schools ADD COLUMN IF NOT EXISTS features jsonb DEFAULT '{"attendance": false}';
 
       -- backfill any null transaction_id values
       UPDATE fee_transactions SET transaction_id = concat('TXN', substr(md5(random()::text),1,8)) WHERE transaction_id IS NULL;
