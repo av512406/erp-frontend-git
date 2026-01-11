@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { getToken } from '@/lib/auth';
 
 interface StudentsExcelExportModalProps {
   open: boolean;
@@ -44,18 +45,19 @@ export default function StudentsExcelExportModal({ open, onClose }: StudentsExce
   const selectAll = () => setSelected(COLUMN_OPTIONS.map(c => c.key));
   const clearAll = () => setSelected([]);
 
+
   const handleExport = () => {
     if (selected.length === 0) {
       alert('Select at least one column');
       return;
     }
     const colsParam = encodeURIComponent(selected.join(','));
-    const url = `/api/export/students/excel?cols=${colsParam}`;
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = url;
-    document.body.appendChild(iframe);
-    setTimeout(() => iframe.remove(), 15000);
+    const token = getToken();
+    const url = `/api/export/students/excel?cols=${colsParam}&token=${token}`;
+
+    // Direct navigation is more robust for downloads than hidden iframes
+    window.location.href = url;
+
     onClose();
   };
 

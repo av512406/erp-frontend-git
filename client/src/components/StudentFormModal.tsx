@@ -23,6 +23,7 @@ interface StudentFormModalProps {
   student: Student | null;
   sessions: { id: string; name: string }[];
   currentSessionId?: string;
+  userRole?: string;
 }
 
 export default function StudentFormModal({
@@ -31,7 +32,8 @@ export default function StudentFormModal({
   onSave,
   student,
   sessions = [],
-  currentSessionId
+  currentSessionId,
+  userRole
 }: StudentFormModalProps) {
   const [formData, setFormData] = useState({
     admissionNumber: '',
@@ -335,42 +337,45 @@ export default function StudentFormModal({
             </fieldset>
 
             {/* Fee Information */}
-            <fieldset className="border rounded-lg p-4 space-y-4">
-              <legend className="text-sm font-semibold px-2">Fee Information</legend>
-              <div className="grid gap-2">
-                <Label htmlFor="yearlyFeeAmount">Yearly Fee Amount (₹)</Label>
-                <Input
-                  id="yearlyFeeAmount"
-                  type="number"
-                  value={formData.yearlyFeeAmount}
-                  onChange={(e) => setFormData({ ...formData, yearlyFeeAmount: e.target.value })}
-                  required
-                  data-testid="input-yearly-fee"
-                  placeholder="25000"
-                  min="0"
-                  step="1"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Total fee amount to be collected for this academic year
-                </p>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="previousYearDue">Previous Year Due (₹)</Label>
-                <Input
-                  id="previousYearDue"
-                  type="number"
-                  value={(formData as any).previousYearDue}
-                  onChange={(e) => setFormData({ ...formData, previousYearDue: e.target.value } as any)}
-                  data-testid="input-previous-year-due"
-                  placeholder="0"
-                  min="0"
-                  step="1"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Outstanding amount from previous academic years
-                </p>
-              </div>
-            </fieldset>
+            {/* Fee Information - Hidden for Teachers */}
+            {(userRole !== 'teacher') && (
+              <fieldset className="border rounded-lg p-4 space-y-4">
+                <legend className="text-sm font-semibold px-2">Fee Information</legend>
+                <div className="grid gap-2">
+                  <Label htmlFor="yearlyFeeAmount">Yearly Fee Amount (₹)</Label>
+                  <Input
+                    id="yearlyFeeAmount"
+                    type="number"
+                    value={formData.yearlyFeeAmount}
+                    onChange={(e) => setFormData({ ...formData, yearlyFeeAmount: e.target.value })}
+                    required
+                    data-testid="input-yearly-fee"
+                    placeholder="25000"
+                    min="0"
+                    step="1"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Total fee amount to be collected for this academic year
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="previousYearDue">Previous Year Due (₹)</Label>
+                  <Input
+                    id="previousYearDue"
+                    type="number"
+                    value={(formData as any).previousYearDue}
+                    onChange={(e) => setFormData({ ...formData, previousYearDue: e.target.value } as any)}
+                    data-testid="input-previous-year-due"
+                    placeholder="0"
+                    min="0"
+                    step="1"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Outstanding amount from previous academic years
+                  </p>
+                </div>
+              </fieldset>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">

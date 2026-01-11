@@ -72,9 +72,13 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
   // Fetch students when selectedSessionId changes
   useEffect(() => {
     (async () => {
-      if (!selectedSessionId) return;
+      // if (!selectedSessionId) return; // Allow default to load if unset
       try {
-        const activeRes = await fetch(`/api/students?sessionId=${selectedSessionId}`, { headers: getAuthHeaders() });
+        const url = selectedSessionId
+          ? `/api/students?sessionId=${selectedSessionId}`
+          : `/api/students`; // Backend defaults to current_session_id
+
+        const activeRes = await fetch(url, { headers: getAuthHeaders() });
         if (activeRes.ok) {
           setStudents(await activeRes.json());
         }
@@ -362,7 +366,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
     <Switch>
       <Route path="/">
         {user.role === 'teacher' ? (
-          <TeacherDashboard />
+          <TeacherDashboard selectedSessionId={selectedSessionId} />
         ) : (
           <Dashboard stats={stats} userRole={user.role as any} />
         )}
@@ -374,7 +378,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       </Route>
 
       <Route path="/students">
-        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+        <ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']} userRole={user.role}>
           <StudentsPage
             students={students}
             onAddStudent={handleAddStudent}
@@ -384,11 +388,13 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
             sessions={sessions}
             selectedSessionId={selectedSessionId}
             onStudentPromoted={refetchStudents}
+            userRole={user.role}
+            isReadOnly={user.role === 'teacher'}
           />
         </ProtectedRoute>
       </Route>
       <Route path="/students-withdrawn">
-        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+        <ProtectedRoute allowedRoles={['admin', 'superadmin']} userRole={user.role}>
           <WithdrawnStudentsPage students={withdrawnStudents} onRestore={async (admissionNumber) => {
             try {
               const res = await fetch(`/api/students/${encodeURIComponent(admissionNumber)}/restore`, {
@@ -409,7 +415,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         </ProtectedRoute>
       </Route>
       <Route path="/students-left">
-        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+        <ProtectedRoute allowedRoles={['admin', 'superadmin']} userRole={user.role}>
           <WithdrawnStudentsPage students={withdrawnStudents} onRestore={async (admissionNumber) => {
             try {
               const res = await fetch(`/api/students/${encodeURIComponent(admissionNumber)}/restore`, {
@@ -430,7 +436,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         </ProtectedRoute>
       </Route>
       <Route path="/fees">
-        <ProtectedRoute allowedRoles={['admin', 'accountant']} userRole={user.role}>
+        <ProtectedRoute allowedRoles={['admin', 'accountant', 'superadmin']} userRole={user.role}>
           <FeesPage
             students={students}
             transactions={transactions}
@@ -440,7 +446,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         </ProtectedRoute>
       </Route>
       <Route path="/data-tools">
-        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+        <ProtectedRoute allowedRoles={['admin', 'superadmin']} userRole={user.role}>
           <DataToolsPage
             students={students}
             onImportStudents={handleImportStudents}
@@ -453,7 +459,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         </ProtectedRoute>
       </Route>
       <Route path="/subjects">
-        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+        <ProtectedRoute allowedRoles={['admin', 'superadmin']} userRole={user.role}>
           <SubjectsPage students={students} />
         </ProtectedRoute>
       </Route>
@@ -467,7 +473,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         />
       </Route>
       <Route path="/reports">
-        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+        <ProtectedRoute allowedRoles={['admin', 'superadmin']} userRole={user.role}>
           <ReportsPage students={students} grades={grades} />
         </ProtectedRoute>
       </Route>
@@ -478,7 +484,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       </Route>
 
       <Route path="/admin/classes">
-        <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
+        <ProtectedRoute allowedRoles={['admin', 'superadmin']} userRole={user.role}>
           <AdminClassesPage />
         </ProtectedRoute>
       </Route>

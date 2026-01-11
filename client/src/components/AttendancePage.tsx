@@ -30,6 +30,7 @@ export default function AttendancePage() {
     const [location, setLocation] = useLocation();
     const searchParams = new URLSearchParams(window.location.search);
     const classId = searchParams.get("classId");
+    const sessionId = searchParams.get("sessionId");
 
     // Default date to today
     const [date, setDate] = useState(() => {
@@ -46,12 +47,17 @@ export default function AttendancePage() {
         if (classId && date) {
             fetchAttendance();
         }
-    }, [classId, date]);
+    }, [classId, date, sessionId]);
 
     const fetchAttendance = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/attendance?classId=${classId}&date=${date}`, {
+            const params = new URLSearchParams();
+            if (classId) params.append("classId", classId);
+            if (date) params.append("date", date);
+            if (sessionId) params.append("sessionId", sessionId);
+
+            const res = await fetch(`/api/attendance?${params.toString()}`, {
                 headers: getAuthHeaders()
             });
             if (res.ok) {
@@ -91,7 +97,8 @@ export default function AttendancePage() {
                 body: JSON.stringify({
                     date,
                     classId,
-                    records
+                    records,
+                    sessionId
                 })
             });
 
@@ -161,13 +168,12 @@ export default function AttendancePage() {
                                                                 onValueChange={(val) => handleStatusChange(student.studentId, val as any)}
                                                                 className="flex gap-4"
                                                             >
-                                                                {['Present', 'Absent', 'Leave', 'Late'].map((statusOption) => (
+                                                                {['Present', 'Absent', 'Leave'].map((statusOption) => (
                                                                     <div key={statusOption} className="flex items-center space-x-2">
                                                                         <RadioGroupItem value={statusOption} id={`${student.studentId}-${statusOption}`} />
                                                                         <Label htmlFor={`${student.studentId}-${statusOption}`} className={
                                                                             statusOption === 'Absent' ? 'text-red-500' :
-                                                                                statusOption === 'Leave' ? 'text-yellow-500' :
-                                                                                    statusOption === 'Late' ? 'text-orange-500' : 'text-green-600'
+                                                                                statusOption === 'Leave' ? 'text-yellow-500' : 'text-green-600'
                                                                         }>
                                                                             {statusOption.charAt(0)}
                                                                         </Label>

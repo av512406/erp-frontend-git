@@ -9,7 +9,7 @@ import StudentFormModal from "./StudentFormModal";
 import StudentViewModal from "./StudentViewModal";
 import PromoteStudentModal from "./PromoteStudentModal";
 import type { Student, InsertStudent } from "@shared/schema";
-import { getAuthHeaders } from "@/lib/utils"; // Ensure this import exists or use localStorage
+import { getAuthHeaders, clearToken } from "@/lib/auth";
 
 interface StudentsPageProps {
   students: Student[];
@@ -32,8 +32,9 @@ export default function StudentsPage({
   isReadOnly = false,
   sessions = [],
   selectedSessionId,
-  onStudentPromoted
-}: StudentsPageProps) {
+  onStudentPromoted,
+  userRole
+}: StudentsPageProps & { userRole?: string }) {
   // Existing State
   const [searchTerm, setSearchTerm] = useState("");
   const [filterGrade, setFilterGrade] = useState<string>("all");
@@ -49,25 +50,38 @@ export default function StudentsPage({
   const [serverData, setServerData] = useState<Student[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(50);
+  const [limit, setLimit] = useState(30);
   const [isLoading, setIsLoading] = useState(false);
 
   // Fetch Server Data
   useEffect(() => {
+    // If we are filtering by Grade, we want to fetch ALL students for that class to enable client-side sorting.
+    // Otherwise (Global view), we use server pagination.
+    const isClassView = filterGrade !== 'all';
+
+    // We update the mode state here or derive it. 
+    // Let's update the effective limit.
+    const effectiveLimit = isClassView ? 1000 : limit;
+
+    // If switching to class view, reset page to 1?
+    // Actually, fetchPage handles the fetch. We just trigger it.
+
     if (!isServerPaginated) return;
 
     const fetchPage = async () => {
       setIsLoading(true);
       try {
         const params = new URLSearchParams();
-        params.append('page', page.toString());
-        params.append('limit', limit.toString());
+        params.append('page', page.toString()); // If class view, backend might ignore or we send 1
+        params.append('limit', effectiveLimit.toString());
         if (selectedSessionId) params.append('sessionId', selectedSessionId);
 
-        // Use helper or direct call
-        const headers: any = { 'Content-Type': 'application/json' };
-        const token = localStorage.getItem('auth_token');
-        if (token) headers['Authorization'] = `Bearer ${token}`;
+        // Pass filters to backend
+        if (filterGrade !== 'all') params.append('grade', filterGrade);
+        if (filterSection !== 'all') params.append('section', filterSection);
+        if (searchTerm) params.append('q', searchTerm); // If backend supports 'q'
+
+        const headers: any = { 'Content-Type': 'application/json', ...getAuthHeaders() };
 
         const res = await fetch(`/api/students?${params.toString()}`, {
           headers
@@ -82,6 +96,13 @@ export default function StudentsPage({
             setServerData(json);
             setServerTotal(json.length);
           }
+        } else {
+          if (res.status === 401) {
+            clearToken();
+            window.location.href = '/';
+            return;
+          }
+          console.error("Fetch failed", res.status);
         }
       } catch (e) {
         console.error("Failed to fetch page", e);
@@ -91,7 +112,7 @@ export default function StudentsPage({
     };
 
     fetchPage();
-  }, [isServerPaginated, page, limit, selectedSessionId]);
+  }, [isServerPaginated, page, limit, selectedSessionId, filterGrade, filterSection, searchTerm]); // Added filters to dep array
 
   // Determine active data
   const activeData = isServerPaginated ? serverData : students;
@@ -149,12 +170,13 @@ export default function StudentsPage({
   };
 
   const columns: Column<Student>[] = [
+
     { header: "Admission No.", accessorKey: "admissionNumber", className: "font-mono", sortable: true },
     { header: "Name", accessorKey: "name", className: "font-medium", sortable: true },
     { header: "Class", accessorKey: "grade", sortable: true },
     { header: "Section", accessorKey: "section", sortable: true },
     { header: "Mobile", accessorKey: "mobileNumber", className: "font-mono" },
-    { header: "Yearly Fee", cell: (s: Student) => `₹${(Number(s.yearlyFeeAmount) || 0).toLocaleString('en-IN')}` },
+    ...(userRole !== 'teacher' ? [{ header: "Yearly Fee", cell: (s: Student) => `₹${(Number(s.yearlyFeeAmount) || 0).toLocaleString('en-IN')}` }] : []),
     !isReadOnly && {
       header: "Actions",
       className: "text-right",
@@ -281,8 +303,9 @@ export default function StudentsPage({
           data={filteredStudents}
 
           // Pagination Props
-          manualPagination={isServerPaginated}
-          totalRows={isServerPaginated ? serverTotal : undefined}
+          // If filtering by Grade, we have all data (limit=1000), so we use CLIENT pagination (manual=false)
+          manualPagination={filterGrade === 'all' && isServerPaginated}
+          totalRows={filterGrade === 'all' && isServerPaginated ? serverTotal : undefined}
           pageSize={limit}
           onPageChange={(p, l) => {
             setPage(p);
@@ -305,6 +328,8 @@ export default function StudentsPage({
         onSave={handleSave}
         student={editingStudent}
         sessions={sessions}
+        currentSessionId={selectedSessionId}
+        userRole={userRole}
       />
       <StudentViewModal
         isOpen={isViewOpen}

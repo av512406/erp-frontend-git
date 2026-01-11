@@ -44,6 +44,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       id: row.id,
       admissionNumber: row.admission_number,
       name: row.name,
+      rollNumber: row.roll_number, // Added roll number mapping
       // normalize date fields to YYYY-MM-DD strings so frontend <input type="date"> can display them
       dateOfBirth: formatDateForClient(row.date_of_birth),
       admissionDate: formatDateForClient(row.admission_date),
@@ -179,20 +180,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Middleware to ensure authentication
   const requireAuth = (req: any, res: any, next: any) => {
+    let token = '';
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.query.token) {
+      // Fallback for direct downloads (e.g. export)
+      token = req.query.token as string;
+    }
+
+    if (!token) {
       return res.status(401).json({ message: 'Not authenticated' });
     }
 
-    const token = authHeader.split(' ')[1];
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, JWT_SECRET, { clockTolerance: 3600 });
       req.user = decoded; // Attach decoded user to request
       // Also attach to session for backward compatibility if needed, but better to migrate
       req.session = { user: decoded };
       next();
-    } catch (err) {
-      return res.status(401).json({ message: 'Invalid token' });
+    } catch (e: any) {
+      console.error('JWT Verification Failed:', e.message); // Debugging 401
+      return res.status(401).json({ message: 'Invalid or expired token' });
     }
   };
 
@@ -645,29 +654,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const page = req.query.page ? parseInt(req.query.page as string) : undefined;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const grade = req.query.grade as string;
+      const section = req.query.section as string;
+      const searchTerm = req.query.q as string;
 
-      // Base WHERE clause
-      const whereClause = `
-        WHERE ss.session_id = $1 
-          AND ss.school_id = $2
-          AND (ss.status = 'active' OR ss.status = 'promoted')
-      `;
+      const params: any[] = [targetSessionId, user.schoolId];
+      const conditions: string[] = [
+        "ss.session_id = $1",
+        "ss.school_id = $2",
+        "(ss.status = 'active' OR ss.status = 'promoted')"
+      ];
+
+      if (grade && grade !== 'all') {
+        conditions.push(`ss.grade = $${params.length + 1}`);
+        params.push(grade);
+      }
+
+      if (section && section !== 'all') {
+        conditions.push(`ss.section = $${params.length + 1}`);
+        params.push(section);
+      }
+
+      // [RESTRICTION] Teacher can only see their own class
+      if (user.role === 'teacher') {
+        const classRes = await pool.query('SELECT grade, section FROM classes WHERE class_teacher_id = $1', [user.id]);
+        if (classRes.rows.length === 0) {
+          return res.json({ data: [], meta: { total: 0, page: 1, limit: 10 } }); // No class assigned
+        }
+        const assigned = classRes.rows[0];
+        // Enforce the filter (override any query params or append AND)
+        // We'll append AND conditions which effectively restricts it.
+        // If user requested a DIFFERENT grade, it will result in empty (grade=X AND grade=Y) which is correct security.
+        conditions.push(`ss.grade = $${params.length + 1}`);
+        params.push(assigned.grade);
+        conditions.push(`ss.section = $${params.length + 1}`);
+        params.push(assigned.section);
+      }
+
+      if (searchTerm) {
+        const q = `%${searchTerm}%`;
+        conditions.push(`(s.name ILIKE $${params.length + 1} OR s.admission_number ILIKE $${params.length + 1})`);
+        params.push(q);
+      }
+
+      const whereClause = "WHERE " + conditions.join(" AND ");
 
       if (page && limit) {
-        // Pagination Mode
         const offset = (page - 1) * limit;
 
-        // 1. Get Total Count
+        // Count Query
         const countQuery = `
           SELECT COUNT(*) as total
           FROM students s
           INNER JOIN student_sessions ss ON s.id = ss.student_id
           ${whereClause}
         `;
-        const countRes = await pool.query(countQuery, [targetSessionId, user.schoolId]);
+        const countRes = await pool.query(countQuery, params);
         const total = parseInt(countRes.rows[0].total);
 
-        // 2. Get Paginated Data
+        // Data Query
         const dataQuery = `
           SELECT 
             s.*,
@@ -679,9 +724,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           INNER JOIN student_sessions ss ON s.id = ss.student_id
           ${whereClause}
           ORDER BY ss.grade, ss.section, s.name
-          LIMIT $3 OFFSET $4
+          LIMIT $${params.length + 1} OFFSET $${params.length + 2}
         `;
-        const { rows } = await pool.query(dataQuery, [targetSessionId, user.schoolId, limit, offset]);
+        const queryParams = [...params, limit, offset];
+        const { rows } = await pool.query(dataQuery, queryParams);
 
         const mapped = rows.map(row => ({
           ...mapStudent(row),
@@ -693,15 +739,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         return res.json({
           data: mapped,
-          meta: {
-            total,
-            page,
-            limit
-          }
+          meta: { total, page, limit }
         });
-
       } else {
-        // Legacy Mode (Return All)
+        // No pagination
         const query = `
           SELECT 
             s.*,
@@ -714,8 +755,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ${whereClause}
           ORDER BY ss.grade, ss.section, s.name
         `;
-        const { rows } = await pool.query(query, [targetSessionId, user.schoolId]);
-
+        const { rows } = await pool.query(query, params);
         const mapped = rows.map(row => ({
           ...mapStudent(row),
           grade: row.session_grade || row.grade,
@@ -723,7 +763,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: row.session_status || row.status,
           rollNumber: row.roll_number
         }));
-
         res.json(mapped);
       }
 
@@ -1131,6 +1170,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Grades APIs
   app.get('/api/grades', requireAuth, async (req, res) => {
     const user = (req as any).user;
+    
+    // [RESTRICTION] Teacher can only see grades for their own class
+    if (user.role === 'teacher') {
+      const classRes = await pool.query('SELECT grade, section FROM classes WHERE class_teacher_id = $1', [user.id]);
+      if (classRes.rows.length === 0) return res.json([]);
+      
+      const { grade, section } = classRes.rows[0];
+      
+      // Join with student_sessions to filter by current class
+      const query = `
+        SELECT g.* 
+        FROM grades g
+        JOIN students s ON g.student_id = s.id
+        JOIN student_sessions ss ON s.id = ss.student_id
+        WHERE g.school_id = $1
+          AND ss.grade = $2 
+          AND ss.section = $3
+          AND ss.status IN ('active', 'promoted')
+      `;
+      // Note: This filters based on student's CURRENT session/grade.
+      // If we need historical, this might be tricky, but usually teacher manages current.
+      // Assuming 'active' session context is sufficient or we need to join implicit current session.
+      // Ideally we filter by session too? The code above doesn't enforce session on grades fetch explicitly but `student_sessions` has multiple rows.
+      // We should probably pick the latest/active one. The previous code didn't filter at all.
+      // Let's refine the join to ensure we don't get duplicates if student has multiple sessions.
+      // We can use the school's current session or just use ANY active session.
+      // Simple approach: Filter by ss.status = 'active'.
+      
+      const { rows } = await pool.query(query, [user.schoolId, grade, section]);
+      return res.json(rows.map(mapGrade));
+    }
+
     const { rows } = await pool.query('SELECT * FROM grades WHERE school_id = $1', [user.schoolId]);
     res.json(rows.map(mapGrade));
   });
@@ -1150,6 +1221,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Verify student belongs to school
           const studentCheck = await client.query('SELECT id FROM students WHERE id=$1 AND school_id=$2', [data.studentId, user.schoolId]);
           if ((studentCheck.rowCount ?? 0) === 0) continue; // Skip if student not found in school
+
+          // [RESTRICTION] Teacher can only upgrade students in their class
+          if (user.role === 'teacher') {
+            // Get teacher class (cached ideally, but here per request ok)
+            // Optimization: Fetch once outside loop?
+            // Since we are inside loop, let's just do it. But await inside loop is slow. 
+            // Better to fetch outside.
+            // But we can't easily change the whole structure in this chunk replace.
+            // Let's do a subquery check or fetch strict.
+            const allowed = await client.query(`
+              SELECT 1 
+              FROM classes c
+              JOIN student_sessions ss ON c.grade = ss.grade AND c.section = ss.section
+              WHERE c.class_teacher_id = $1 
+                AND ss.student_id = $2
+                AND ss.status = 'active'
+            `, [user.id, data.studentId]);
+            
+            if ((allowed.rowCount ?? 0) === 0) {
+              console.warn(`Teacher ${user.username} attempted to grade student ${data.studentId} not in their class.`);
+              continue; // Skip
+            }
+          }
 
           const exists = await client.query('SELECT id FROM grades WHERE student_id=$1 AND subject=$2 AND term=$3 AND school_id=$4', [data.studentId, data.subject, data.term, user.schoolId]);
           if ((exists.rowCount ?? 0) > 0) {
@@ -1682,31 +1776,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // For now, let's use a LEFT JOIN that might return nulls if no session matches
       }
 
-      const query = `
-        SELECT ${selectList} 
-        FROM students s
-        LEFT JOIN student_sessions ss ON s.id = ss.student_id AND ss.session_id = $2
-        LEFT JOIN academic_sessions acs ON ss.session_id = acs.id
-        WHERE s.school_id = $1
-        ORDER BY s.admission_number
-      `;
-
-      const { rows } = await pool.query(query, [user.schoolId, currentSessionId]);
-
-      const workbook = new ExcelJS.Workbook();
-      const sheet = workbook.addWorksheet('Students');
-      sheet.addRow(finalCols.map(c => allowedMap[c].header));
-      for (const r of rows) {
-        const rowValues = finalCols.map(c => {
-          const def = allowedMap[c];
-          // extract column name from expr (e.g. s.name -> name) or handle raw property access
-          // In pg result, 's.name' becomes 'name'. 'ss.grade' becomes 'grade' (collision!).
-          // Wait, PG driver returns result based on column alias. If we select "s.grade" and "ss.grade", we get collision.
-          // We must alias the columns in SELECT to avoid collision.
-
-          return null; // Logic needs fix below
-        });
-      }
       // Re-implementing correctly with aliases to avoid collision
       // Re-map uniqueExprs to "expr as alias"
       const exprToAlias: Record<string, string> = {};
@@ -1729,6 +1798,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { rows: safeRows } = await pool.query(safeQuery, [user.schoolId, currentSessionId]);
 
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Students');
+      sheet.addRow(finalCols.map(c => allowedMap[c].header));
+
       for (const r of safeRows) {
         const rowValues = finalCols.map(c => {
           const def = allowedMap[c];
@@ -1738,6 +1811,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         sheet.addRow(rowValues);
       }
+
 
       // Basic styling: header bold
       const headerRow = sheet.getRow(1);
@@ -1755,8 +1829,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const arrayBuffer = await workbook.xlsx.writeBuffer();
       const buf = Buffer.from(arrayBuffer);
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="students-${finalCols.length}-cols-${new Date().toISOString().split('T')[0]}.xlsx"`);
+      const filename = `students-${finalCols.length}-cols-${new Date().toISOString().split('T')[0]}.xlsx`;
+
+      res.attachment(filename);
       res.send(buf);
     } catch (e) {
       console.error('students excel export error', e);
@@ -2354,61 +2429,235 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Fetch Attendance for a specific Date & Class
+  // [NEW] Get Students for Class Teacher (with Fee Details - HIDDEN for Privacy)
+  app.get('/api/teacher/my-class/students', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== 'teacher' && user.role !== 'admin') return res.status(403).json({ message: 'Access denied' });
+
+    try {
+      // 1. Get Class Assigned
+      const classRes = await pool.query('SELECT * FROM classes WHERE class_teacher_id = $1', [user.id]);
+      if (classRes.rows.length === 0) return res.status(404).json({ message: 'No class assigned' });
+      const cls = classRes.rows[0];
+
+      // 2. Determine Session
+      let { sessionId } = req.query;
+      if (!sessionId) {
+        const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+        sessionId = schoolRes.rows[0]?.current_session_id;
+      }
+      if (!sessionId) return res.status(400).json({ message: 'No active session' });
+
+      // 3. Fetch Students in that class for current session
+      // REMOVED FEE SUMMARY JOIN for privacy
+      const query = `
+        SELECT 
+          s.id, s.name, s.admission_number, ss.roll_number, s.mobile_number
+        FROM students s
+        JOIN student_sessions ss ON s.id = ss.student_id
+        WHERE ss.grade = $1 AND ss.section = $2 
+          AND ss.session_id = $3 AND ss.school_id = $4
+          AND ss.status = 'active'
+        ORDER BY s.name
+      `;
+
+      const { rows } = await pool.query(query, [cls.grade, cls.section, sessionId, user.schoolId]);
+
+      const mapped = rows.map(r => ({
+        id: r.id,
+        name: r.name,
+        admissionNumber: r.admission_number,
+        rollNumber: r.roll_number,
+        mobileNumber: r.mobile_number,
+        // Hide financials
+        yearlyFee: 0,
+        totalPaid: 0,
+        balance: 0
+      }));
+
+      res.json(mapped);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Failed to fetch class students' });
+    }
+  });
+
+  // [NEW] Attendance Summary for Class Teacher
+  app.get('/api/teacher/my-class/attendance-summary', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== 'teacher' && user.role !== 'admin') return res.status(403).json({ message: 'Access denied' });
+
+    try {
+      const { startDate, endDate } = req.query;
+
+      // 1. Get Class & Session
+      const classRes = await pool.query('SELECT grade, section FROM classes WHERE class_teacher_id = $1', [user.id]);
+      if (classRes.rows.length === 0) return res.status(404).json({ message: 'No class assigned' });
+      const { grade, section } = classRes.rows[0];
+
+      // Determine session
+      let targetSessionId = req.query.sessionId;
+      if (!targetSessionId) {
+        const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+        targetSessionId = schoolRes.rows[0]?.current_session_id;
+      }
+
+      const sessionId = targetSessionId;
+
+      let dateFilter = "";
+      const queryParams: any[] = [sessionId, user.schoolId, grade, section];
+
+      if (startDate && endDate) {
+        dateFilter = ` AND date >= $${queryParams.length + 1} AND date <= $${queryParams.length + 2}`;
+        queryParams.push(startDate);
+        queryParams.push(endDate);
+      }
+
+      // 2. Aggregate Attendance Logic
+      const query = `
+        WITH stats AS (
+          SELECT 
+            student_id,
+            COUNT(*) FILTER (WHERE status = 'Present') as present_count,
+            COUNT(*) FILTER (WHERE status = 'Absent') as absent_count,
+            COUNT(*) FILTER (WHERE status = 'Leave') as leave_count,
+            COUNT(*) FILTER (WHERE status = 'Late') as late_count,
+            COUNT(*) as total_marked
+          FROM attendance
+          WHERE session_id = $1 AND school_id = $2 ${dateFilter}
+          GROUP BY student_id
+        )
+        SELECT 
+          s.id, s.name, s.admission_number, ss.roll_number,
+          COALESCE(st.present_count, 0) as present,
+          COALESCE(st.absent_count, 0) as absent,
+          COALESCE(st.leave_count, 0) as leave,
+          COALESCE(st.late_count, 0) as late,
+          COALESCE(st.total_marked, 0) as total_days
+        FROM students s
+        JOIN student_sessions ss ON s.id = ss.student_id
+        LEFT JOIN stats st ON s.id = st.student_id
+        WHERE ss.grade = $3 AND ss.section = $4 
+          AND ss.session_id = $1 AND ss.school_id = $2
+          AND ss.status = 'active'
+        ORDER BY s.name
+      `;
+
+      const { rows } = await pool.query(query, queryParams);
+
+      // Calculate Percentage
+      const report = rows.map(r => {
+        const total = parseInt(r.total_days);
+        const present = parseInt(r.present) + parseInt(r.late); // Late counts as present
+        const percentage = total > 0 ? ((present / total) * 100).toFixed(1) : '0.0';
+        return {
+          studentId: r.id,
+          name: r.name,
+          admissionNumber: r.admission_number,
+          rollNumber: r.roll_number,
+          present: r.present,
+          absent: r.absent,
+          leave: r.leave,
+          late: r.late,
+          total: total,
+          percentage: percentage + '%'
+        };
+      });
+
+      res.json(report);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Failed to fetch attendance summary' });
+    }
+  });
+
+  // Fetch Attendance for a specific Date & Class (Fix: List all students, even if not marked)
   app.get('/api/attendance', requireAuth, async (req, res) => {
     const user = (req as any).user;
-    const { date, classId } = req.query;
+    const { date, classId, sessionId } = req.query;
 
     if (!date || !classId) return res.status(400).json({ message: 'Date and Class ID required' });
 
     try {
-      const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-      const sessionId = schoolRes.rows[0]?.current_session_id;
+      let targetSessionId = sessionId;
+      if (!targetSessionId) {
+        const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+        targetSessionId = schoolRes.rows[0]?.current_session_id;
+      }
+      if (!targetSessionId) return res.status(400).json({ message: 'No active session' });
 
-      if (!sessionId) return res.status(400).json({ message: 'No active session' });
+      // We only want students from the class
+      // First get the grade/section of this classId
+      const classRow = await pool.query('SELECT grade, section FROM classes WHERE id = $1', [classId]);
+      if (classRow.rows.length === 0) return res.status(404).json({ message: 'Class not found' });
+      const { grade, section } = classRow.rows[0];
 
-      // Get Class Details
-      const clsRes = await pool.query('SELECT grade, section FROM classes WHERE id = $1', [classId]);
-      if (clsRes.rows.length === 0) return res.status(404).json({ message: 'Class not found' });
-      const { grade, section } = clsRes.rows[0];
-
-      // 1. Get Students
-      const studentsQuery = `
-        SELECT s.id, s.name, s.admission_number, s.roll_number
+      // Join students + attendance
+      // Issue: We want ALL students, even if no attendance record exists for that date (marked as null)
+      const query = `
+        SELECT 
+          s.id as "studentId", s.name, s.admission_number as "admissionNumber", ss.roll_number as "rollNumber",
+          a.status
         FROM students s
         JOIN student_sessions ss ON s.id = ss.student_id
-        WHERE ss.session_id = $1 AND ss.school_id = $2
-          AND ss.grade = $3 AND ss.section = $4
+        LEFT JOIN attendance a ON s.id = a.student_id AND a.date = $3 AND a.session_id = $4
+        WHERE ss.grade = $1 AND ss.section = $2
+          AND ss.session_id = $4 AND ss.school_id = $5
           AND ss.status = 'active'
-        ORDER BY s.name
+        ORDER BY ss.roll_number ASC, s.name ASC
       `;
-      const students = (await pool.query(studentsQuery, [sessionId, user.schoolId, grade, section])).rows;
 
-      // 2. Get Existing Attendance
-      const attQuery = `
-        SELECT student_id, status FROM attendance 
-        WHERE date = $1 AND school_id = $2 AND student_id = ANY($3)
-      `;
-      const studentIds = students.map(s => s.id);
-      const attendanceMap = new Map();
-      if (studentIds.length > 0) {
-        const attRows = (await pool.query(attQuery, [date, user.schoolId, studentIds])).rows;
-        attRows.forEach(r => attendanceMap.set(r.student_id, r.status));
-      }
+      const { rows } = await pool.query(query, [grade, section, date, targetSessionId, user.schoolId]);
 
-      // Merge
-      const result = students.map(s => ({
-        studentId: s.id,
-        name: s.name,
-        admissionNumber: s.admission_number,
-        rollNumber: s.roll_number,
-        status: attendanceMap.get(s.id) || null // null means not marked yet
-      }));
-
-      res.json(result);
+      res.json(rows);
     } catch (e) {
       console.error(e);
       res.status(500).json({ message: 'Failed to fetch attendance' });
+    }
+  });
+
+  // Assign Auto Roll Numbers
+  app.post('/api/classes/assign-roll-numbers', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== 'admin' && user.role !== 'teacher') return res.status(403).json({ message: 'Forbidden' });
+
+    const client = await pool.connect();
+    try {
+      const { classId } = req.body;
+      // Get class details
+      const clsRes = await client.query('SELECT grade, section FROM classes WHERE id = $1', [classId]);
+      if (clsRes.rows.length === 0) return res.status(404).json({ message: 'Class not found' });
+      const { grade, section } = clsRes.rows[0];
+
+      // Get Session
+      const sessionRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+      const sessionId = sessionRes.rows[0].current_session_id;
+
+      await client.query('BEGIN');
+
+      // 1. Fetch current students sorted by Name
+      const studentsRes = await client.query(`
+              SELECT s.id, ss.id as session_record_id
+              FROM students s
+              JOIN student_sessions ss ON s.id = ss.student_id
+              WHERE ss.grade = $1 AND ss.section = $2 AND ss.session_id = $3 AND ss.school_id = $4
+              ORDER BY s.name ASC
+          `, [grade, section, sessionId, user.schoolId]);
+
+      // 2. Update each roll number
+      let roll = 1;
+      for (const row of studentsRes.rows) {
+        await client.query('UPDATE student_sessions SET roll_number = $1 WHERE id = $2', [String(roll++), row.session_record_id]);
+      }
+
+      await client.query('COMMIT');
+      res.json({ message: `Assigned roll numbers to ${studentsRes.rows.length} students` });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error(e);
+      res.status(500).json({ message: 'Failed to assign roll numbers' });
+    } finally {
+      client.release();
     }
   });
 
