@@ -26,6 +26,7 @@ const schoolSchema = z.object({
     features: z.object({
         attendance: z.boolean().default(false),
         transport: z.boolean().default(false),
+        sms: z.boolean().default(false),
     }).optional(),
 });
 
@@ -39,7 +40,7 @@ interface School {
     phone?: string;
     logoUrl?: string;
     is_active: boolean;
-    features?: { attendance: boolean; transport?: boolean };
+    features?: { attendance: boolean; transport?: boolean; sms?: boolean };
 }
 
 const adminSchema = z.object({
@@ -67,7 +68,8 @@ export default function SuperAdminDashboard() {
             address: "",
             phone: "",
             logoUrl: "",
-            features: { attendance: false, transport: false },
+            logoUrl: "",
+            features: { attendance: false, transport: false, sms: false },
         },
     });
 
@@ -184,6 +186,7 @@ export default function SuperAdminDashboard() {
             features: {
                 attendance: school.features?.attendance || false,
                 transport: school.features?.transport || false,
+                sms: school.features?.sms || false,
             },
         });
         setOpen(true);
@@ -363,6 +366,26 @@ export default function SuperAdminDashboard() {
                                                         <FormLabel>Enable Transport (Pro)</FormLabel>
                                                         <div className="text-[0.8rem] text-muted-foreground">
                                                             Allow this school to manage transport routes and fees.
+                                                        </div>
+                                                    </div>
+                                                    <FormControl>
+                                                        <Switch
+                                                            checked={field.value}
+                                                            onCheckedChange={field.onChange}
+                                                        />
+                                                    </FormControl>
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="features.sms"
+                                            render={({ field }) => (
+                                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                                                    <div className="space-y-0.5">
+                                                        <FormLabel>Enable SMS Notifications (Pro)</FormLabel>
+                                                        <div className="text-[0.8rem] text-muted-foreground">
+                                                            Allow this school to send SMS notifications to parents.
                                                         </div>
                                                     </div>
                                                     <FormControl>
