@@ -165,7 +165,6 @@ export default function TransportPage() {
 
                 // Refresh data
                 await fetchTransactions(selectedStudent.student_id);
-                // We also need to update the total_paid for the selected student locally to reflect changes immediately in UI
                 fetchData();
 
                 // Optimistic local update for smoothing UI
@@ -201,17 +200,17 @@ export default function TransportPage() {
     });
 
     return (
-        <div className="container mx-auto p-6 space-y-6">
-            <div className="flex justify-between items-center">
+        <div className="container mx-auto p-4 md:p-6 space-y-6">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Transport Management</h1>
-                    <p className="text-muted-foreground">Manage transport assignments and fees</p>
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Transport Management</h1>
+                    <p className="text-sm md:text-base text-muted-foreground">Manage transport assignments and fees</p>
                 </div>
                 <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                     <DialogTrigger asChild>
-                        <Button><Plus className="h-4 w-4 mr-2" /> Add Student</Button>
+                        <Button className="w-full md:w-auto"><Plus className="h-4 w-4 mr-2" /> Add Student</Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-h-[85vh] overflow-y-auto w-[95vw] max-w-lg">
                         <DialogHeader>
                             <DialogTitle>Add Student to Transport</DialogTitle>
                         </DialogHeader>
@@ -264,85 +263,135 @@ export default function TransportPage() {
                 </Dialog>
             </div>
 
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
+            <Card className="border-none shadow-sm md:border md:shadow">
+                <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-0 md:px-6">
                     <div>
-                        <CardTitle>Transport Students</CardTitle>
+                        <CardTitle className="text-lg md:text-xl">Transport Students</CardTitle>
                         <CardDescription>
                             Total Using Transport: {assignedStudents.length}
                         </CardDescription>
                     </div>
-                    <div className="relative w-64">
+                    <div className="relative w-full md:w-64">
                         <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
                             placeholder="Search student..."
-                            className="pl-8"
+                            className="pl-8 w-full"
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                         />
                     </div>
                 </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Information</TableHead>
-                                <TableHead>Class</TableHead>
-                                <TableHead>Type</TableHead>
-                                <TableHead>Yearly Fee</TableHead>
-                                <TableHead>Paid</TableHead>
-                                <TableHead>Balance</TableHead>
-                                <TableHead className="text-right">Action</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {filteredRecords.length === 0 ? (
+                <CardContent className="px-0 md:px-6">
+                    {/* Desktop View */}
+                    <div className="hidden md:block rounded-md border">
+                        <Table>
+                            <TableHeader>
                                 <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                                        No students using transport found.
-                                    </TableCell>
+                                    <TableHead>Information</TableHead>
+                                    <TableHead>Class</TableHead>
+                                    <TableHead>Type</TableHead>
+                                    <TableHead>Yearly Fee</TableHead>
+                                    <TableHead>Paid</TableHead>
+                                    <TableHead>Balance</TableHead>
+                                    <TableHead className="text-right">Action</TableHead>
                                 </TableRow>
-                            ) : (
-                                filteredRecords.map(record => {
-                                    const balance = record.yearly_fee - record.total_paid;
-                                    return (
-                                        <TableRow key={record.transport_record_id}>
-                                            <TableCell>
-                                                <div className="font-medium">{record.student_name}</div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    ID: {record.admission_number}
-                                                    {record.father_name && ` • F: ${record.father_name}`}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>{record.grade} - {record.section}</TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    {record.transport_type === 'Bus' ? <Bus className="h-4 w-4 text-blue-500" /> : <Car className="h-4 w-4 text-orange-500" />}
-                                                    {record.transport_type}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>₹{record.yearly_fee.toLocaleString()}</TableCell>
-                                            <TableCell className="text-green-600">₹{record.total_paid.toLocaleString()}</TableCell>
-                                            <TableCell className={balance > 0 ? "text-red-500 font-bold" : "text-gray-500"}>
+                            </TableHeader>
+                            <TableBody>
+                                {filteredRecords.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                                            No students using transport found.
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    filteredRecords.map(record => {
+                                        const balance = record.yearly_fee - record.total_paid;
+                                        return (
+                                            <TableRow key={record.transport_record_id}>
+                                                <TableCell>
+                                                    <div className="font-medium">{record.student_name}</div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        ID: {record.admission_number}
+                                                        {record.father_name && ` • F: ${record.father_name}`}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>{record.grade} - {record.section}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2">
+                                                        {record.transport_type === 'Bus' ? <Bus className="h-4 w-4 text-blue-500" /> : <Car className="h-4 w-4 text-orange-500" />}
+                                                        {record.transport_type}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>₹{record.yearly_fee.toLocaleString()}</TableCell>
+                                                <TableCell className="text-green-600">₹{record.total_paid.toLocaleString()}</TableCell>
+                                                <TableCell className={balance > 0 ? "text-red-500 font-bold" : "text-gray-500"}>
+                                                    ₹{balance.toLocaleString()}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button size="sm" variant="outline" onClick={() => openDetails(record)}>
+                                                        <Eye className="h-4 w-4 mr-2" /> Details
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+
+                    {/* Mobile View - Cards */}
+                    <div className="md:hidden space-y-4">
+                        {filteredRecords.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground border rounded-lg bg-muted/10">
+                                No students found.
+                            </div>
+                        ) : (
+                            filteredRecords.map(record => {
+                                const balance = record.yearly_fee - record.total_paid;
+                                return (
+                                    <div key={record.transport_record_id} className="border rounded-lg p-4 bg-card text-card-foreground shadow-sm space-y-3">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <h3 className="font-semibold">{record.student_name}</h3>
+                                                <p className="text-xs text-muted-foreground">{record.admission_number} | {record.grade}-{record.section}</p>
+                                                {record.father_name && <p className="text-xs text-muted-foreground">F: {record.father_name}</p>}
+                                            </div>
+                                            <div className={`px-2 py-1 rounded text-xs font-semibold ${balance > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                                                {balance > 0 ? 'Due' : 'Paid'}
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-2 text-sm">
+                                            <div className="flex items-center gap-1 text-muted-foreground">
+                                                {record.transport_type === 'Bus' ? <Bus className="h-3 w-3" /> : <Car className="h-3 w-3" />}
+                                                {record.transport_type}
+                                            </div>
+                                            <div className="text-right font-medium">₹{record.yearly_fee.toLocaleString()}</div>
+
+                                            <div className="text-muted-foreground">Paid</div>
+                                            <div className="text-right text-green-600">₹{record.total_paid.toLocaleString()}</div>
+
+                                            <div className="text-muted-foreground">Balance</div>
+                                            <div className={`text-right font-bold ${balance > 0 ? 'text-red-500' : 'text-gray-500'}`}>
                                                 ₹{balance.toLocaleString()}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Button size="sm" variant="outline" onClick={() => openDetails(record)}>
-                                                    <Eye className="h-4 w-4 mr-2" /> Details
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })
-                            )}
-                        </TableBody>
-                    </Table>
+                                            </div>
+                                        </div>
+
+                                        <Button className="w-full" variant="outline" onClick={() => openDetails(record)}>
+                                            View Details
+                                        </Button>
+                                    </div>
+                                )
+                            })
+                        )}
+                    </div>
                 </CardContent>
             </Card>
 
             {/* DETAILS & PAYMENT DIALOG */}
             <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-                <DialogContent className="max-w-3xl">
+                <DialogContent className="max-h-[85vh] overflow-y-auto w-[95vw] max-w-3xl">
                     <DialogHeader>
                         <DialogTitle>Transport Details</DialogTitle>
                     </DialogHeader>
@@ -351,9 +400,14 @@ export default function TransportPage() {
                             {/* Summary Cards */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <Card>
-                                    <CardContent className="pt-6">
-                                        <div className="text-2xl font-bold">₹{selectedStudent.yearly_fee.toLocaleString()}</div>
-                                        <p className="text-xs text-muted-foreground">Total Fee</p>
+                                    <CardContent className="pt-6 flex justify-between md:block">
+                                        <div>
+                                            <p className="text-xs text-muted-foreground">Total Fee</p>
+                                            <div className="text-2xl font-bold">₹{selectedStudent.yearly_fee.toLocaleString()}</div>
+                                        </div>
+                                        <div className="md:hidden">
+                                            {/* Icon or visual filler could go here */}
+                                        </div>
                                     </CardContent>
                                 </Card>
                                 <Card>
@@ -372,7 +426,7 @@ export default function TransportPage() {
                                 </Card>
                             </div>
 
-                            <div className="flex justify-between items-center">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                 <div className="space-y-1">
                                     <h3 className="font-semibold">{selectedStudent.student_name}</h3>
                                     <p className="text-sm text-muted-foreground">
@@ -382,14 +436,14 @@ export default function TransportPage() {
                                         <p className="text-sm text-muted-foreground">Father: {selectedStudent.father_name}</p>
                                     )}
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 w-full md:w-auto">
                                     {!isPayMode ? (
-                                        <Button onClick={() => setIsPayMode(true)}>
+                                        <Button className="flex-1 md:flex-none" onClick={() => setIsPayMode(true)}>
                                             <Plus className="h-4 w-4 mr-2" /> Add Payment
                                         </Button>
                                     ) : (
-                                        <Button variant="outline" onClick={() => setIsPayMode(false)}>
-                                            Cancel Payment
+                                        <Button className="flex-1 md:flex-none" variant="outline" onClick={() => setIsPayMode(false)}>
+                                            Cancel
                                         </Button>
                                     )}
                                 </div>

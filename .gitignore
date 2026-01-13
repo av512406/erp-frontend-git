@@ -27,3 +27,6 @@ debug_*.ts
 migration_*.ts
 scripts/
 Dockerfile.backup
+check_role.cjs
+test_students.cjs
+server/seed-super-admin.ts
