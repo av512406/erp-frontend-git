@@ -888,11 +888,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await client.query('COMMIT');
       res.json({ message: `Promoted/Imported ${inserted.length} students` });
     } catch (e) {
-      await client.query('ROLLBACK');
-      console.error(e);
-      res.status(500).json({ message: 'Promotion failed' });
-    } finally {
-      client.release();
+      res.status(500).json({ message: 'Failed to fetch absentee list' });
     }
   });
 
@@ -2702,6 +2698,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: 'Failed to assign roll numbers' });
     } finally {
       client.release();
+    }
+  });
+
+
+  // [NEW] Get Absentee List for a specific date
+  app.get('/api/attendance/absent', requireAuth, requireFeature('attendance'), async (req, res) => {
+    const user = (req as any).user;
+    if (!user.schoolId) return res.status(400).json({ message: "School ID required" });
+
+    const { date: reportDate, sessionId } = req.query;
+    if (!reportDate) return res.status(400).json({ message: "Date is required" });
+
+    try {
+      const query = `
+        SELECT 
+          s.name as student_name,
+          s.admission_number,
+          s.father_name,
+          s.mobile_number,
+          ss.grade,
+          ss.section,
+          ss.roll_number,
+          a.status
+        FROM attendance a
+        JOIN students s ON a.student_id = s.id
+        JOIN student_sessions ss ON s.id = ss.student_id
+        WHERE a.school_id = $1
+          AND a.date = $2
+          AND a.status IN ('Absent', 'Leave')
+          AND ss.session_id = $3
+        ORDER BY ss.grade, ss.section, s.name
+      `;
+
+      let targetSessionId = sessionId;
+      if (!targetSessionId) {
+        const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+        targetSessionId = schoolRes.rows[0]?.current_session_id;
+      }
+
+      if (!targetSessionId) return res.status(400).json({ message: "Session not found" });
+
+      const { rows } = await pool.query(query, [user.schoolId, reportDate, targetSessionId]);
+      res.json(rows.map(row => ({
+        name: row.student_name,
+        admissionNumber: row.admission_number,
+        fatherName: row.father_name,
+        mobileNumber: row.mobile_number,
+        className: `${row.grade}-${row.section}`,
+        rollNumber: row.roll_number,
+        status: row.status
+      })));
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Failed to fetch absentee list' });
     }
   });
 

@@ -373,7 +373,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         )}
       </Route>
       <Route path="/attendance">
-        <ProtectedRoute allowedRoles={['teacher']} userRole={user.role}>
+        <ProtectedRoute allowedRoles={['teacher', 'admin']} userRole={user.role}>
           <AttendancePage />
         </ProtectedRoute>
       </Route>
