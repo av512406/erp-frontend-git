@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/auth";
-import { Plus, Search, Wallet, Bus, Car, Eye, History, CreditCard } from "lucide-react";
+import { Plus, Search, Wallet, Bus, Car, Eye, History, CreditCard, Pencil } from "lucide-react";
 import { format } from "date-fns";
 
 interface TransportRecord {
@@ -64,6 +64,15 @@ export default function TransportPage() {
         remarks: ''
     });
     const [isPayMode, setIsPayMode] = useState(false); // Toggle within dialog to show payment form
+
+    // Edit State
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+    const [editData, setEditData] = useState({
+        recordId: '',
+        studentName: '',
+        transportType: 'Bus',
+        yearlyFee: ''
+    });
 
     // Search & Filter
     const [searchTerm, setSearchTerm] = useState('');
@@ -137,6 +146,39 @@ export default function TransportPage() {
             }
         } catch (e) {
             toast({ title: "Error", description: "Failed to assign student", variant: "destructive" });
+        }
+    };
+
+    const openEdit = (record: TransportRecord) => {
+        setEditData({
+            recordId: record.transport_record_id,
+            studentName: record.student_name,
+            transportType: record.transport_type,
+            yearlyFee: String(record.yearly_fee)
+        });
+        setIsEditDialogOpen(true);
+    };
+
+    const handleUpdateAssignment = async () => {
+        try {
+            const res = await fetch(`/api/transport/records/${editData.recordId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                body: JSON.stringify({
+                    transportType: editData.transportType,
+                    yearlyFee: Number(editData.yearlyFee)
+                })
+            });
+
+            if (res.ok) {
+                toast({ title: "Success", description: "Updated successfully" });
+                setIsEditDialogOpen(false);
+                fetchData();
+            } else {
+                throw new Error("Failed to update");
+            }
+        } catch (e) {
+            toast({ title: "Error", description: "Failed to update", variant: "destructive" });
         }
     };
 
@@ -328,6 +370,9 @@ export default function TransportPage() {
                                                     ₹{balance.toLocaleString()}
                                                 </TableCell>
                                                 <TableCell className="text-right">
+                                                    <Button size="sm" variant="outline" onClick={() => openEdit(record)} className="mr-2">
+                                                        <Pencil className="h-4 w-4" />
+                                                    </Button>
                                                     <Button size="sm" variant="outline" onClick={() => openDetails(record)}>
                                                         <Eye className="h-4 w-4 mr-2" /> Details
                                                     </Button>
@@ -518,6 +563,45 @@ export default function TransportPage() {
                     )}
                 </DialogContent>
             </Dialog>
-        </div>
+
+            {/* EDIT DIALOG */}
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Transport Details</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div>
+                            <Label>Student</Label>
+                            <div className="font-medium">{editData.studentName}</div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Transport Type</Label>
+                            <Select
+                                value={editData.transportType}
+                                onValueChange={(val) => setEditData({ ...editData, transportType: val })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Bus">Bus</SelectItem>
+                                    <SelectItem value="Van">Van</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Yearly Fee (₹)</Label>
+                            <Input
+                                type="number"
+                                value={editData.yearlyFee}
+                                onChange={e => setEditData({ ...editData, yearlyFee: e.target.value })}
+                            />
+                        </div>
+                        <Button className="w-full" onClick={handleUpdateAssignment}>Update</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </div >
     );
 }

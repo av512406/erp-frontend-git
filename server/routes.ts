@@ -2861,6 +2861,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put('/api/transport/records/:id', requireAuth, requireFeature('transport'), async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== 'admin' && user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
+
+    try {
+      const { id } = req.params;
+      const { yearlyFee, transportType } = req.body;
+
+      const q = await pool.query(
+        'UPDATE transport_records SET yearly_fee = $1, transport_type = $2, updated_at = now() WHERE id = $3 AND school_id = $4 RETURNING *',
+        [yearlyFee, transportType, id, user.schoolId]
+      );
+
+      if (q.rowCount === 0) return res.status(404).json({ message: 'Record not found' });
+      res.json(q.rows[0]);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: 'Failed to update transport record' });
+    }
+  });
+
   // Assign Student to Transport (Simplified)
   app.post('/api/transport/assign', requireAuth, requireFeature('transport'), async (req, res) => {
     const user = (req as any).user;
