@@ -19,7 +19,8 @@ import {
   LogOut,
   Settings,
   UserX,
-  Menu
+  Menu,
+  Bus
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -61,67 +62,13 @@ export default function Navigation({ userRole, userEmail, onLogout, sessions = [
   ];
 
   if (config.features?.attendance) {
-    adminLinks.splice(1, 0, { path: "/attendance", label: "Attendance", icon: Users }); // Insert after Dashboard? Or anywhere.
-    // Actually the user wants it visible. Let's add it if enabled.
-    // Admin links didn't have attendance in the original file I viewed in Step 197?
-    // Let me check Step 197 again.
-    // Line 55: Dashboard, Fees, Reports, Grades, Data Tools. Attendance was MISSING in `adminLinks` but likely in `teacherLinks`?
-    // Line 64: teacherLinks: Dashboard, Grades.
-
-    // Wait, where is Attendance link usually?
-    // In `App.tsx` line 23: `AttendancePage`.
-    // In `App.tsx` line 374: Route `/attendance`.
-
-    // In `Navigation.tsx`, I don't see "Attendance" link in `adminLinks` or `teacherLinks` in the file I viewed?!
-    // Maybe I missed it or it wasn't there?
-    // Let me check Step 197 line 55-62.
-    // { path: "/", ... }, { path: "/fees", ... }, { path: "/reports", ... }, { path: "/grades", ... }, { path: "/data-tools", ... }
-    // No Attendance link!
-
-    // Ah, maybe the user wants to ADD it now?
-    // Or maybe it was just not linked for Admin?
-    // But `App.tsx` has logic for it?
-    // `App.tsx`: `<Route path="/attendance"><ProtectedRoute allowedRoles={['teacher']} ...>`
-    // So only teachers had access.
-
-    // So I should check `teacherLinks` in `Navigation.tsx`.
-    // Line 64: { path: "/", ... }, { path: "/grades", ... }
-    // Still no attendance link for teacher?
-    // Maybe it's hardcoded somewhere else or I missed it?
-    // Or maybe the user *wants* "Attendance" feature which implies adding it?
-
-    // "Like 1st such feature is attendance".
-    // "I want those features to be on/off".
-
-    // If the link wasn't there, I should add it now, strictly controlled.
-    // But wait, if it wasn't there, how did they use it?
-    // Maybe checking `TeacherDashboard.tsx` content?
-    // Step 42 `GradesPage.tsx`...
-    // Step 37 `App.tsx` has `<Route path="/attendance">`.
-
-    // Let's check `TeacherDashboard.tsx`. I viewed it in Step 40 (Code Interaction Summary) but not fully in recent turns.
-    // Summary says: "displays class info... and provides links to mark attendance".
-
-    // So `TeacherDashboard` HAS the link internally?
-    // If so, I need to hide it THERE.
-
-    // Also, `Navigation.tsx` seems to be the main nav. If I add it there for "Pro" users, that's good.
-    // But primarily I need to find where the link EXISTS currently.
-
-    // If `TeacherDashboard` has it, I need to modify `TeacherDashboard.tsx`.
-
-    // Let's modify `TeacherDashboard.tsx` toggle logic.
-    // And also `SuperAdminDashboard.tsx`.
-
-    // I'll stick to `Navigation.tsx` update if I want to ADD it to nav for Pro users, or just ignore if it wasn't there.
-    // But the prompt says "Like 1st such feature is attendance".
-
-    // Let's modify `TeacherDashboard.tsx` to conditionally show the Attendance Widget/Link.
-    // And modify `App.tsx` to protect the route.
-
-    // I will read `TeacherDashboard.tsx` now to be sure.
-
+    adminLinks.splice(1, 0, { path: "/attendance", label: "Attendance", icon: Users });
   }
+
+  if (config.features?.transport) {
+    adminLinks.splice(2, 0, { path: "/transport", label: "Transport", icon: Bus });
+  }
+
 
   const teacherLinks = [
     { path: "/", label: "Dashboard", icon: LayoutDashboard },

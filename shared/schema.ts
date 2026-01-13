@@ -266,3 +266,45 @@ export const attendance = pgTable("attendance", {
 export const insertAttendanceSchema = createInsertSchema(attendance).omit({ id: true, schoolId: true, markedBy: true });
 export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
 export type Attendance = typeof attendance.$inferSelect;
+
+// --- Transport System ---
+
+export const transportRoutes = pgTable("transport_routes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(), // e.g., "Route 1 - Downtown"
+  feeAmount: decimal("fee_amount", { precision: 10, scale: 2 }).notNull(), // Annual Fee
+  vehicleNumber: text("vehicle_number"),
+  schoolId: varchar("school_id").notNull().references(() => schools.id),
+});
+
+export const insertTransportRouteSchema = createInsertSchema(transportRoutes).omit({ id: true, schoolId: true });
+export type InsertTransportRoute = z.infer<typeof insertTransportRouteSchema>;
+export type TransportRoute = typeof transportRoutes.$inferSelect;
+
+export const studentTransport = pgTable("student_transport", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: varchar("student_id").notNull().references(() => students.id),
+  // routeId: varchar("route_id").notNull().references(() => transportRoutes.id), // Deprecated/Removed
+  transportType: text("transport_type").notNull().default('Bus'), // 'Bus' or 'Van'
+  yearlyFee: decimal("yearly_fee", { precision: 10, scale: 2 }).notNull().default('0'),
+  schoolId: varchar("school_id").notNull().references(() => schools.id),
+  sessionId: varchar("session_id").notNull().references(() => academicSessions.id),
+});
+
+export const insertStudentTransportSchema = createInsertSchema(studentTransport).omit({ id: true, schoolId: true });
+export type InsertStudentTransport = z.infer<typeof insertStudentTransportSchema>;
+export type StudentTransport = typeof studentTransport.$inferSelect;
+
+export const transportFeeTransactions = pgTable("transport_fee_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: varchar("student_id").notNull().references(() => students.id),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  paymentDate: date("payment_date").notNull(),
+  remarks: text("remarks"),
+  schoolId: varchar("school_id").notNull().references(() => schools.id),
+  sessionId: varchar("session_id").notNull().references(() => academicSessions.id),
+});
+
+export const insertTransportFeeTransactionSchema = createInsertSchema(transportFeeTransactions).omit({ id: true, schoolId: true });
+export type InsertTransportFeeTransaction = z.infer<typeof insertTransportFeeTransactionSchema>;
+export type TransportFeeTransaction = typeof transportFeeTransactions.$inferSelect;

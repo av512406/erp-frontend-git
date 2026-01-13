@@ -21,6 +21,7 @@ import SuperAdminDashboard from "@/components/SuperAdminDashboard";
 import AdminClassesPage from "@/components/AdminClassesPage";
 import TeacherDashboard from "@/components/TeacherDashboard";
 import AttendancePage from "@/components/AttendancePage";
+import TransportPage from "@/components/TransportPage";
 
 import type { Student } from "@shared/schema";
 import type { FeeTransaction } from "@/components/FeesPage";
@@ -445,6 +446,11 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
           />
         </ProtectedRoute>
       </Route>
+      <Route path="/transport">
+        <ProtectedRoute allowedRoles={['admin', 'superadmin']} userRole={user.role}>
+          <TransportPage />
+        </ProtectedRoute>
+      </Route>
       <Route path="/data-tools">
         <ProtectedRoute allowedRoles={['admin', 'superadmin']} userRole={user.role}>
           <DataToolsPage
@@ -495,7 +501,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         </ProtectedRoute>
       </Route>
       <Route component={NotFound} />
-    </Switch>
+    </Switch >
   );
 }
 

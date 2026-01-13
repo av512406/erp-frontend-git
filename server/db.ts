@@ -456,6 +456,44 @@ export async function ensureTables(retries = 20, delayMs = 2000) {
 
       ALTER TABLE teachers ADD COLUMN IF NOT EXISTS user_id text REFERENCES users(id);
 
+      -- MIGRATION: Transport System
+      CREATE TABLE IF NOT EXISTS transport_routes (
+        id text PRIMARY KEY,
+        name text NOT NULL,
+        fee_amount numeric(10,2) NOT NULL,
+        vehicle_number text,
+        school_id text NOT NULL REFERENCES schools(id),
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS student_transport (
+        id text PRIMARY KEY,
+        student_id text NOT NULL REFERENCES students(id),
+        route_id text NOT NULL REFERENCES transport_routes(id),
+        school_id text NOT NULL REFERENCES schools(id),
+        session_id text NOT NULL REFERENCES academic_sessions(id),
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE(student_id, session_id)
+      );
+
+      -- MIGRATION: Update Student Transport (Remove Route Reliance)
+      ALTER TABLE student_transport ALTER COLUMN route_id DROP NOT NULL;
+      ALTER TABLE student_transport ADD COLUMN IF NOT EXISTS transport_type text DEFAULT 'Bus';
+      ALTER TABLE student_transport ADD COLUMN IF NOT EXISTS yearly_fee numeric(10,2) DEFAULT 0;
+
+      CREATE TABLE IF NOT EXISTS transport_fee_transactions (
+        id text PRIMARY KEY,
+        student_id text NOT NULL REFERENCES students(id),
+        amount numeric(10,2) NOT NULL,
+        payment_date date NOT NULL,
+        remarks text,
+        school_id text NOT NULL REFERENCES schools(id),
+        session_id text NOT NULL REFERENCES academic_sessions(id),
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
     `);
 
     // --- Session Management Migration ---
