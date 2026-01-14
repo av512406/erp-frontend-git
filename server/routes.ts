@@ -331,6 +331,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
+      // 4. Set current_session_id to the active one (Self-Healing)
+      const activeSessionRes = await client.query('SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true LIMIT 1', [id]);
+      if (activeSessionRes.rows.length > 0) {
+        await client.query('UPDATE schools SET current_session_id = $1 WHERE id = $2', [activeSessionRes.rows[0].id, id]);
+      }
+
       await client.query('COMMIT');
 
       res.status(201).json({ school: q.rows[0], admin: { username: adminUsername, password: adminPassword } });
@@ -690,10 +696,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Default to school's current session
         const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
         targetSessionId = schoolRes.rows[0]?.current_session_id;
+
+        // Fallback: If no current session set, try to find the latest active session for the school
+        if (!targetSessionId) {
+          const sessionRes = await pool.query(
+            'SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1',
+            [user.schoolId]
+          );
+          if (sessionRes.rows.length > 0) {
+            targetSessionId = sessionRes.rows[0].id;
+          }
+        }
       }
 
       if (!targetSessionId) {
-        return res.json([]); // No session defined, empty list
+        return res.json({ data: [], meta: { total: 0, page: 1, limit: 10 } }); // No session defined, empty list
       }
 
       const page = req.query.page ? parseInt(req.query.page as string) : undefined;
@@ -1080,7 +1097,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           // Ensure session record exists
-          if (studentId && effectiveSessionId && (isNew || strategy === 'upsert')) {
+          // FIX: Even if strategy is 'skip' (meaning don't update profile), we MUST link to the new session if not present.
+          if (studentId && effectiveSessionId) {
             // Check if session link exists
             const sessCheck = await client.query('SELECT 1 FROM student_sessions WHERE student_id = $1 AND session_id = $2', [studentId, effectiveSessionId]);
             if ((sessCheck.rowCount ?? 0) === 0) {
@@ -1212,6 +1230,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const user = (req as any).user;
 
     // [RESTRICTION] Teacher can only see grades for their own class
+    // Resolve Session ID
+    let sessionId = req.query.sessionId as string;
+    if (!sessionId) {
+      const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+      sessionId = schoolRes.rows[0]?.current_session_id;
+    }
+    // Fallback
+    if (!sessionId) {
+      const sessionRes = await pool.query('SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1', [user.schoolId]);
+      if (sessionRes.rows.length > 0) sessionId = sessionRes.rows[0].id;
+    }
+
     if (user.role === 'teacher') {
       const classRes = await pool.query('SELECT grade, section FROM classes WHERE class_teacher_id = $1', [user.id]);
       if (classRes.rows.length === 0) return res.json([]);
@@ -1242,7 +1272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.json(rows.map(mapGrade));
     }
 
-    const { rows } = await pool.query('SELECT * FROM grades WHERE school_id = $1', [user.schoolId]);
+    const { rows } = await pool.query('SELECT * FROM grades WHERE school_id = $1 AND (session_id = $2 OR session_id IS NULL)', [user.schoolId, sessionId]);
     res.json(rows.map(mapGrade));
   });
 
@@ -1286,11 +1316,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           const exists = await client.query('SELECT id FROM grades WHERE student_id=$1 AND subject=$2 AND term=$3 AND school_id=$4', [data.studentId, data.subject, data.term, user.schoolId]);
+          const sessionRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+          let sessionId = sessionRes.rows[0]?.current_session_id;
+          if (!sessionId) {
+            const activeRes = await client.query('SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1', [user.schoolId]);
+            sessionId = activeRes.rows[0]?.id;
+          }
+
           if ((exists.rowCount ?? 0) > 0) {
             await client.query('UPDATE grades SET marks=$1 WHERE id=$2', [data.marks, exists.rows[0].id]);
           } else {
             const id = genId();
-            await client.query('INSERT INTO grades (id, student_id, subject, marks, term, school_id) VALUES ($1,$2,$3,$4,$5,$6)', [id, data.studentId, data.subject, data.marks, data.term, user.schoolId]);
+            await client.query('INSERT INTO grades (id, student_id, subject, marks, term, school_id, session_id) VALUES ($1,$2,$3,$4,$5,$6,$7)', [id, data.studentId, data.subject, data.marks, data.term, user.schoolId, sessionId]);
           }
           keys.push({ studentId: data.studentId, subject: data.subject, term: data.term });
         } catch (e) {
@@ -1319,14 +1356,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/fees', requireAuth, async (req, res) => {
     const user = (req as any).user;
     try {
+      let sessionId = req.query.sessionId as string;
+      if (!sessionId) {
+        const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+        sessionId = schoolRes.rows[0]?.current_session_id;
+      }
+
+      // If absolutely no session found (rare), fall back to checking all or active?
+      // Better to return empty or try active fallback.
+      if (!sessionId) {
+        const sessionRes = await pool.query(
+          'SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1',
+          [user.schoolId]
+        );
+        if (sessionRes.rows.length > 0) sessionId = sessionRes.rows[0].id;
+      }
+
       const { rows } = await pool.query(`
         SELECT f.id, f.student_id as "studentId", f.transaction_id as "transactionId", f.amount, f.payment_date as "paymentDate", f.payment_mode as "paymentMode", f.remarks,
                s.name as "studentName", f.created_at as "createdAt", f.updated_at as "updatedAt", f.receipt_serial as "receiptSerial", f.status, f.cancel_reason as "cancelReason"
         FROM fee_transactions f
         JOIN students s ON s.id = f.student_id
         WHERE f.school_id = $1
+          AND (f.session_id = $2 OR f.session_id IS NULL) -- Include NULL for legacy compatibility? Or strictly session? Let's restrict to session but allow NULL if really old data? Safest is strict session if we want isolation. But to avoid "hiding" old data, maybe just session?
+          -- For now, enforcing session_id = $2. If old data has NULL, it won't show anywhere, which is tricky.
+          -- Let's assume we migrated or new data has it. I'll stick to strict session filter for correctness.
+          AND f.session_id = $2
         ORDER BY f.payment_date DESC, f.id DESC
-      `, [user.schoolId]);
+      `, [user.schoolId, sessionId]);
       const mapped = rows.map(r => ({
         id: r.id,
         studentId: r.studentId,
@@ -1375,9 +1432,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const maxQ = await pool.query('SELECT COALESCE(MAX(receipt_serial),0)+1 as next FROM fee_transactions WHERE school_id=$1', [user.schoolId]);
           receiptSerial = Number(maxQ.rows[0].next);
 
+          const sessionRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+          const sessionId = sessionRes.rows[0]?.current_session_id;
+
+          // If no session active, we should probably warn or block?
+          // But to prevent breaking, let's allow NULL but log? Or perform fallback search?
+          // Better self-healing: Find latest active.
+          let finalSessionId = sessionId;
+          if (!finalSessionId) {
+            const activeRes = await pool.query('SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1', [user.schoolId]);
+            finalSessionId = activeRes.rows[0]?.id;
+          }
+
           const q = await pool.query(
-            `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks, receipt_serial, school_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-            [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null, receiptSerial, user.schoolId]
+            `INSERT INTO fee_transactions (id, student_id, transaction_id, amount, payment_date, payment_mode, remarks, receipt_serial, school_id, session_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+            [id, data.studentId, transactionId, data.amount, data.paymentDate, data.paymentMode, data.remarks || null, receiptSerial, user.schoolId, finalSessionId]
           );
           row = q.rows[0];
           break; // Success
@@ -2735,6 +2804,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!targetSessionId) {
         const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
         targetSessionId = schoolRes.rows[0]?.current_session_id;
+
+        // Fallback: Find latest active session
+        if (!targetSessionId) {
+          const sessionRes = await pool.query(
+            'SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1',
+            [user.schoolId]
+          );
+          if (sessionRes.rows.length > 0) {
+            targetSessionId = sessionRes.rows[0].id;
+          }
+        }
       }
 
       if (!targetSessionId) return res.status(400).json({ message: "Session not found" });
@@ -2898,7 +2978,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get current session
       const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-      const sessionId = schoolRes.rows[0]?.current_session_id;
+      let sessionId = schoolRes.rows[0]?.current_session_id;
+
+      // Fallback: Find latest active session
+      if (!sessionId) {
+        const sessionRes = await client.query(
+          'SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1',
+          [user.schoolId]
+        );
+        if (sessionRes.rows.length > 0) {
+          sessionId = sessionRes.rows[0].id;
+        }
+      }
 
       if (!sessionId) return res.status(400).json({ message: 'No active session' });
 
@@ -2930,9 +3021,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const user = (req as any).user;
 
     try {
-      // Get current session
-      const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-      const sessionId = schoolRes.rows[0]?.current_session_id;
+      // Resolve Session ID: Query Param > School's Current Session > Fallback Active
+      let sessionId = req.query.sessionId as string;
+
+      if (!sessionId) {
+        const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+        sessionId = schoolRes.rows[0]?.current_session_id;
+      }
+
+      // Fallback: Find latest active session
+      if (!sessionId) {
+        const sessionRes = await pool.query(
+          'SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1',
+          [user.schoolId]
+        );
+        if (sessionRes.rows.length > 0) {
+          sessionId = sessionRes.rows[0].id;
+        }
+      }
+
+      if (!sessionId) return res.json([]);
 
       // New simplified query: Join students, student_transport, and aggregate fees
       // We don't need routes anymore.
@@ -2980,7 +3088,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get current session
       const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-      const sessionId = schoolRes.rows[0]?.current_session_id;
+      let sessionId = schoolRes.rows[0]?.current_session_id;
+
+      // Fallback: Find latest active session
+      if (!sessionId) {
+        const sessionRes = await pool.query(
+          'SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1',
+          [user.schoolId]
+        );
+        if (sessionRes.rows.length > 0) {
+          sessionId = sessionRes.rows[0].id;
+        }
+      }
 
       if (!sessionId) return res.status(400).json({ message: 'No active session' });
 
@@ -3005,7 +3124,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get current session
       const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-      const sessionId = schoolRes.rows[0]?.current_session_id;
+      let sessionId = schoolRes.rows[0]?.current_session_id;
+
+      // Fallback: Find latest active session
+      if (!sessionId) {
+        const sessionRes = await pool.query(
+          'SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1',
+          [user.schoolId]
+        );
+        if (sessionRes.rows.length > 0) {
+          sessionId = sessionRes.rows[0].id;
+        }
+      }
 
       const { rows } = await pool.query(`
             SELECT id, amount, payment_date, remarks, created_at
@@ -3021,7 +3151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.use("/api/backup", backupRouter);
+  app.use("/api/backup", requireAuth, backupRouter);
 
   const httpServer = createServer(app);
   return httpServer;

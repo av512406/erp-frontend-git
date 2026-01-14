@@ -98,28 +98,30 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/fees', { headers: getAuthHeaders() });
+        const queryParams = selectedSessionId ? `?sessionId=${selectedSessionId}` : '';
+        const res = await fetch(`/api/fees${queryParams}`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           setTransactions(data);
         }
       } catch (e) { /* ignore */ }
     })();
-  }, []);
+  }, [selectedSessionId]);
 
   const [grades, setGrades] = useState<GradeEntry[]>([]);
   const [savingGrades, setSavingGrades] = useState(false);
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/grades', { headers: getAuthHeaders() });
+        const queryParams = selectedSessionId ? `?sessionId=${selectedSessionId}` : '';
+        const res = await fetch(`/api/grades${queryParams}`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           setGrades(data);
         }
       } catch (e) { /* ignore */ }
     })();
-  }, []);
+  }, [selectedSessionId]);
 
   const handleAddStudent = async (student: Omit<Student, 'id'>) => {
     try {
@@ -448,7 +450,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       </Route>
       <Route path="/transport">
         <ProtectedRoute allowedRoles={['admin', 'superadmin']} userRole={user.role}>
-          <TransportPage />
+          <TransportPage selectedSessionId={selectedSessionId} />
         </ProtectedRoute>
       </Route>
       <Route path="/data-tools">

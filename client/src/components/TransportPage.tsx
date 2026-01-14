@@ -40,7 +40,11 @@ interface Transaction {
     remarks: string;
 }
 
-export default function TransportPage() {
+interface TransportPageProps {
+    selectedSessionId?: string;
+}
+
+export default function TransportPage({ selectedSessionId }: TransportPageProps) {
     const { toast } = useToast();
     const [assignedStudents, setAssignedStudents] = useState<TransportRecord[]>([]);
     const [allStudents, setAllStudents] = useState<Student[]>([]);
@@ -79,14 +83,15 @@ export default function TransportPage() {
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [selectedSessionId]);
 
     const fetchData = async () => {
         setLoading(true);
         try {
+            const queryParams = selectedSessionId ? `?sessionId=${selectedSessionId}` : '';
             const [transportRes, studentsRes] = await Promise.all([
-                fetch('/api/transport/students', { headers: getAuthHeaders() }),
-                fetch('/api/students', { headers: getAuthHeaders() })
+                fetch(`/api/transport/students${queryParams}`, { headers: getAuthHeaders() }),
+                fetch(`/api/students${queryParams}`, { headers: getAuthHeaders() })
             ]);
 
             if (transportRes.ok) {
