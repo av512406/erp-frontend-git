@@ -2,7 +2,8 @@ import { Router, Request, Response } from "express";
 import { db } from "./db";
 import {
     schools, academicSessions, subjects, teachers, students,
-    studentSessions, classSubjects, feeTransactions, grades
+    studentSessions, classSubjects, feeTransactions, grades,
+    attendance, classes, transportRoutes, studentTransport, transportFeeTransactions
 } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
@@ -19,7 +20,7 @@ const requireSchoolAdmin = (req: Request, res: Response, next: Function) => {
 
 router.get("/export", requireSchoolAdmin, async (req: Request, res: Response) => {
     try {
-        const schoolId = req.user!.schoolId!;
+        const schoolId = (req as any).user!.schoolId!;
 
         // Fetch data concurrently
         const [
@@ -31,7 +32,12 @@ router.get("/export", requireSchoolAdmin, async (req: Request, res: Response) =>
             fetchedStudentSessions,
             fetchedClassSubjects,
             fetchedFees,
-            fetchedGrades
+            fetchedGrades,
+            fetchedAttendance,
+            fetchedClasses,
+            fetchedTransportRoutes,
+            fetchedStudentTransport,
+            fetchedTransportFeeTransactions
         ] = await Promise.all([
             db.select().from(schools).where(eq(schools.id, schoolId)),
             db.select().from(academicSessions).where(eq(academicSessions.schoolId, schoolId)),
@@ -42,6 +48,11 @@ router.get("/export", requireSchoolAdmin, async (req: Request, res: Response) =>
             db.select().from(classSubjects).where(eq(classSubjects.schoolId, schoolId)),
             db.select().from(feeTransactions).where(eq(feeTransactions.schoolId, schoolId)),
             db.select().from(grades).where(eq(grades.schoolId, schoolId)),
+            db.select().from(attendance).where(eq(attendance.schoolId, schoolId)),
+            db.select().from(classes).where(eq(classes.schoolId, schoolId)),
+            db.select().from(transportRoutes).where(eq(transportRoutes.schoolId, schoolId)),
+            db.select().from(studentTransport).where(eq(studentTransport.schoolId, schoolId)),
+            db.select().from(transportFeeTransactions).where(eq(transportFeeTransactions.schoolId, schoolId)),
         ]);
 
         const backupData = {
@@ -58,7 +69,12 @@ router.get("/export", requireSchoolAdmin, async (req: Request, res: Response) =>
                     studentSessions: fetchedStudentSessions.length,
                     classSubjects: fetchedClassSubjects.length,
                     feeTransactions: fetchedFees.length,
-                    grades: fetchedGrades.length
+                    grades: fetchedGrades.length,
+                    attendance: fetchedAttendance.length,
+                    classes: fetchedClasses.length,
+                    transportRoutes: fetchedTransportRoutes.length,
+                    studentTransport: fetchedStudentTransport.length,
+                    transportFeeTransactions: fetchedTransportFeeTransactions.length
                 }
             },
             data: {
@@ -70,7 +86,12 @@ router.get("/export", requireSchoolAdmin, async (req: Request, res: Response) =>
                 studentSessions: fetchedStudentSessions,
                 classSubjects: fetchedClassSubjects,
                 feeTransactions: fetchedFees,
-                grades: fetchedGrades
+                grades: fetchedGrades,
+                attendance: fetchedAttendance,
+                classes: fetchedClasses,
+                transportRoutes: fetchedTransportRoutes,
+                studentTransport: fetchedStudentTransport,
+                transportFeeTransactions: fetchedTransportFeeTransactions
             }
         };
 
@@ -86,7 +107,7 @@ router.get("/export", requireSchoolAdmin, async (req: Request, res: Response) =>
 
 router.post("/restore", requireSchoolAdmin, async (req: Request, res: Response) => {
     try {
-        const schoolId = req.user!.schoolId!;
+        const schoolId = (req as any).user!.schoolId!;
         const backup = req.body;
 
         if (!backup || !backup.meta || !backup.data) {
@@ -100,10 +121,15 @@ router.post("/restore", requireSchoolAdmin, async (req: Request, res: Response) 
         // Transactional Restore
         await db.transaction(async (tx) => {
             // 1. Delete existing data in reverse order of dependencies
+            await tx.delete(transportFeeTransactions).where(eq(transportFeeTransactions.schoolId, schoolId));
+            await tx.delete(attendance).where(eq(attendance.schoolId, schoolId));
+            await tx.delete(studentTransport).where(eq(studentTransport.schoolId, schoolId));
             await tx.delete(grades).where(eq(grades.schoolId, schoolId));
             await tx.delete(feeTransactions).where(eq(feeTransactions.schoolId, schoolId));
             await tx.delete(studentSessions).where(eq(studentSessions.schoolId, schoolId));
+            await tx.delete(classes).where(eq(classes.schoolId, schoolId));
             await tx.delete(classSubjects).where(eq(classSubjects.schoolId, schoolId));
+            await tx.delete(transportRoutes).where(eq(transportRoutes.schoolId, schoolId));
             // Teachers and Students might have circular dependcies or other links? 
             // Usually students depend on schools.
             await tx.delete(students).where(eq(students.schoolId, schoolId));
@@ -120,11 +146,16 @@ router.post("/restore", requireSchoolAdmin, async (req: Request, res: Response) 
             if (d.academicSessions?.length) await tx.insert(academicSessions).values(d.academicSessions);
             if (d.subjects?.length) await tx.insert(subjects).values(d.subjects);
             if (d.teachers?.length) await tx.insert(teachers).values(d.teachers);
+            if (d.transportRoutes?.length) await tx.insert(transportRoutes).values(d.transportRoutes);
             if (d.students?.length) await tx.insert(students).values(d.students);
             if (d.classSubjects?.length) await tx.insert(classSubjects).values(d.classSubjects);
+            if (d.classes?.length) await tx.insert(classes).values(d.classes);
             if (d.studentSessions?.length) await tx.insert(studentSessions).values(d.studentSessions);
             if (d.feeTransactions?.length) await tx.insert(feeTransactions).values(d.feeTransactions);
             if (d.grades?.length) await tx.insert(grades).values(d.grades);
+            if (d.studentTransport?.length) await tx.insert(studentTransport).values(d.studentTransport);
+            if (d.attendance?.length) await tx.insert(attendance).values(d.attendance);
+            if (d.transportFeeTransactions?.length) await tx.insert(transportFeeTransactions).values(d.transportFeeTransactions);
 
             // Verify school record integrity if needed (e.g. if specific fields need update)
         });
