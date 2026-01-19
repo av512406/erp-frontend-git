@@ -10,8 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/auth";
 import { Plus, Search, Wallet, Bus, Car, Eye, History, CreditCard, Pencil } from "lucide-react";
 import { format } from "date-fns";
+import { DataTable, Column } from "@/components/ui/data-table";
 
 interface TransportRecord {
+    id: string; // Alias for transport_record_id for DataTable
     transport_record_id: string;
     student_id: string;
     student_name: string;
@@ -98,6 +100,7 @@ export default function TransportPage({ selectedSessionId }: TransportPageProps)
                 const data = await transportRes.json();
                 setAssignedStudents(data.map((d: any) => ({
                     ...d,
+                    id: d.transport_record_id, // Alias for DataTable
                     yearly_fee: Number(d.yearly_fee),
                     total_paid: Number(d.total_paid)
                 })));
@@ -246,6 +249,77 @@ export default function TransportPage({ selectedSessionId }: TransportPageProps)
             (r.father_name && r.father_name.toLowerCase().includes(searchLower));
     });
 
+    const columns: Column<TransportRecord>[] = [
+        {
+            header: "Information",
+            cell: (record) => (
+                <div>
+                    <div className="font-medium">{record.student_name}</div>
+                    <div className="text-xs text-muted-foreground">
+                        ID: {record.admission_number}
+                        {record.father_name && ` • F: ${record.father_name}`}
+                    </div>
+                </div>
+            ),
+            sortable: true,
+            accessorKey: "student_name"
+        },
+        {
+            header: "Class",
+            // For sorting, we might want to extend this, but for now simple display
+            cell: (record) => `${record.grade} - ${record.section}`,
+            sortable: true,
+            accessorKey: "grade"
+        },
+        {
+            header: "Type",
+            cell: (record) => (
+                <div className="flex items-center gap-2">
+                    {record.transport_type === 'Bus' ? <Bus className="h-4 w-4 text-blue-500" /> : <Car className="h-4 w-4 text-orange-500" />}
+                    {record.transport_type}
+                </div>
+            ),
+            accessorKey: "transport_type"
+        },
+        {
+            header: "Yearly Fee",
+            cell: (record) => `₹${record.yearly_fee.toLocaleString()}`,
+            accessorKey: "yearly_fee",
+            sortable: true,
+        },
+        {
+            header: "Paid",
+            cell: (record) => <span className="text-green-600">₹{record.total_paid.toLocaleString()}</span>,
+            accessorKey: "total_paid",
+            sortable: true
+        },
+        {
+            header: "Balance",
+            cell: (record) => {
+                const balance = record.yearly_fee - record.total_paid;
+                return (
+                    <span className={balance > 0 ? "text-red-500 font-bold" : "text-gray-500"}>
+                        ₹{balance.toLocaleString()}
+                    </span>
+                );
+            }
+        },
+        {
+            header: "Action",
+            className: "text-right",
+            cell: (record) => (
+                <div className="flex justify-end gap-2">
+                    <Button size="sm" variant="outline" onClick={() => openEdit(record)}>
+                        <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => openDetails(record)}>
+                        <Eye className="h-4 w-4 mr-2" /> Details
+                    </Button>
+                </div>
+            )
+        }
+    ];
+
     return (
         <div className="container mx-auto p-4 md:p-6 space-y-6">
             <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
@@ -329,65 +403,9 @@ export default function TransportPage({ selectedSessionId }: TransportPageProps)
                     </div>
                 </CardHeader>
                 <CardContent className="px-0 md:px-6">
-                    {/* Desktop View */}
-                    <div className="hidden md:block rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Information</TableHead>
-                                    <TableHead>Class</TableHead>
-                                    <TableHead>Type</TableHead>
-                                    <TableHead>Yearly Fee</TableHead>
-                                    <TableHead>Paid</TableHead>
-                                    <TableHead>Balance</TableHead>
-                                    <TableHead className="text-right">Action</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredRecords.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                                            No students using transport found.
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    filteredRecords.map(record => {
-                                        const balance = record.yearly_fee - record.total_paid;
-                                        return (
-                                            <TableRow key={record.transport_record_id}>
-                                                <TableCell>
-                                                    <div className="font-medium">{record.student_name}</div>
-                                                    <div className="text-xs text-muted-foreground">
-                                                        ID: {record.admission_number}
-                                                        {record.father_name && ` • F: ${record.father_name}`}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>{record.grade} - {record.section}</TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2">
-                                                        {record.transport_type === 'Bus' ? <Bus className="h-4 w-4 text-blue-500" /> : <Car className="h-4 w-4 text-orange-500" />}
-                                                        {record.transport_type}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>₹{record.yearly_fee.toLocaleString()}</TableCell>
-                                                <TableCell className="text-green-600">₹{record.total_paid.toLocaleString()}</TableCell>
-                                                <TableCell className={balance > 0 ? "text-red-500 font-bold" : "text-gray-500"}>
-                                                    ₹{balance.toLocaleString()}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <Button size="sm" variant="outline" onClick={() => openEdit(record)} className="mr-2">
-                                                        <Pencil className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button size="sm" variant="outline" onClick={() => openDetails(record)}>
-                                                        <Eye className="h-4 w-4 mr-2" /> Details
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })
-                                )}
-                            </TableBody>
-                        </Table>
+                    {/* Desktop View - DataTable */}
+                    <div className="hidden md:block">
+                        <DataTable columns={columns} data={filteredRecords} pageSize={10} />
                     </div>
 
                     {/* Mobile View - Cards */}

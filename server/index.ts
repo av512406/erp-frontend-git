@@ -53,7 +53,16 @@ app.use((req, res, next) => {
   next();
 });
 
+import { connectAndMigrate } from "./db";
+
 (async () => {
+  try {
+    await connectAndMigrate();
+  } catch (e) {
+    log(`Failed to initialize database: ${e}`);
+    process.exit(1);
+  }
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

@@ -68,7 +68,6 @@ export default function SuperAdminDashboard() {
             address: "",
             phone: "",
             logoUrl: "",
-            logoUrl: "",
             features: { attendance: false, transport: false, sms: false },
         },
     });

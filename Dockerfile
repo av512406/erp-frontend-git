@@ -25,6 +25,7 @@ RUN npm ci --legacy-peer-deps --omit=dev && \
 
 # Copy built artifacts from builder
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/migrations ./migrations
 
 # Expose the port
 EXPOSE 5000

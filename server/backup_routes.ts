@@ -120,6 +120,9 @@ router.post("/restore", requireSchoolAdmin, async (req: Request, res: Response) 
 
         // Transactional Restore
         await db.transaction(async (tx) => {
+            // 0. Break circular dependency: Set current_session_id to NULL in schools table
+            await tx.update(schools).set({ currentSessionId: null }).where(eq(schools.id, schoolId));
+
             // 1. Delete existing data in reverse order of dependencies
             await tx.delete(transportFeeTransactions).where(eq(transportFeeTransactions.schoolId, schoolId));
             await tx.delete(attendance).where(eq(attendance.schoolId, schoolId));
@@ -157,7 +160,15 @@ router.post("/restore", requireSchoolAdmin, async (req: Request, res: Response) 
             if (d.attendance?.length) await tx.insert(attendance).values(d.attendance);
             if (d.transportFeeTransactions?.length) await tx.insert(transportFeeTransactions).values(d.transportFeeTransactions);
 
-            // Verify school record integrity if needed (e.g. if specific fields need update)
+            // 3. Restore current_session_id
+            if (d.schools && d.schools.length > 0) {
+                const restoredSchool = d.schools.find((s: any) => s.id === schoolId);
+                if (restoredSchool && restoredSchool.currentSessionId) {
+                    await tx.update(schools)
+                        .set({ currentSessionId: restoredSchool.currentSessionId })
+                        .where(eq(schools.id, schoolId));
+                }
+            }
         });
 
         res.json({ message: "Restore successful", recordCounts: backup.meta.recordCounts });

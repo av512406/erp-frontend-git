@@ -22,6 +22,8 @@ import AdminClassesPage from "@/components/AdminClassesPage";
 import TeacherDashboard from "@/components/TeacherDashboard";
 import AttendancePage from "@/components/AttendancePage";
 import TransportPage from "@/components/TransportPage";
+import { useStudents, useWithdrawnStudents, useFees, useGrades } from "./hooks/use-queries";
+import { useQueryClient } from "@tanstack/react-query";
 
 import type { Student } from "@shared/schema";
 import type { FeeTransaction } from "@/components/FeesPage";
@@ -67,61 +69,14 @@ interface RouterProps {
 function Router({ user, sessions, selectedSessionId }: RouterProps) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [students, setStudents] = useState<Student[]>([]);
-  const [withdrawnStudents, setWithdrawnStudents] = useState<Student[]>([]);
+  const queryClient = useQueryClient();
 
-  // Fetch students when selectedSessionId changes
-  useEffect(() => {
-    (async () => {
-      // if (!selectedSessionId) return; // Allow default to load if unset
-      try {
-        const url = selectedSessionId
-          ? `/api/students?sessionId=${selectedSessionId}`
-          : `/api/students`; // Backend defaults to current_session_id
-
-        const activeRes = await fetch(url, { headers: getAuthHeaders() });
-        if (activeRes.ok) {
-          setStudents(await activeRes.json());
-        }
-        // Withdrawn students might be session-independent or dependent. 
-        // For now, keeping original logic or we could filter by date/session too?
-        // Let's assume withdrawn list is global for now, or use the existing endpoint.
-        const leftRes = await fetch('/api/students/withdrawn', { headers: getAuthHeaders() });
-        if (leftRes.ok) {
-          setWithdrawnStudents(await leftRes.json());
-        }
-      } catch (e) { /* ignore network */ }
-    })();
-  }, [selectedSessionId]);
-
-  const [transactions, setTransactions] = useState<FeeTransaction[]>([]);
-  useEffect(() => {
-    (async () => {
-      try {
-        const queryParams = selectedSessionId ? `?sessionId=${selectedSessionId}` : '';
-        const res = await fetch(`/api/fees${queryParams}`, { headers: getAuthHeaders() });
-        if (res.ok) {
-          const data = await res.json();
-          setTransactions(data);
-        }
-      } catch (e) { /* ignore */ }
-    })();
-  }, [selectedSessionId]);
-
-  const [grades, setGrades] = useState<GradeEntry[]>([]);
+  // Use React Query Hooks
+  const { data: students = [] } = useStudents(selectedSessionId);
+  const { data: withdrawnStudents = [] } = useWithdrawnStudents();
+  const { data: transactions = [] } = useFees(selectedSessionId);
+  const { data: grades = [] } = useGrades(selectedSessionId);
   const [savingGrades, setSavingGrades] = useState(false);
-  useEffect(() => {
-    (async () => {
-      try {
-        const queryParams = selectedSessionId ? `?sessionId=${selectedSessionId}` : '';
-        const res = await fetch(`/api/grades${queryParams}`, { headers: getAuthHeaders() });
-        if (res.ok) {
-          const data = await res.json();
-          setGrades(data);
-        }
-      } catch (e) { /* ignore */ }
-    })();
-  }, [selectedSessionId]);
 
   const handleAddStudent = async (student: Omit<Student, 'id'>) => {
     try {
@@ -131,8 +86,9 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         body: JSON.stringify(student)
       });
       if (res.ok) {
-        const created = await res.json();
-        setStudents(prev => [...prev, created]);
+        // const created = await res.json();
+        // setStudents(prev => [...prev, created]);
+        queryClient.invalidateQueries({ queryKey: ['students'] });
       }
     } catch (e) { /* ignore */ }
   };
@@ -148,8 +104,9 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         body: JSON.stringify(student)
       });
       if (res.ok) {
-        const updated = await res.json();
-        setStudents(prev => prev.map(s => s.id === id ? updated : s));
+        // const updated = await res.json();
+        // setStudents(prev => prev.map(s => s.id === id ? updated : s));
+        queryClient.invalidateQueries({ queryKey: ['students'] });
       }
     } catch (e) { /* ignore */ }
   };
@@ -160,7 +117,10 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         method: 'DELETE',
         headers: getAuthHeaders()
       });
-      if (res.ok) setStudents(prev => prev.filter(s => s.id !== id));
+      if (res.ok) {
+        // setStudents(prev => prev.filter(s => s.id !== id));
+        queryClient.invalidateQueries({ queryKey: ['students'] });
+      }
     } catch (e) { /* ignore */ }
   };
 
@@ -183,9 +143,11 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         const msg = await (async () => { try { const j = await res.json(); return j?.message; } catch { return ''; } })();
         throw new Error(msg || 'Failed');
       }
-      const updated = await res.json();
-      setStudents(prev => prev.filter(s => s.admissionNumber !== admissionNumber));
-      setWithdrawnStudents(prev => [...prev, updated]);
+
+      // const updated = await res.json();
+      // setStudents(prev => prev.filter(s => s.admissionNumber !== admissionNumber));
+      // setWithdrawnStudents(prev => [...prev, updated]);
+      queryClient.invalidateQueries({ queryKey: ['students'] });
     } catch (e) {
       // surface minimal alert
       alert((e as any)?.message || 'Failed to mark as withdrawn');
@@ -209,7 +171,8 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       throw new Error(msg);
     }
     const created = await res.json();
-    setTransactions(prev => [created, ...prev]);
+    // setTransactions(prev => [created, ...prev]);
+    queryClient.invalidateQueries({ queryKey: ['fees'] });
     return created as FeeTransaction;
   };
 
@@ -223,9 +186,10 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       const msg = await (async () => { try { const j = await res.json(); return j?.message; } catch { return 'Failed to cancel'; } })();
       throw new Error(msg);
     }
-    const result = await res.json();
+    // const result = await res.json();
     // Update local state - merge changes to preserve camelCase fields (studentName etc)
-    setTransactions(prev => prev.map(t => t.id === id ? { ...t, status: 'cancelled', cancelReason: reason } : t));
+    // setTransactions(prev => prev.map(t => t.id === id ? { ...t, status: 'cancelled', cancelReason: reason } : t));
+    queryClient.invalidateQueries({ queryKey: ['fees'] });
   };
 
   const handleSaveGrades = async (newGrades: GradeEntry[]) => {
@@ -243,19 +207,11 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       if (res.ok) {
         const payload = await res.json();
         if (Array.isArray(payload.grades)) {
-          // merge: replace existing rows with same (studentId, subject, term) or append
-          setGrades(prev => {
-            const key = (g: GradeEntry) => `${g.studentId}::${g.subject}::${g.term}`;
-            const incomingMap = new Map<string, GradeEntry>();
-            payload.grades.forEach((g: GradeEntry) => incomingMap.set(key(g), g));
-            const merged = prev.filter(g => !incomingMap.has(key(g)));
-            incomingMap.forEach(g => merged.push(g));
-            return merged;
-          });
+          // merge logic removed, rely on refetch
+          queryClient.invalidateQueries({ queryKey: ['grades'] });
         } else {
           // fallback full refresh
-          const refreshed = await fetch('/api/grades', { headers: getAuthHeaders() }).then(r => r.json());
-          setGrades(refreshed);
+          queryClient.invalidateQueries({ queryKey: ['grades'] });
         }
         toast({
           title: "Grades saved successfully",
@@ -288,8 +244,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       });
       if (res.ok) {
         const summary = await res.json();
-        const refreshed = await fetch('/api/students', { headers: getAuthHeaders() }).then(r => r.json());
-        setStudents(refreshed);
+        await queryClient.invalidateQueries({ queryKey: ['students'] });
         return { added: summary.added, skipped: summary.skipped, skippedAdmissionNumbers: summary.skippedAdmissionNumbers };
       }
     } catch (e) { /* ignore */ }
@@ -305,8 +260,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       });
       if (res.ok) {
         const summary = await res.json();
-        const refreshed = await fetch('/api/students', { headers: getAuthHeaders() }).then(r => r.json());
-        setStudents(refreshed);
+        await queryClient.invalidateQueries({ queryKey: ['students'] });
         return { updated: summary.updated };
       }
     } catch (e) { /* ignore */ }
@@ -326,8 +280,9 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       });
       if (res.ok) {
         const summary = await res.json();
-        const refreshed = await fetch('/api/fees', { headers: getAuthHeaders() }).then(r => r.json());
-        setTransactions(refreshed);
+        // const refreshed = await fetch('/api/fees', { headers: getAuthHeaders() }).then(r => r.json());
+        // setTransactions(refreshed);
+        queryClient.invalidateQueries({ queryKey: ['fees'] });
         return { inserted: summary.inserted, skipped: summary.skipped, skippedRows: summary.skippedRows || [] };
       }
     } catch (e) { /* ignore */ }
@@ -335,13 +290,14 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
   };
 
   const refetchStudents = async () => {
-    if (!selectedSessionId) return;
-    try {
-      const activeRes = await fetch(`/api/students?sessionId=${selectedSessionId}`, { headers: getAuthHeaders() });
-      if (activeRes.ok) {
-        setStudents(await activeRes.json());
-      }
-    } catch (e) { /* ignore */ }
+    // if (!selectedSessionId) return;
+    // try {
+    //   const activeRes = await fetch(`/api/students?sessionId=${selectedSessionId}`, { headers: getAuthHeaders() });
+    //   if (activeRes.ok) {
+    //     setStudents(await activeRes.json());
+    //   }
+    // } catch (e) { /* ignore */ }
+    queryClient.invalidateQueries({ queryKey: ['students'] });
   };
 
   const stats = {
@@ -408,9 +364,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
                 const msg = await (async () => { try { const j = await res.json(); return j?.message; } catch { return ''; } })();
                 throw new Error(msg || 'Failed to restore');
               }
-              const restored = await res.json();
-              setWithdrawnStudents(prev => prev.filter(s => s.admissionNumber !== admissionNumber));
-              setStudents(prev => [...prev, restored]);
+              await queryClient.invalidateQueries({ queryKey: ['students'] });
             } catch (e: any) {
               alert(e?.message || 'Restore failed');
             }
@@ -429,9 +383,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
                 const msg = await (async () => { try { const j = await res.json(); return j?.message; } catch { return ''; } })();
                 throw new Error(msg || 'Failed to restore');
               }
-              const restored = await res.json();
-              setWithdrawnStudents(prev => prev.filter(s => s.admissionNumber !== admissionNumber));
-              setStudents(prev => [...prev, restored]);
+              await queryClient.invalidateQueries({ queryKey: ['students'] });
             } catch (e: any) {
               alert(e?.message || 'Restore failed');
             }
