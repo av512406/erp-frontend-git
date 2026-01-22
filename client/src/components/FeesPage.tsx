@@ -15,7 +15,7 @@ import {
 import { DataTable, Column } from "@/components/ui/data-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Download } from "lucide-react";
+import { FileText, Download, MessageSquare } from "lucide-react";
 import { printReceipt } from './Receipt';
 import ReceiptDistributionModal from './ReceiptDistributionModal';
 import { schoolConfig } from '@/lib/schoolConfig';
@@ -89,6 +89,28 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
   // Pending Fees Filters
   const [pendingFilterClass, setPendingFilterClass] = useState<string>("all");
   const [pendingFilterSection, setPendingFilterSection] = useState<string>("all");
+
+  // Feature Flags & Config
+  const [smsEnabled, setSmsEnabled] = useState(false);
+  const [schoolName, setSchoolName] = useState("");
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const res = await fetch('/api/school-config', { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          setSchoolName(data.name || "School");
+          let features = data.features;
+          if (typeof features === 'string') {
+            try { features = JSON.parse(features); } catch { features = {}; }
+          }
+          setSmsEnabled(!!features?.sms);
+        }
+      } catch (e) { console.error(e); }
+    };
+    fetchConfig();
+  }, []);
 
   const studentsWithPendingFees = useMemo(() => {
     return students.map(s => {
@@ -350,7 +372,23 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     { header: "Yearly Fee", accessorKey: "yearly", cell: (s) => `₹${s.yearly.toLocaleString('en-IN')}`, sortable: true },
     { header: "Prev. Due", accessorKey: "previousDue", cell: (s) => `₹${s.previousDue.toLocaleString('en-IN')}`, sortable: true },
     { header: "Total Paid", accessorKey: "paid", cell: (s) => `₹${s.paid.toLocaleString('en-IN')}`, sortable: true },
-    { header: "Pending Amount", accessorKey: "pending", cell: (s) => `₹${s.pending.toLocaleString('en-IN')}`, className: "font-bold text-red-600", sortable: true }
+    { header: "Pending Amount", accessorKey: "pending", cell: (s) => `₹${s.pending.toLocaleString('en-IN')}`, className: "font-bold text-red-600", sortable: true },
+    {
+      header: "Action",
+      cell: (row) => smsEnabled && (row as any).mobileNumber ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 gap-2"
+          onClick={() => {
+            const message = `Dear Parent,\n\nPending fee for ${(row as any).name} is Rs. ${(row as any).pending}. Please pay at the earliest.\n\nRegards,\nPrincipal\n${schoolName}`;
+            window.open(`sms:${(row as any).mobileNumber}?body=${encodeURIComponent(message)}`, '_blank');
+          }}
+        >
+          <MessageSquare className="h-4 w-4" /> SMS
+        </Button>
+      ) : null
+    }
   ];
 
   return (
