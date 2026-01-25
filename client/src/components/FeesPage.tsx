@@ -116,11 +116,12 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     return students.map(s => {
       const yearly = parseFloat((s as any).yearlyFeeAmount || '0');
       const previousDue = parseFloat((s as any).previousYearDue || '0');
+      const transportFee = parseFloat((s as any).transportFee || '0');
       const paid = transactions
         .filter(t => t.studentId === s.id && t.status !== 'cancelled')
         .reduce((sum, t) => sum + (t.amount || 0), 0);
-      const pending = (yearly + previousDue) - paid;
-      return { ...s, yearly, previousDue, paid, pending };
+      const pending = (yearly + previousDue + transportFee) - paid;
+      return { ...s, yearly, previousDue, transportFee, paid, pending };
     }).filter(s => s.pending > 0);
   }, [students, transactions]);
 
@@ -162,6 +163,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
         { header: 'Section', key: 'section', width: 10 },
         { header: 'Phone', key: 'phone', width: 15 },
         { header: 'Yearly Fee', key: 'yearly', width: 15 },
+        { header: 'Transport Fee', key: 'transport', width: 15 },
         { header: 'Prev. Due', key: 'previousDue', width: 15 },
         { header: 'Total Paid', key: 'paid', width: 15 },
         { header: 'Pending Amount', key: 'pending', width: 15 },
@@ -176,6 +178,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
           section: s.section,
           phone: (s as any).phone || '',
           yearly: s.yearly,
+          transport: (s as any).transportFee || 0,
           previousDue: s.previousDue,
           paid: s.paid,
           pending: s.pending
@@ -295,7 +298,8 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     .reduce((sum, t) => sum + (t.amount || 0), 0);
   const yearlyFee = viewedStudent ? parseFloat((viewedStudent as any).yearlyFeeAmount || '0') : 0;
   const previousDue = viewedStudent ? parseFloat((viewedStudent as any).previousYearDue || '0') : 0;
-  const balance = (yearlyFee + previousDue) - totalPaid;
+  const transportFee = viewedStudent ? parseFloat((viewedStudent as any).transportFee || '0') : 0;
+  const balance = (yearlyFee + previousDue + transportFee) - totalPaid;
 
   const handleExportExcel = async () => {
     setExporting(true);
@@ -369,7 +373,8 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     { header: "Father Name", accessorKey: "fatherName", sortable: true },
     { header: "Class", accessorKey: "grade", sortable: true },
     { header: "Section", accessorKey: "section", sortable: true },
-    { header: "Yearly Fee", accessorKey: "yearly", cell: (s) => `₹${s.yearly.toLocaleString('en-IN')}`, sortable: true },
+    { header: 'Yearly Fee', accessorKey: "yearly", cell: (s) => `₹${s.yearly.toLocaleString('en-IN')}`, sortable: true },
+    { header: 'Transport', accessorKey: "transportFee", cell: (s) => `₹${((s as any).transportFee || 0).toLocaleString('en-IN')}`, sortable: true },
     { header: "Prev. Due", accessorKey: "previousDue", cell: (s) => `₹${s.previousDue.toLocaleString('en-IN')}`, sortable: true },
     { header: "Total Paid", accessorKey: "paid", cell: (s) => `₹${s.paid.toLocaleString('en-IN')}`, sortable: true },
     { header: "Pending Amount", accessorKey: "pending", cell: (s) => `₹${s.pending.toLocaleString('en-IN')}`, className: "font-bold text-red-600", sortable: true },
@@ -520,6 +525,10 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                             <div className="p-4 bg-muted rounded-lg">
                               <p className="text-sm text-muted-foreground">Total Paid</p>
                               <p className="text-2xl font-bold">₹{totalPaid.toLocaleString('en-IN')}</p>
+                            </div>
+                            <div className="p-4 bg-muted rounded-lg">
+                              <p className="text-sm text-muted-foreground">Transport Fee</p>
+                              <p className="text-2xl font-bold">₹{transportFee.toLocaleString('en-IN')}</p>
                             </div>
                             <div className="p-4 bg-muted rounded-lg">
                               <p className="text-sm text-muted-foreground">Balance Due</p>

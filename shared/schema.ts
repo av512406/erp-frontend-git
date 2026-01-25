@@ -50,7 +50,6 @@ export const students = pgTable("students", {
   section: text("section").notNull(),
   fatherName: text("father_name"),
   motherName: text("mother_name"),
-  yearlyFeeAmount: decimal("yearly_fee_amount", { precision: 10, scale: 2 }).notNull(),
   previousYearDue: decimal("previous_year_due", { precision: 10, scale: 2 }).default('0'),
   status: text("status").notNull().default('active'),
   leftDate: date("left_date"),
@@ -63,6 +62,11 @@ export const students = pgTable("students", {
 export const insertStudentSchema = createInsertSchema(students).omit({
   id: true,
   schoolId: true,
+}).extend({
+  yearlyFeeAmount: z.string().optional(),
+  transportFee: z.string().optional(),
+  session: z.string().optional(),
+  sessionName: z.string().optional()
 });
 
 export type InsertStudent = z.infer<typeof insertStudentSchema>;
@@ -204,6 +208,8 @@ export const studentSessions = pgTable("student_sessions", {
   section: text("section").notNull(),
   rollNumber: text("roll_number"),
   status: text("status").notNull().default('active'), // promoted, detained, active
+  yearlyFeeAmount: decimal("yearly_fee_amount", { precision: 10, scale: 2 }).notNull().default('0'),
+  transportFee: decimal("transport_fee", { precision: 10, scale: 2 }).default('0'),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
 });
 

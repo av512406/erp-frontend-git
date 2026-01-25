@@ -19,8 +19,7 @@ import {
   LogOut,
   Settings,
   UserX,
-  Menu,
-  Bus
+  Menu
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -65,9 +64,7 @@ export default function Navigation({ userRole, userEmail, onLogout, sessions = [
     adminLinks.splice(1, 0, { path: "/attendance", label: "Attendance", icon: Users });
   }
 
-  if (config.features?.transport) {
-    adminLinks.splice(2, 0, { path: "/transport", label: "Transport", icon: Bus });
-  }
+
 
 
   const teacherLinks = [

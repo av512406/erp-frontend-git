@@ -94,7 +94,9 @@ router.get('/api/students', requireAuth, async (req, res) => {
             ss.grade as session_grade,
             ss.section as session_section,
             ss.status as session_status,
-            ss.roll_number
+            ss.roll_number,
+            ss.transport_fee,
+            ss.yearly_fee_amount as session_fee
           FROM students s
           INNER JOIN student_sessions ss ON s.id = ss.student_id
           ${whereClause}
@@ -109,7 +111,9 @@ router.get('/api/students', requireAuth, async (req, res) => {
                 grade: row.session_grade || row.grade,
                 section: row.session_section || row.section,
                 status: row.session_status || row.status,
-                rollNumber: row.roll_number
+                rollNumber: row.roll_number,
+                transportFee: row.transport_fee?.toString?.() || '0',
+                yearlyFeeAmount: row.session_fee?.toString?.() || '0'
             }));
 
             return res.json({
@@ -123,7 +127,9 @@ router.get('/api/students', requireAuth, async (req, res) => {
             ss.grade as session_grade,
             ss.section as session_section,
             ss.status as session_status,
-            ss.roll_number
+            ss.roll_number,
+            ss.transport_fee,
+            ss.yearly_fee_amount as session_fee
           FROM students s
           INNER JOIN student_sessions ss ON s.id = ss.student_id
           ${whereClause}
@@ -135,7 +141,9 @@ router.get('/api/students', requireAuth, async (req, res) => {
                 grade: row.session_grade || row.grade,
                 section: row.session_section || row.section,
                 status: row.session_status || row.status,
-                rollNumber: row.roll_number
+                rollNumber: row.roll_number,
+                transportFee: row.transport_fee?.toString?.() || '0',
+                yearlyFeeAmount: row.session_fee?.toString?.() || '0'
             }));
             res.json(mapped);
         }
@@ -237,15 +245,15 @@ router.post('/api/students', requireAuth, async (req, res) => {
 
         const id = genId();
         const q = await client.query(
-            `INSERT INTO students (id, admission_number, name, date_of_birth, admission_date, aadhar_number, pen_number, aapar_id, mobile_number, address, grade, section, father_name, mother_name, yearly_fee_amount, status, school_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'active', $16) RETURNING *`,
-            [id, data.admissionNumber, data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber, data.penNumber, data.aaparId, data.mobileNumber, data.address, data.grade, data.section, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount || 0, user.schoolId]
+            `INSERT INTO students (id, admission_number, name, date_of_birth, admission_date, aadhar_number, pen_number, aapar_id, mobile_number, address, grade, section, father_name, mother_name, status, school_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'active', $15) RETURNING *`,
+            [id, data.admissionNumber, data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber, data.penNumber, data.aaparId, data.mobileNumber, data.address, data.grade, data.section, (data as any).fatherName || null, (data as any).motherName || null, user.schoolId]
         );
 
         await client.query(
-            `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [genId(), id, sessionId, data.grade, data.section, 'active', user.schoolId]
+            `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id, transport_fee, yearly_fee_amount)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [genId(), id, sessionId, data.grade, data.section, 'active', user.schoolId, (data as any).transportFee || 0, (data as any).yearlyFeeAmount || 0]
         );
 
         await client.query('COMMIT');
@@ -268,21 +276,56 @@ router.put('/api/students/:admissionNumber', requireAuth, async (req, res) => {
         const existing = await pool.query('SELECT * FROM students WHERE admission_number = $1 AND school_id = $2', [admissionNumber, user.schoolId]);
         if ((existing.rowCount ?? 0) === 0) return res.status(404).json({ message: 'not found' });
 
+        // DEBUG LOGGING
+        console.log(`[PUT /students/${admissionNumber}] Raw Body:`, req.body);
+
         const keys = Object.keys(data);
+        console.log(`[PUT /students/${admissionNumber}] Parsed keys:`, keys);
+
         const values: any[] = [];
         const sets: string[] = [];
+        const excludedKeys = ['yearlyFeeAmount', 'transportFee', 'session', 'sessionName', 'sessionId'];
         keys.forEach((k, i) => {
+            if (excludedKeys.includes(k)) return;
             const col = k.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase()).replace(/^admission_number$/, 'admission_number');
             sets.push(`${col} = $${i + 1}`);
             values.push((data as any)[k]);
         });
-        if (sets.length === 0) return res.json(mapStudent(existing.rows[0]));
 
-        values.push(admissionNumber);
-        values.push(user.schoolId);
+        console.log(`[PUT /students/${admissionNumber}] Sets:`, sets);
 
-        const q = await pool.query(`UPDATE students SET ${sets.join(', ')} WHERE admission_number = $${sets.length + 1} AND school_id = $${sets.length + 2} RETURNING *`, values);
-        res.json(mapStudent(q.rows[0]));
+        // if (sets.length === 0) return res.json(mapStudent(existing.rows[0])); 
+        // We can't return early if we have session updates to do.
+
+        let q;
+        if (sets.length > 0) {
+            values.push(admissionNumber);
+            values.push(user.schoolId);
+            q = await pool.query(`UPDATE students SET ${sets.join(', ')} WHERE admission_number = $${sets.length + 1} AND school_id = $${sets.length + 2} RETURNING *`, values);
+        } else {
+            // Just fetch existing to return
+            q = { rows: [existing.rows[0]] };
+        }
+
+        const { sessionId, transportFee, yearlyFeeAmount } = req.body;
+
+        if (sessionId) {
+            await pool.query(
+                `UPDATE student_sessions SET transport_fee = $1, yearly_fee_amount = $2 WHERE student_id = $3 AND session_id = $4 AND school_id = $5`,
+                [transportFee || 0, yearlyFeeAmount || 0, existing.rows[0].id, sessionId, user.schoolId]
+            );
+        }
+
+        // Re-fetch to return complete object
+        // Actually, let's just construct the return object or do a heavy query?
+        // Map student handles the core fields. The 'transportFee' needs to be merged in from the update we just did.
+        // For simplicity, we can just return what we updated in students table + the transport fee provided.
+        // But better to be consistent if possible.
+        const updated = mapStudent(q.rows[0]);
+        (updated as any).transportFee = transportFee || '0';
+        (updated as any).yearlyFeeAmount = yearlyFeeAmount || '0';
+
+        res.json(updated);
     } catch (e) {
         if (e instanceof ZodError) return res.status(400).json({ message: 'validation', issues: e.format() });
         console.error(e);
@@ -367,8 +410,8 @@ router.post('/api/students/import', requireAuth, async (req, res) => {
                     studentId = exists.rows[0].id;
                     if (strategy === 'upsert') {
                         await client.query(
-                            `UPDATE students SET name=$1, date_of_birth=$2, admission_date=$3, aadhar_number=$4, pen_number=$5, aapar_id=$6, mobile_number=$7, address=$8, grade=$9, section=$10, father_name=$11, mother_name=$12, yearly_fee_amount=$13, category=$14, gender=$15, previous_year_due=$16 WHERE admission_number=$17 AND school_id=$18`,
-                            [data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount, (data as any).category || 'GEN', (data as any).gender || null, (data as any).previousYearDue || '0', data.admissionNumber, user.schoolId]
+                            `UPDATE students SET name=$1, date_of_birth=$2, admission_date=$3, aadhar_number=$4, pen_number=$5, aapar_id=$6, mobile_number=$7, address=$8, grade=$9, section=$10, father_name=$11, mother_name=$12, category=$13, gender=$14, previous_year_due=$15 WHERE admission_number=$16 AND school_id=$17`,
+                            [data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, (data as any).category || 'GEN', (data as any).gender || null, (data as any).previousYearDue || '0', data.admissionNumber, user.schoolId]
                         );
                         updated++;
                     } else {
@@ -377,8 +420,8 @@ router.post('/api/students/import', requireAuth, async (req, res) => {
                 } else {
                     studentId = genId();
                     await client.query(
-                        `INSERT INTO students (id, admission_number, name, date_of_birth, admission_date, aadhar_number, pen_number, aapar_id, mobile_number, address, grade, section, father_name, mother_name, yearly_fee_amount, status, category, gender, previous_year_due, school_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'active', $16, $17, $18, $19)`,
-                        [studentId, data.admissionNumber, data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, data.yearlyFeeAmount, (data as any).category || 'GEN', (data as any).gender || null, (data as any).previousYearDue || '0', user.schoolId]
+                        `INSERT INTO students (id, admission_number, name, date_of_birth, admission_date, aadhar_number, pen_number, aapar_id, mobile_number, address, grade, section, father_name, mother_name, status, category, gender, previous_year_due, school_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'active', $15, $16, $17, $18)`,
+                        [studentId, data.admissionNumber, data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber || null, data.penNumber || null, data.aaparId || null, data.mobileNumber || null, data.address || null, data.grade || null, data.section || null, (data as any).fatherName || null, (data as any).motherName || null, (data as any).category || 'GEN', (data as any).gender || null, (data as any).previousYearDue || '0', user.schoolId]
                     );
                     added.push(data.admissionNumber);
                 }
@@ -387,14 +430,14 @@ router.post('/api/students/import', requireAuth, async (req, res) => {
                     const sessCheck = await client.query('SELECT 1 FROM student_sessions WHERE student_id = $1 AND session_id = $2', [studentId, effectiveSessionId]);
                     if ((sessCheck.rowCount ?? 0) === 0) {
                         await client.query(
-                            `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                            [genId(), studentId, effectiveSessionId, data.grade, data.section, 'active', user.schoolId]
+                            `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id, yearly_fee_amount, transport_fee)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                            [genId(), studentId, effectiveSessionId, data.grade, data.section, 'active', user.schoolId, data.yearlyFeeAmount || 0, (data as any).transportFee || 0]
                         );
                     } else if (strategy === 'upsert') {
                         await client.query(
-                            `UPDATE student_sessions SET grade=$1, section=$2 WHERE student_id=$3 AND session_id=$4`,
-                            [data.grade, data.section, studentId, effectiveSessionId]
+                            `UPDATE student_sessions SET grade=$1, section=$2, yearly_fee_amount=$3, transport_fee=$4 WHERE student_id=$5 AND session_id=$6`,
+                            [data.grade, data.section, data.yearlyFeeAmount || 0, (data as any).transportFee || 0, studentId, effectiveSessionId]
                         );
                     }
                 }

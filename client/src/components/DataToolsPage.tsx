@@ -127,7 +127,10 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
       const csv = event.target?.result as string;
       window.Papa.parse(csv, {
         header: true,
+        skipEmptyLines: true,
+        transformHeader: (h: string) => h.trim().toLowerCase(), // Normalize headers to lowercase
         complete: async (results: any) => {
+          console.log('CSV Parsed Results:', results);
           const normalize = (val: any) => typeof val === 'string' ? val.trim() : (val ?? '');
           const normalizeNumberString = (val: any) => {
             const s = String(val ?? '').replace(/,/g, '').trim();
@@ -193,61 +196,112 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
             return v;
           };
 
-          const importedStudents = results.data
-            .filter((row: any) => (row.admissionNumber || row['Admission Number'] || row['AdmissionNo'] || row['Admission No'] || row['admission no']) && (row.name || row['Name']))
-            .map((row: any) => {
-              const admissionNumber = normalize(row.admissionNumber || row['Admission Number'] || row['AdmissionNo'] || row['Admission No'] || row['admission no']);
-              const name = normalize(row.name || row['Name']);
-              const dateOfBirth = normalizeDate(row.dateOfBirth || row['date of birth'] || row['Date of Birth'] || row['dob']);
-              const admissionDate = normalizeDate(row.admissionDate || row['Admission Date'] || row['admission date']);
-              const aadharNumber = normalize(row.aadharNumber || row['Aadhar Number'] || row['aadhar']);
-              const penNumber = normalize(row.penNumber || row['PEN Number'] || row['pen']);
-              const aaparId = normalize(row.aaparId || row['Aapar ID'] || row['aapar']);
-              const mobileNumber = normalize(row.mobileNumber || row['Mobile'] || row['Phone'] || row['mobile']);
-              const address = normalize(row.address || row['Address']);
-              const grade = normalize(row.grade || row['class'] || row['Class']);
-              const section = normalize(row.section || row['Section']);
-              const yfaRaw = row.yearlyFeeAmount ?? row['Yearly fees'] ?? row['Yearly Fees'] ?? row['yearly fees'] ?? row['Yearly_Fees'] ?? row['YearlyFee'] ?? row['yearlyFeeAmount'];
-              const yearlyFeeAmount = yfaRaw === undefined || yfaRaw === null ? '' : normalizeNumberString(yfaRaw);
-              const pydRaw = row.previousYearDue ?? row['Previous Year Due'] ?? row['Previous Due'] ?? row['previous year due'] ?? row['previous due'] ?? row['previousYearDue'];
-              const previousYearDue = pydRaw === undefined || pydRaw === null ? '' : normalizeNumberString(pydRaw);
-              const fatherName = normalize(row.fatherName || row["Father's Name"] || row['Father Name'] || row['father'] || row['Fathers Name']);
-              const motherName = normalize(row.motherName || row["Mother's Name"] || row['Mother Name'] || row['mother'] || row['Mothers Name']);
-              const category = normalize(row.category || row['Category'] || 'GEN');
-              const gender = normalize(row.gender || row['Gender'] || '');
-              return {
-                admissionNumber,
-                name,
-                dateOfBirth,
-                admissionDate,
-                aadharNumber,
-                penNumber,
-                aaparId,
-                mobileNumber,
-                address,
-                grade,
-                section,
-                fatherName,
-                motherName,
-                yearlyFeeAmount,
-                previousYearDue,
-                category,
-                gender
-              };
+
+          const validStudents: any[] = [];
+          const invalidRows: any[] = [];
+
+          results.data.forEach((row: any, index: number) => {
+            // Helper to safe get (case insensitive check fallback if transformHeader fails)
+            const getField = (keys: string[]) => {
+              for (const k of keys) {
+                if (row[k] !== undefined && row[k] !== null && row[k] !== '') return row[k];
+              }
+              // manual scan if needed (e.g. whitespace) or just return undefined
+              return undefined;
+            };
+
+            // adjusted to lower case keys since we use transformHeader, but keeping original casing as fallback just in case
+            const admVal = row.admissionnumber || row['admission number'] || row.admissionno || row['admission no'] || row.admissionNumber || row['Admission Number'];
+            const nameVal = row.name || row['Name'];
+
+            if (!admVal || !nameVal) {
+              invalidRows.push({ ...row, _error: 'Missing admission number or name', _index: index });
+              return;
+            }
+
+            const admissionNumber = normalize(admVal);
+            const name = normalize(nameVal);
+            const dateOfBirth = normalizeDate(row.dateofbirth || row['date of birth'] || row['dob'] || row.dateOfBirth);
+            const admissionDate = normalizeDate(row.admissiondate || row['admission date'] || row.admissionDate);
+            const aadharNumber = normalize(row.aadharnumber || row['aadhar number'] || row.aadhar || row.aadharNumber);
+            const penNumber = normalize(row.pennumber || row['pen number'] || row.pen || row.penNumber);
+            const aaparId = normalize(row.aaparid || row['aapar id'] || row.aapar || row.aaparId);
+            const mobileNumber = normalize(row.mobilenumber || row.mobile || row.phone || row.mobileNumber);
+            const address = normalize(row.address);
+            const grade = normalize(row.grade || row.class || row['Class']);
+            const section = normalize(row.section);
+            const yfaRaw = row.yearlyfeeamount ?? row['yearly fees'] ?? row.yearlyfee ?? row.yearly_fee_amount ?? row.yearlyFeeAmount;
+            const yearlyFeeAmount = yfaRaw === undefined || yfaRaw === null ? '' : normalizeNumberString(yfaRaw);
+            const pydRaw = row.previousyeardue ?? row['previous year due'] ?? row['previous due'] ?? row.previousyeardue ?? row.previousYearDue;
+            const previousYearDue = pydRaw === undefined || pydRaw === null ? '' : normalizeNumberString(pydRaw);
+            const tfRaw = row.transportfee ?? row['transport fee'] ?? row['transport fees'] ?? row.transport_fee ?? row.transportFee;
+            const transportFee = tfRaw === undefined || tfRaw === null ? '' : normalizeNumberString(tfRaw);
+            const fatherName = normalize(row.fathername || row["father's name"] || row['father name'] || row.father || row.fatherName);
+            const motherName = normalize(row.mothername || row["mother's name"] || row['mother name'] || row.mother || row.motherName);
+            const category = normalize(row.category || 'GEN');
+            const gender = normalize(row.gender || '');
+
+            validStudents.push({
+              admissionNumber,
+              name,
+              dateOfBirth,
+              admissionDate,
+              aadharNumber,
+              penNumber,
+              aaparId,
+              mobileNumber,
+              address,
+              grade,
+              section,
+              fatherName,
+              motherName,
+              yearlyFeeAmount,
+              previousYearDue,
+              transportFee,
+              category,
+              gender
             });
-          // keep a copy of raw parsed rows for review/export/upsert
-          setLastImportedRows(importedStudents as RawStudentRow[]);
-          const summary = await onImportStudents(importedStudents, importSessionId);
-          toast({
-            title: "Import Finished",
-            description: `Added ${summary.added} students, skipped ${summary.skipped} duplicates`,
           });
-          if (summary.skipped && summary.skippedAdmissionNumbers && summary.skippedAdmissionNumbers.length) {
-            setSkippedAdmissions(summary.skippedAdmissionNumbers);
-            // prepare skipped rows to allow export/upsert
-            const skipped = importedStudents.filter((r: RawStudentRow) => summary.skippedAdmissionNumbers!.includes(r.admissionNumber));
-            setSkippedRows(skipped);
+
+          console.log('Valid Students:', validStudents.length, 'Invalid Rows:', invalidRows.length);
+          if (validStudents.length === 0 && invalidRows.length > 0) {
+            toast({
+              title: "Import Failed",
+              description: `No valid rows found. ${invalidRows.length} rows failed validation (missing admission number or name). check console or skipped list.`,
+              variant: "destructive"
+            });
+            // Show invalid rows as skipped
+            setSkippedAdmissions(invalidRows.map(r => `Row ${r._index}: ${r._error}`));
+            setLastImportedRows(invalidRows); // for debug view
+            setIsImporting(false);
+            return;
           }
+
+          setLastImportedRows(validStudents as RawStudentRow[]);
+
+          if (validStudents.length > 0) {
+            const summary = await onImportStudents(validStudents, importSessionId);
+            let msg = `Added ${summary.added} students, skipped ${summary.skipped} duplicates`;
+            if (invalidRows.length > 0) {
+              msg += `. ${invalidRows.length} rows were invalid.`;
+            }
+            toast({
+              title: "Import Finished",
+              description: msg,
+            });
+
+            const allSkipped = [
+              ...(summary.skippedAdmissionNumbers || []),
+              ...invalidRows.map(r => `[Invalid] Row ${r._index}: ${JSON.stringify(r)}`)
+            ];
+
+            if (allSkipped.length > 0) {
+              setSkippedAdmissions(allSkipped);
+              // merge invalid rows into skippedRows for export if needed (rough approximation)
+              setSkippedRows([...(invalidRows as any), ...(validStudents.filter(s => summary.skippedAdmissionNumbers?.includes(s.admissionNumber)))]);
+            }
+          }
+
           setIsImporting(false);
           if (studentFileRef.current) studentFileRef.current.value = '';
         }
@@ -420,11 +474,12 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
         s.address,
         s.grade,
         s.section,
-        s.yearlyFeeAmount,
+        s.section,
+        (s as any).yearlyFeeAmount || '',
         (s as any).previousYearDue || '0',
         (s as any).category || 'GEN',
-        (s as any).category || 'GEN',
         (s as any).gender || '',
+        (s as any).transportFee || '',
         (s as any).sessionName || '' // We might need to fetch this or it might be on the student object if joined
       ].join(','))
     ].join('\n');
@@ -455,13 +510,13 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
         <p className="text-muted-foreground">Import and export data in bulk</p>
       </div>
 
-      {/* Skipped duplicates dialog */}
+      {/* Skipped duplicates/errors dialog */}
       <AlertDialog open={!!skippedAdmissions} onOpenChange={() => setSkippedAdmissions(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Skipped Duplicate Students</AlertDialogTitle>
+            <AlertDialogTitle>Import Report: Skipped Records</AlertDialogTitle>
             <AlertDialogDescription>
-              The following admission numbers were skipped because they already exist in the system.
+              The following records were skipped due to errors (duplicates or missing required fields).
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="max-h-64 overflow-y-auto mt-2">
@@ -648,7 +703,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 onClick={() => {
                   // generate template for selected templateGrade
                   const filtered = templateGrade === 'all' ? students : students.filter(s => s.grade === templateGrade);
-                  const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'previousYearDue', 'category', 'gender', 'session'];
+                  const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'gender', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'transportFee', 'previousYearDue', 'category', 'session'];
                   // Template with one sample row illustrating date format (YYYY-MM-DD)
                   const sample = [
                     'STU001',
@@ -656,6 +711,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                     'Sample Father Name',
                     'Sample Mother Name',
                     '2010-05-14', // dateOfBirth (YYYY-MM-DD)
+                    'Male',       // gender
                     '2022-03-31', // admissionDate (YYYY-MM-DD)
                     '1234-5678-9012',
                     'PEN000001',
@@ -665,9 +721,9 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                     '10',
                     'A',
                     '25000',
+                    '2000', // transportFee
                     '5000',
                     'GEN',
-                    'Male',
                     '2025-26'
                   ].join(',');
                   const csv = [header.join(','), sample].join('\n');

@@ -8,6 +8,27 @@
       "when": 1768527319334,
       "tag": "0000_dashing_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1769273040792,
+      "tag": "0001_lonely_marten_broadcloak",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1769273761869,
+      "tag": "0002_volatile_tinkerer",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1769279562322,
+      "tag": "0003_lame_violations",
+      "breakpoints": true
     }
   ]
 }

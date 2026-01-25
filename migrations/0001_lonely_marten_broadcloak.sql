@@ -1,0 +1,1 @@
+ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "transport_fee" numeric(10, 2) DEFAULT '0';

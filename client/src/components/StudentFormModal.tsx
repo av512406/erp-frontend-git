@@ -53,7 +53,8 @@ export default function StudentFormModal({
     yearlyFeeAmount: '',
     category: 'GEN',
     gender: 'Male',
-    previousYearDue: ''
+    previousYearDue: '',
+    transportFee: ''
   });
 
   useEffect(() => {
@@ -76,7 +77,8 @@ export default function StudentFormModal({
         yearlyFeeAmount: student.yearlyFeeAmount,
         category: (student as any).category || 'GEN',
         gender: (student as any).gender || 'Male',
-        previousYearDue: (student as any).previousYearDue || ''
+        previousYearDue: (student as any).previousYearDue || '',
+        transportFee: (student as any).transportFee || ''
       });
     } else {
       setFormData({
@@ -97,14 +99,18 @@ export default function StudentFormModal({
         yearlyFeeAmount: '',
         category: 'GEN',
         gender: 'Male',
-        previousYearDue: ''
+        previousYearDue: '',
+        transportFee: ''
       });
     }
   }, [student, isOpen]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData as any);
+    const payload = { ...formData };
+    if (!payload.transportFee) payload.transportFee = '0';
+    if (!payload.previousYearDue) payload.previousYearDue = '0'; // also good practice
+    onSave(payload as any);
   };
 
   return (
@@ -372,6 +378,22 @@ export default function StudentFormModal({
                   />
                   <p className="text-xs text-muted-foreground">
                     Outstanding amount from previous academic years
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="transportFee">Transport Fee (₹)</Label>
+                  <Input
+                    id="transportFee"
+                    type="number"
+                    value={(formData as any).transportFee}
+                    onChange={(e) => setFormData({ ...formData, transportFee: e.target.value } as any)}
+                    data-testid="input-transport-fee"
+                    placeholder="0"
+                    min="0"
+                    step="1"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Optional transport fee amount
                   </p>
                 </div>
               </fieldset>

@@ -43,13 +43,14 @@ export function mapStudent(row: any) {
         section: row.section,
         fatherName: row.father_name,
         motherName: row.mother_name,
-        yearlyFeeAmount: row.yearly_fee_amount?.toString?.() ?? row.yearly_fee_amount,
+        yearlyFeeAmount: row.yearlyFeeAmount || row.session_fee?.toString?.() || row.yearly_fee_amount?.toString?.() || '0',
         previousYearDue: row.previous_year_due?.toString?.() ?? row.previous_year_due,
         status: row.status || 'active',
         leftDate: formatDateForClient(row.left_date),
         leavingReason: row.leaving_reason || '',
         category: row.category || 'GEN',
-        gender: row.gender || ''
+        gender: row.gender || '',
+        transportFee: row.transportFee || row.transport_fee?.toString?.() || '0'
     };
 }
 
