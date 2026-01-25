@@ -11,6 +11,7 @@ import { reportRouter } from "./reports";
 import { sessionRouter } from "./sessions";
 import { attendanceRouter } from "./attendance";
 import { transportRouter } from "./transport";
+import { financeRouter } from "./finance";
 import backupRouter from "../backup_routes";
 import { requireAuth } from "../middleware/auth";
 
@@ -27,6 +28,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     app.use(sessionRouter);
     app.use(attendanceRouter);
     app.use(transportRouter);
+    app.use(financeRouter);
 
     // Backup Routes (Kept external)
     app.use("/api/backup", requireAuth, backupRouter);

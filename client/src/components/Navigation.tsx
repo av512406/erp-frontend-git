@@ -65,6 +65,11 @@ export default function Navigation({ userRole, userEmail, onLogout, sessions = [
     adminLinks.splice(1, 0, { path: "/attendance", label: "Attendance", icon: Users });
   }
 
+  if (config.features?.finance) {
+    adminLinks.splice(1, 0, { path: "/finance", label: "Finance", icon: DollarSign });
+  }
+
+
 
 
 
@@ -75,7 +80,6 @@ export default function Navigation({ userRole, userEmail, onLogout, sessions = [
 
   const superAdminLinks = [
     { path: "/super-admin", label: "Super Admin", icon: LayoutDashboard },
-    { path: "/", label: "School Dashboard", icon: LayoutDashboard },
   ];
 
   const accountantLinks = [

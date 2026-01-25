@@ -8,6 +8,20 @@ const router = Router();
 
 router.get('/api/school-config', requireAuth, async (req, res) => {
     const user = (req as any).user;
+
+    // Super Admin Fallback
+    if (user.role === 'superadmin' && !user.schoolId) {
+        return res.json({
+            id: 'system',
+            name: 'System Admin',
+            slug: 'system',
+            features: { attendance: true, sms: true, finance: true }, // Enable all by default for superadmin context
+            logoUrl: '',
+            examPattern: ["Term 1", "Term 2"],
+            session: '2024-2025'
+        });
+    }
+
     try {
         const { rows } = await pool.query(`
         SELECT s.id, s.name, s.slug, s.address, s.phone, s.logo_url as "logoUrl", s.exam_pattern as "examPattern", s.features, ac.name as "session"
@@ -15,7 +29,11 @@ router.get('/api/school-config', requireAuth, async (req, res) => {
         LEFT JOIN academic_sessions ac ON s.current_session_id = ac.id
         WHERE s.id = $1
       `, [user.schoolId]);
-        if (rows.length === 0) return res.status(404).json({ message: 'School not found' });
+
+        if (rows.length === 0) {
+            // If user has schoolId but school not found (deleted?), or role is admin but no school?
+            return res.status(404).json({ message: 'School not found' });
+        }
 
         const school = rows[0];
         // Parse JSON fields

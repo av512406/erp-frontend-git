@@ -26,6 +26,7 @@ const schoolSchema = z.object({
     features: z.object({
         attendance: z.boolean().default(false),
         sms: z.boolean().default(false),
+        finance: z.boolean().default(false),
     }).optional(),
 });
 
@@ -39,7 +40,7 @@ interface School {
     phone?: string;
     logoUrl?: string;
     is_active: boolean;
-    features?: { attendance: boolean; transport?: boolean; sms?: boolean };
+    features?: { attendance: boolean; transport?: boolean; sms?: boolean; finance?: boolean };
 }
 
 const adminSchema = z.object({
@@ -184,6 +185,7 @@ export default function SuperAdminDashboard() {
             features: {
                 attendance: school.features?.attendance || false,
                 sms: school.features?.sms || false,
+                finance: school.features?.finance || false,
             },
         });
         setOpen(true);
@@ -364,6 +366,26 @@ export default function SuperAdminDashboard() {
                                                         <FormLabel>Enable SMS Notifications (Pro)</FormLabel>
                                                         <div className="text-[0.8rem] text-muted-foreground">
                                                             Allow this school to send SMS notifications to parents.
+                                                        </div>
+                                                    </div>
+                                                    <FormControl>
+                                                        <Switch
+                                                            checked={field.value}
+                                                            onCheckedChange={field.onChange}
+                                                        />
+                                                    </FormControl>
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="features.finance"
+                                            render={({ field }) => (
+                                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                                                    <div className="space-y-0.5">
+                                                        <FormLabel>Enable Finance Module (Pro)</FormLabel>
+                                                        <div className="text-[0.8rem] text-muted-foreground">
+                                                            Enable expense management, payroll, and collection tracking.
                                                         </div>
                                                     </div>
                                                     <FormControl>

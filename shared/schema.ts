@@ -343,3 +343,43 @@ export const transportFeeTransactions = pgTable("transport_fee_transactions", {
 export const insertTransportFeeTransactionSchema = createInsertSchema(transportFeeTransactions).omit({ id: true, schoolId: true });
 export type InsertTransportFeeTransaction = z.infer<typeof insertTransportFeeTransactionSchema>;
 export type TransportFeeTransaction = typeof transportFeeTransactions.$inferSelect;
+
+// --- Finance: Expense Management ---
+
+export const expenses = pgTable("expenses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  description: text("description").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  category: text("category").notNull(), // e.g., 'utilities', 'maintenance', 'events', 'salary', 'other'
+  date: date("date").notNull(),
+  paymentMethod: text("payment_method"), // 'cash', 'bank_transfer', 'cheque', etc.
+  receiptUrl: text("receipt_url"), // Optional URL to stored image
+  recordedBy: varchar("recorded_by").references(() => users.id), // User who entered the record
+  schoolId: varchar("school_id").notNull().references(() => schools.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true, schoolId: true, recordedBy: true });
+export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+export type Expense = typeof expenses.$inferSelect;
+
+// --- Finance: Staff Payments (Salary) ---
+
+export const staffPayments = pgTable("staff_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  staffId: varchar("staff_id").notNull().references(() => teachers.id), // Linking to teachers table for now
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  month: text("month").notNull(), // e.g., "January"
+  year: integer("year").notNull(), // e.g., 2025
+  paymentDate: date("payment_date").notNull(),
+  status: text("status").notNull().default('Paid'), // 'Paid', 'Pending'
+  remarks: text("remarks"),
+  schoolId: varchar("school_id").notNull().references(() => schools.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertStaffPaymentSchema = createInsertSchema(staffPayments).omit({ id: true, schoolId: true });
+export type InsertStaffPayment = z.infer<typeof insertStaffPaymentSchema>;
+export type StaffPayment = typeof staffPayments.$inferSelect;

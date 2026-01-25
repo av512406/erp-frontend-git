@@ -16,7 +16,12 @@ export function useStudents(sessionId?: string) {
                 : `/api/students`;
             const res = await fetch(url, { headers: getAuthHeaders() });
             if (!res.ok) throw new Error('Failed to fetch students');
-            return res.json();
+            const data = await res.json();
+            // Handle paginated response { data: [], meta: ... } or simple array []
+            if (data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) {
+                return data.data;
+            }
+            return Array.isArray(data) ? data : [];
         },
         enabled: true // Always enabled, but we could gate it if sessionId is required
     });
@@ -40,7 +45,11 @@ export function useFees(sessionId?: string) {
             const queryParams = sessionId ? `?sessionId=${sessionId}` : '';
             const res = await fetch(`/api/fees${queryParams}`, { headers: getAuthHeaders() });
             if (!res.ok) throw new Error('Failed to fetch fees');
-            return res.json();
+            const data = await res.json();
+            if (data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) {
+                return data.data;
+            }
+            return Array.isArray(data) ? data : [];
         }
     });
 }
@@ -52,7 +61,11 @@ export function useGrades(sessionId?: string) {
             const queryParams = sessionId ? `?sessionId=${sessionId}` : '';
             const res = await fetch(`/api/grades${queryParams}`, { headers: getAuthHeaders() });
             if (!res.ok) throw new Error('Failed to fetch grades');
-            return res.json();
+            const data = await res.json();
+            if (data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) {
+                return data.data;
+            }
+            return Array.isArray(data) ? data : [];
         }
     });
 }

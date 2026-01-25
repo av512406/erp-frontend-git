@@ -22,6 +22,7 @@ import AdminClassesPage from "@/components/AdminClassesPage";
 import TeacherDashboard from "@/components/TeacherDashboard";
 import AttendancePage from "@/components/AttendancePage";
 import IDCardPage from "@/components/IDCardPage";
+import FinancePage from "@/pages/FinancePage";
 
 import { useStudents, useWithdrawnStudents, useFees, useGrades } from "./hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -304,7 +305,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
   const stats = {
     totalStudents: students.length,
     pendingFees: (() => {
-      const totalYearly = students.reduce((s, st) => s + (parseFloat(st.yearlyFeeAmount || '0') || 0) + (parseFloat((st as any).previousYearDue || '0') || 0), 0);
+      const totalYearly = students.reduce((s, st) => s + (parseFloat((st as any).yearlyFeeAmount || '0') || 0) + (parseFloat((st as any).previousYearDue || '0') || 0), 0);
       const paid = transactions
         .filter(t => t.status !== 'cancelled')
         .reduce((s, t) => s + (t.amount || 0), 0);
@@ -457,6 +458,13 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
           <IDCardPage students={students} />
         </ProtectedRoute>
       </Route>
+
+      <Route path="/finance">
+        <ProtectedRoute allowedRoles={['admin', 'superadmin']} userRole={user.role}>
+          <FinancePage />
+        </ProtectedRoute>
+      </Route>
+
       <Route component={NotFound} />
     </Switch >
   );
