@@ -37,6 +37,9 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
   const TERMS = config.examPattern || ['Term 1', 'Term 2', 'Final'];
   const { data: template } = useDocumentTemplate('report_card');
 
+  const [availableGrades, setAvailableGrades] = useState<string[]>([]);
+  const [availableSections, setAvailableSections] = useState<string[]>([]);
+
   const [selectedStudent, setSelectedStudent] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
   const [selectedSection, setSelectedSection] = useState("");
@@ -46,6 +49,23 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
   const [isStudentSelectOpen, setIsStudentSelectOpen] = useState(false);
   const [selectedTerm, setSelectedTerm] = useState("");
   const [showReport, setShowReport] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/classes/grades', { headers: getAuthHeaders() })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setAvailableGrades(data))
+      .catch(() => setAvailableGrades([]));
+  }, []);
+
+  useEffect(() => {
+    setAvailableSections([]);
+    if (!selectedClass || selectedClass === 'all') return;
+
+    fetch(`/api/classes/${encodeURIComponent(selectedClass)}/sections`, { headers: getAuthHeaders() })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setAvailableSections(data))
+      .catch(() => setAvailableSections([]));
+  }, [selectedClass]);
 
   const handleGenerate = () => {
     setShowReport(true);
@@ -260,7 +280,7 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All classes</SelectItem>
-                  {Array.from(new Set(students.map(s => s.grade))).sort((a, b) => parseInt(a) - parseInt(b)).map(c => (
+                  {availableGrades.map(c => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>
@@ -275,7 +295,7 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All sections</SelectItem>
-                  {Array.from(new Set(students.filter(s => s.grade === selectedClass).map(s => s.section))).sort().map(sec => (
+                  {availableSections.map(sec => (
                     <SelectItem key={sec} value={sec}>{sec}</SelectItem>
                   ))}
                 </SelectContent>

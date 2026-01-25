@@ -232,16 +232,55 @@ router.get('/api/users/teachers', requireAuth, async (req, res) => {
 // Subject Assignments
 router.get('/api/classes/grades', requireAuth, async (req, res) => {
     const user = (req as any).user;
-    const { rows } = await pool.query(`
-      SELECT DISTINCT grade FROM (
-        SELECT grade FROM students WHERE grade IS NOT NULL AND school_id = $1
-        UNION
-        SELECT grade FROM class_subjects WHERE school_id = $1
-      ) t
-      WHERE grade IS NOT NULL AND grade <> ''
-      ORDER BY grade
-    `, [user.schoolId]);
+    // Use classes table as the source of truth for defined grades
+    const classRes = await pool.query(
+        `SELECT DISTINCT grade FROM classes WHERE school_id = $1 ORDER BY grade`,
+        [user.schoolId]
+    );
+
+    let rows = classRes.rows;
+
+    // Fallback if no classes are defined: use existing student data
+    if (rows.length === 0) {
+        const fallbackRes = await pool.query(`
+        SELECT DISTINCT grade FROM (
+            SELECT grade FROM students WHERE grade IS NOT NULL AND school_id = $1
+            UNION
+            SELECT grade FROM class_subjects WHERE school_id = $1
+        ) t
+        WHERE grade IS NOT NULL AND grade <> ''
+        ORDER BY grade
+        `, [user.schoolId]);
+        rows = fallbackRes.rows;
+    }
+
     res.json(rows.map(r => r.grade));
+});
+
+router.get('/api/classes/:grade/sections', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    const grade = req.params.grade;
+
+    // Use classes table as source of truth
+    const classRes = await pool.query(
+        `SELECT DISTINCT section FROM classes WHERE school_id = $1 AND grade = $2 ORDER BY section`,
+        [user.schoolId, grade]
+    );
+    let rows = classRes.rows;
+
+    // Fallback if no classes defined
+    if (rows.length === 0) {
+        const fallbackRes = await pool.query(`
+        SELECT DISTINCT section FROM (
+            SELECT section FROM students WHERE grade=$2 AND school_id=$1
+            UNION
+            SELECT section FROM student_sessions WHERE grade=$2 AND school_id=$1
+        ) t WHERE section IS NOT NULL AND section <> '' ORDER BY section
+       `, [user.schoolId, grade]);
+        rows = fallbackRes.rows;
+    }
+
+    res.json(rows.map(r => r.section));
 });
 
 router.get('/api/classes/:grade/subjects', requireAuth, async (req, res) => {

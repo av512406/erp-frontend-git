@@ -19,7 +19,8 @@ import {
   LogOut,
   Settings,
   UserX,
-  Menu
+  Menu,
+  IdCard
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -135,6 +136,7 @@ export default function Navigation({ userRole, userEmail, onLogout, sessions = [
                       <div className="text-sm font-medium text-muted-foreground mt-4 mb-2 px-2">Students</div>
                       <NavLink link={{ path: "/students", label: "Enrolled", icon: Users }} mobile />
                       <NavLink link={{ path: "/students-withdrawn", label: "Withdrawn", icon: UserX }} mobile />
+                      <NavLink link={{ path: "/id-cards", label: "ID Cards", icon: IdCard }} mobile />
                     </>
                   )}
 
@@ -223,6 +225,11 @@ export default function Navigation({ userRole, userEmail, onLogout, sessions = [
                   <DropdownMenuItem asChild>
                     <Link href="/students-withdrawn" className="flex items-center gap-2">
                       <UserX className="w-4 h-4" /> Withdrawn
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/id-cards" className="flex items-center gap-2">
+                      <IdCard className="w-4 h-4" /> ID Card
                     </Link>
                   </DropdownMenuItem>
                 </DropdownMenuContent>

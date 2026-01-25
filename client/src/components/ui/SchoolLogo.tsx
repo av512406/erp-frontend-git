@@ -21,6 +21,7 @@ export function SchoolLogo({ url, name, className = "h-10 w-10", fallbackClassNa
             <img
                 src={url}
                 alt="Logo"
+                crossOrigin="anonymous"
                 className={`${className} object-contain rounded`}
                 onError={() => setError(true)}
             />

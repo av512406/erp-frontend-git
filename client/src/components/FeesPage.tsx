@@ -213,12 +213,26 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     }
   }, [location]);
 
-  // Unique grades & sections (sections depend on selected grade)
-  const uniqueGrades = useMemo(() => Array.from(new Set(students.map(s => s.grade))).sort((a, b) => Number(a) - Number(b)), [students]);
-  const uniqueSectionsForGrade = useMemo(() => {
-    const source = filterGrade === 'all' ? students : students.filter(s => s.grade === filterGrade);
-    return Array.from(new Set(source.map(s => s.section))).sort();
-  }, [students, filterGrade]);
+  // API-based filters for Main Entry
+  const [availableGrades, setAvailableGrades] = useState<string[]>([]);
+  const [availableSections, setAvailableSections] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch('/api/classes/grades', { headers: getAuthHeaders() })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setAvailableGrades(data))
+      .catch(() => setAvailableGrades([]));
+  }, []);
+
+  useEffect(() => {
+    setAvailableSections([]);
+    if (!filterGrade || filterGrade === 'all') return;
+
+    fetch(`/api/classes/${encodeURIComponent(filterGrade)}/sections`, { headers: getAuthHeaders() })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setAvailableSections(data))
+      .catch(() => setAvailableSections([]));
+  }, [filterGrade]);
 
   // Filter students by grade then section
   const filteredStudents = useMemo(() => {
@@ -236,9 +250,11 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
   }, [students, filterGrade, filterSection, searchTerm]);
 
   // If section becomes invalid after grade change, reset to 'all'
-  if (filterSection !== 'all' && !uniqueSectionsForGrade.includes(filterSection)) {
-    setFilterSection('all');
-  }
+  useEffect(() => {
+    if (filterSection !== 'all' && availableSections.length > 0 && !availableSections.includes(filterSection)) {
+      setFilterSection('all');
+    }
+  }, [filterGrade, availableSections, filterSection]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -450,7 +466,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All classes</SelectItem>
-                          {uniqueGrades.map(g => (
+                          {availableGrades.map(g => (
                             <SelectItem key={g} value={g}>Class {g}</SelectItem>
                           ))}
                         </SelectContent>
@@ -464,7 +480,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All sections</SelectItem>
-                          {uniqueSectionsForGrade.map(sec => (
+                          {availableSections.map(sec => (
                             <SelectItem key={sec} value={sec}>Section {sec}</SelectItem>
                           ))}
                         </SelectContent>

@@ -59,10 +59,30 @@ export default function GradesPage({ students, grades, onSaveGrades, saving = fa
       .sort((a, b) => Number(a) - Number(b))
   ), [students]);
 
-  const uniqueSectionsForClass = useMemo(() => {
-    const pool = selectedGrade ? students.filter(s => s.grade === selectedGrade) : students;
-    return Array.from(new Set(pool.map(s => s.section))).filter(Boolean).sort();
-  }, [students, selectedGrade]);
+  const [sectionsForClass, setSectionsForClass] = useState<string[]>([]);
+  const [loadingSections, setLoadingSections] = useState(false);
+
+  // Load sections for selected class
+  useEffect(() => {
+    setSelectedSection("");
+    if (!selectedGrade) { setSectionsForClass([]); return; }
+    (async () => {
+      setLoadingSections(true);
+      try {
+        const res = await fetch(`/api/classes/${encodeURIComponent(selectedGrade)}/sections`, { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data: string[] = await res.json();
+          setSectionsForClass(data);
+        } else {
+          setSectionsForClass([]);
+        }
+      } catch {
+        setSectionsForClass([]);
+      } finally {
+        setLoadingSections(false);
+      }
+    })();
+  }, [selectedGrade]);
 
   // update maxMarks when subject selection changes
   useEffect(() => {
@@ -73,10 +93,10 @@ export default function GradesPage({ students, grades, onSaveGrades, saving = fa
 
   // keep section consistent with selected class
   useEffect(() => {
-    if (selectedSection && !uniqueSectionsForClass.includes(selectedSection)) {
+    if (selectedSection && sectionsForClass.length > 0 && !sectionsForClass.includes(selectedSection)) {
       setSelectedSection("");
     }
-  }, [uniqueSectionsForClass, selectedSection]);
+  }, [sectionsForClass, selectedSection]);
 
   // Load subjects for selected class
   useEffect(() => {
@@ -255,10 +275,10 @@ export default function GradesPage({ students, grades, onSaveGrades, saving = fa
               <Label htmlFor="section">Section</Label>
               <Select value={selectedSection} onValueChange={setSelectedSection} disabled={!selectedGrade}>
                 <SelectTrigger id="section" data-testid="select-section">
-                  <SelectValue placeholder={selectedGrade ? "Select section" : "Select class first"} />
+                  <SelectValue placeholder={loadingSections ? "Loading sections..." : (selectedGrade ? "Select section" : "Select class first")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {uniqueSectionsForClass.map(section => (
+                  {sectionsForClass.map(section => (
                     <SelectItem key={section} value={section}>{section}</SelectItem>
                   ))}
                 </SelectContent>

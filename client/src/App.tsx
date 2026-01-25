@@ -21,6 +21,7 @@ import SuperAdminDashboard from "@/components/SuperAdminDashboard";
 import AdminClassesPage from "@/components/AdminClassesPage";
 import TeacherDashboard from "@/components/TeacherDashboard";
 import AttendancePage from "@/components/AttendancePage";
+import IDCardPage from "@/components/IDCardPage";
 
 import { useStudents, useWithdrawnStudents, useFees, useGrades } from "./hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -448,6 +449,12 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       <Route path="/super-admin">
         <ProtectedRoute allowedRoles={['superadmin']} userRole={user.role}>
           <SuperAdminDashboard />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/id-cards">
+        <ProtectedRoute allowedRoles={['admin', 'superadmin']} userRole={user.role}>
+          <IDCardPage students={students} />
         </ProtectedRoute>
       </Route>
       <Route component={NotFound} />

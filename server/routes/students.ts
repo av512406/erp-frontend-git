@@ -217,6 +217,13 @@ router.post('/api/students/promote', requireAuth, async (req, res) => {
            `,
                 [id, s.studentId, targetSessionId, user.schoolId, s.grade, s.section, s.rollNumber || null]
             );
+
+            // Also update the main students table to reflect the current grade/section
+            await client.query(
+                `UPDATE students SET grade = $1, section = $2 WHERE id = $3 AND school_id = $4`,
+                [s.grade, s.section, s.studentId, user.schoolId]
+            );
+
             inserted.push(s.studentId);
         }
 
@@ -323,9 +330,28 @@ router.put('/api/students/:admissionNumber', requireAuth, async (req, res) => {
             const finalTransportFee = isRteBool ? 0 : (transportFee || 0);
             const finalYearlyFee = isRteBool ? 0 : (yearlyFeeAmount || 0);
 
+            // Construct sets for session update
+            const sessionSets: string[] = [`transport_fee = $1`, `yearly_fee_amount = $2`, `is_rte = $3`];
+            const sessionValues: any[] = [finalTransportFee, finalYearlyFee, isRteBool];
+            let valIdx = 4;
+
+            // If grade/section provided in body, update them in session too
+            if (data.grade) {
+                sessionSets.push(`grade = $${valIdx++}`);
+                sessionValues.push(data.grade);
+            }
+            if (data.section) {
+                sessionSets.push(`section = $${valIdx++}`);
+                sessionValues.push(data.section);
+            }
+
+            sessionValues.push(existing.rows[0].id); // student_id
+            sessionValues.push(sessionId); // session_id
+            sessionValues.push(user.schoolId); // school_id
+
             await pool.query(
-                `UPDATE student_sessions SET transport_fee = $1, yearly_fee_amount = $2, is_rte = $3 WHERE student_id = $4 AND session_id = $5 AND school_id = $6`,
-                [finalTransportFee, finalYearlyFee, isRteBool, existing.rows[0].id, sessionId, user.schoolId]
+                `UPDATE student_sessions SET ${sessionSets.join(', ')} WHERE student_id = $${valIdx} AND session_id = $${valIdx + 1} AND school_id = $${valIdx + 2}`,
+                sessionValues
             );
         }
 
