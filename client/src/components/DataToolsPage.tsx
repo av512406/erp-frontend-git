@@ -63,6 +63,7 @@ type RawStudentRow = {
   category?: string;
   gender?: string;
   previousYearDue?: string;
+  isRTE?: string;
 };
 
 interface DataToolsPageProps {
@@ -240,6 +241,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
             const motherName = normalize(row.mothername || row["mother's name"] || row['mother name'] || row.mother || row.motherName);
             const category = normalize(row.category || 'GEN');
             const gender = normalize(row.gender || '');
+            const isRTE = normalize(row.isRTE || row.is_rte || row['RTE'] || row['rte']);
 
             validStudents.push({
               admissionNumber,
@@ -259,7 +261,8 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
               previousYearDue,
               transportFee,
               category,
-              gender
+              gender,
+              isRTE
             });
           });
 
@@ -497,6 +500,48 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
       title: "Export Successful",
       description: `Exported ${filteredStudents.length} student${filteredStudents.length === 1 ? '' : 's'}`,
     });
+
+  };
+
+  const handleExportRTEStudents = () => {
+    const rteStudents = students.filter(s => (s as any).isRTE);
+    if (rteStudents.length === 0) {
+      toast({ title: "No RTE Students", description: "No students marked as RTE found.", variant: "default" });
+      return;
+    }
+
+    const csvContent = [
+      ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'previousYearDue', 'category', 'gender', 'session', 'isRTE'].join(','),
+      ...rteStudents.map(s => [
+        s.admissionNumber,
+        `"${(s.name || '').replace(/"/g, '""')}"`,
+        `"${(s.fatherName || '').replace(/"/g, '""')}"`,
+        `"${(s.motherName || '').replace(/"/g, '""')}"`,
+        formatCsvDate(s.dateOfBirth),
+        formatCsvDate(s.admissionDate),
+        s.aadharNumber,
+        s.penNumber,
+        s.aaparId,
+        s.mobileNumber,
+        `"${(s.address || '').replace(/"/g, '""')}"`,
+        s.grade,
+        s.section,
+        '0', // RTE implies 0 fee
+        (s as any).previousYearDue || '0',
+        (s as any).category || 'GEN',
+        (s as any).gender || '',
+        (s as any).sessionName || '',
+        'Yes'
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rte-students-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -703,7 +748,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 onClick={() => {
                   // generate template for selected templateGrade
                   const filtered = templateGrade === 'all' ? students : students.filter(s => s.grade === templateGrade);
-                  const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'gender', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'transportFee', 'previousYearDue', 'category', 'session'];
+                  const header = ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'gender', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'transportFee', 'previousYearDue', 'category', 'session', 'isRTE'];
                   // Template with one sample row illustrating date format (YYYY-MM-DD)
                   const sample = [
                     'STU001',
@@ -724,7 +769,8 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                     '2000', // transportFee
                     '5000',
                     'GEN',
-                    '2025-26'
+                    '2025-26',
+                    'No' // isRTE
                   ].join(',');
                   const csv = [header.join(','), sample].join('\n');
 
@@ -991,6 +1037,15 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
                 data-testid="button-export-students-excel"
               >
                 <FileSpreadsheet className="w-4 h-4" /> Students Excel
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full gap-2 border-dashed border-primary/50 hover:bg-primary/5"
+                onClick={handleExportRTEStudents}
+                data-testid="button-export-rte-students"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-primary" />
+                Download RTE List
               </Button>
               <Button
                 variant="outline"

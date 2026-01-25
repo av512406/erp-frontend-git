@@ -16,6 +16,20 @@ export default function LoginPage({ onLogin, errorMessage }: LoginPageProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Frontend validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    // Wait, let's just let it pass if it's 'admin' (legacy) or ensure it matches email.
+    // The user rules say: "our username is in the format username@schoolname.com".
+    if (!emailRegex.test(email)) {
+      // We can't use 'toast' here easily as it's not imported (though it is in AdminSettings).
+      // Let's import useToast if possible, or just add a simple check.
+      // The prompt requested "frontend side validation".
+      alert("Please enter a valid username in the format username@schoolname.com");
+      return;
+    }
+
     onLogin(email, password);
   };
 

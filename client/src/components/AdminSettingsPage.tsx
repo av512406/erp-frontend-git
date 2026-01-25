@@ -64,10 +64,20 @@ function UserManagement() {
       const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users';
       const method = editingUser ? 'PUT' : 'POST';
 
+      // Auto-append domain logic placeholder - ideally we fetch school config here
+      let finalUsername = formData.username;
+
+      // Basic validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(finalUsername)) {
+        toast({ title: "Validation Error", description: "Username must be in format username@schoolname.com", variant: "destructive" });
+        return;
+      }
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({ ...formData, username: finalUsername })
       });
 
       if (!res.ok) {

@@ -95,7 +95,9 @@ router.get('/api/students', requireAuth, async (req, res) => {
             ss.section as session_section,
             ss.status as session_status,
             ss.roll_number,
+            ss.roll_number,
             ss.transport_fee,
+            ss.is_rte,
             ss.yearly_fee_amount as session_fee
           FROM students s
           INNER JOIN student_sessions ss ON s.id = ss.student_id
@@ -113,7 +115,8 @@ router.get('/api/students', requireAuth, async (req, res) => {
                 status: row.session_status || row.status,
                 rollNumber: row.roll_number,
                 transportFee: row.transport_fee?.toString?.() || '0',
-                yearlyFeeAmount: row.session_fee?.toString?.() || '0'
+                yearlyFeeAmount: row.session_fee?.toString?.() || '0',
+                isRTE: row.is_rte || false
             }));
 
             return res.json({
@@ -129,6 +132,7 @@ router.get('/api/students', requireAuth, async (req, res) => {
             ss.status as session_status,
             ss.roll_number,
             ss.transport_fee,
+            ss.is_rte,
             ss.yearly_fee_amount as session_fee
           FROM students s
           INNER JOIN student_sessions ss ON s.id = ss.student_id
@@ -143,7 +147,8 @@ router.get('/api/students', requireAuth, async (req, res) => {
                 status: row.session_status || row.status,
                 rollNumber: row.roll_number,
                 transportFee: row.transport_fee?.toString?.() || '0',
-                yearlyFeeAmount: row.session_fee?.toString?.() || '0'
+                yearlyFeeAmount: row.session_fee?.toString?.() || '0',
+                isRTE: row.is_rte || false
             }));
             res.json(mapped);
         }
@@ -250,10 +255,14 @@ router.post('/api/students', requireAuth, async (req, res) => {
             [id, data.admissionNumber, data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber, data.penNumber, data.aaparId, data.mobileNumber, data.address, data.grade, data.section, (data as any).fatherName || null, (data as any).motherName || null, user.schoolId]
         );
 
+        const isRTE = data.isRTE === true || String(data.isRTE).toLowerCase() === 'true' || String(data.isRTE).toLowerCase() === 'yes';
+        const finalYearlyFee = isRTE ? 0 : ((data as any).yearlyFeeAmount || 0);
+        const finalTransportFee = isRTE ? 0 : ((data as any).transportFee || 0);
+
         await client.query(
-            `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id, transport_fee, yearly_fee_amount)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-            [genId(), id, sessionId, data.grade, data.section, 'active', user.schoolId, (data as any).transportFee || 0, (data as any).yearlyFeeAmount || 0]
+            `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id, transport_fee, yearly_fee_amount, is_rte)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [genId(), id, sessionId, data.grade, data.section, 'active', user.schoolId, finalTransportFee, finalYearlyFee, isRTE]
         );
 
         await client.query('COMMIT');
@@ -284,7 +293,7 @@ router.put('/api/students/:admissionNumber', requireAuth, async (req, res) => {
 
         const values: any[] = [];
         const sets: string[] = [];
-        const excludedKeys = ['yearlyFeeAmount', 'transportFee', 'session', 'sessionName', 'sessionId'];
+        const excludedKeys = ['yearlyFeeAmount', 'transportFee', 'session', 'sessionName', 'sessionId', 'isRTE'];
         keys.forEach((k, i) => {
             if (excludedKeys.includes(k)) return;
             const col = k.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase()).replace(/^admission_number$/, 'admission_number');
@@ -307,12 +316,16 @@ router.put('/api/students/:admissionNumber', requireAuth, async (req, res) => {
             q = { rows: [existing.rows[0]] };
         }
 
-        const { sessionId, transportFee, yearlyFeeAmount } = req.body;
+        const { sessionId, transportFee, yearlyFeeAmount, isRTE } = req.body;
+        const isRteBool = isRTE === true || String(isRTE).toLowerCase() === 'true';
 
         if (sessionId) {
+            const finalTransportFee = isRteBool ? 0 : (transportFee || 0);
+            const finalYearlyFee = isRteBool ? 0 : (yearlyFeeAmount || 0);
+
             await pool.query(
-                `UPDATE student_sessions SET transport_fee = $1, yearly_fee_amount = $2 WHERE student_id = $3 AND session_id = $4 AND school_id = $5`,
-                [transportFee || 0, yearlyFeeAmount || 0, existing.rows[0].id, sessionId, user.schoolId]
+                `UPDATE student_sessions SET transport_fee = $1, yearly_fee_amount = $2, is_rte = $3 WHERE student_id = $4 AND session_id = $5 AND school_id = $6`,
+                [finalTransportFee, finalYearlyFee, isRteBool, existing.rows[0].id, sessionId, user.schoolId]
             );
         }
 
@@ -426,18 +439,22 @@ router.post('/api/students/import', requireAuth, async (req, res) => {
                     added.push(data.admissionNumber);
                 }
 
+                const isRTE = data.isRTE === true || String(data.isRTE).toLowerCase() === 'true' || String(data.isRTE).toLowerCase() === 'yes';
+                const finalYearlyFee = isRTE ? 0 : (data.yearlyFeeAmount || 0);
+                const finalTransportFee = isRTE ? 0 : ((data as any).transportFee || 0);
+
                 if (studentId && effectiveSessionId) {
                     const sessCheck = await client.query('SELECT 1 FROM student_sessions WHERE student_id = $1 AND session_id = $2', [studentId, effectiveSessionId]);
                     if ((sessCheck.rowCount ?? 0) === 0) {
                         await client.query(
-                            `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id, yearly_fee_amount, transport_fee)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-                            [genId(), studentId, effectiveSessionId, data.grade, data.section, 'active', user.schoolId, data.yearlyFeeAmount || 0, (data as any).transportFee || 0]
+                            `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id, yearly_fee_amount, transport_fee, is_rte)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                            [genId(), studentId, effectiveSessionId, data.grade, data.section, 'active', user.schoolId, finalYearlyFee, finalTransportFee, isRTE]
                         );
                     } else if (strategy === 'upsert') {
                         await client.query(
-                            `UPDATE student_sessions SET grade=$1, section=$2, yearly_fee_amount=$3, transport_fee=$4 WHERE student_id=$5 AND session_id=$6`,
-                            [data.grade, data.section, data.yearlyFeeAmount || 0, (data as any).transportFee || 0, studentId, effectiveSessionId]
+                            `UPDATE student_sessions SET grade=$1, section=$2, yearly_fee_amount=$3, transport_fee=$4, is_rte=$5 WHERE student_id=$6 AND session_id=$7`,
+                            [data.grade, data.section, finalYearlyFee, finalTransportFee, isRTE, studentId, effectiveSessionId]
                         );
                     }
                 }

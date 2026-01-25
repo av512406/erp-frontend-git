@@ -54,7 +54,8 @@ export default function StudentFormModal({
     category: 'GEN',
     gender: 'Male',
     previousYearDue: '',
-    transportFee: ''
+    transportFee: '',
+    isRTE: false
   });
 
   useEffect(() => {
@@ -74,11 +75,12 @@ export default function StudentFormModal({
         sessionId: (student as any).sessionId || currentSessionId || '',
         fatherName: (student as any).fatherName || '',
         motherName: (student as any).motherName || '',
-        yearlyFeeAmount: student.yearlyFeeAmount,
+        yearlyFeeAmount: (student as any).yearlyFeeAmount,
         category: (student as any).category || 'GEN',
         gender: (student as any).gender || 'Male',
         previousYearDue: (student as any).previousYearDue || '',
-        transportFee: (student as any).transportFee || ''
+        transportFee: (student as any).transportFee || '',
+        isRTE: (student as any).isRTE || false
       });
     } else {
       setFormData({
@@ -100,7 +102,8 @@ export default function StudentFormModal({
         category: 'GEN',
         gender: 'Male',
         previousYearDue: '',
-        transportFee: ''
+        transportFee: '',
+        isRTE: false
       });
     }
   }, [student, isOpen]);
@@ -344,9 +347,33 @@ export default function StudentFormModal({
 
             {/* Fee Information */}
             {/* Fee Information - Hidden for Teachers */}
+            {/* Fee Information - Hidden for Teachers */}
             {(userRole !== 'teacher') && (
               <fieldset className="border rounded-lg p-4 space-y-4">
                 <legend className="text-sm font-semibold px-2">Fee Information</legend>
+
+                {/* RTE Checkbox */}
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="isRTE"
+                    checked={(formData as any).isRTE || false}
+                    onChange={(e) => {
+                      const isRTE = e.target.checked;
+                      setFormData({
+                        ...formData,
+                        isRTE,
+                        yearlyFeeAmount: isRTE ? '0' : formData.yearlyFeeAmount,
+                        transportFee: isRTE ? '0' : (formData as any).transportFee
+                      } as any);
+                    }}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <Label htmlFor="isRTE" className="cursor-pointer">
+                    Right To Education (RTE) - Free Education
+                  </Label>
+                </div>
+
                 <div className="grid gap-2">
                   <Label htmlFor="yearlyFeeAmount">Yearly Fee Amount (₹)</Label>
                   <Input
@@ -359,9 +386,11 @@ export default function StudentFormModal({
                     placeholder="25000"
                     min="0"
                     step="1"
+                    disabled={(formData as any).isRTE}
+                    className={(formData as any).isRTE ? "bg-muted" : ""}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Total fee amount to be collected for this academic year
+                    Token fee amount to be collected for this academic year
                   </p>
                 </div>
                 <div className="grid gap-2">
@@ -391,6 +420,8 @@ export default function StudentFormModal({
                     placeholder="0"
                     min="0"
                     step="1"
+                    disabled={(formData as any).isRTE}
+                    className={(formData as any).isRTE ? "bg-muted" : ""}
                   />
                   <p className="text-xs text-muted-foreground">
                     Optional transport fee amount

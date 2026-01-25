@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, decimal, date, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, decimal, date, integer, boolean, timestamp, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -14,6 +14,8 @@ export const schools = pgTable("schools", {
   currentSessionId: varchar("current_session_id"),
   examPattern: text("exam_pattern").default('["Term 1", "Term 2", "Final"]'), // JSON string
   features: text("features").default('{"attendance": false}'), // JSON string: { "attendance": boolean, ... }
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const users = pgTable("users", {
@@ -23,6 +25,8 @@ export const users = pgTable("users", {
   role: text("role").notNull().default('teacher'),
   name: text("name").notNull().default('User'),
   schoolId: varchar("school_id").references(() => schools.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -30,6 +34,8 @@ export const insertUserSchema = createInsertSchema(users).pick({
   password: true,
   role: true,
   name: true,
+}).extend({
+  username: z.string().email("Invalid email format"),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -57,6 +63,8 @@ export const students = pgTable("students", {
   category: text("category").default('GEN'),
   gender: text("gender"),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const insertStudentSchema = createInsertSchema(students).omit({
@@ -66,7 +74,8 @@ export const insertStudentSchema = createInsertSchema(students).omit({
   yearlyFeeAmount: z.string().optional(),
   transportFee: z.string().optional(),
   session: z.string().optional(),
-  sessionName: z.string().optional()
+  sessionName: z.string().optional(),
+  isRTE: z.boolean().optional().or(z.string().optional()) // Allow boolean or string "true"/"yes" for import
 });
 
 export type InsertStudent = z.infer<typeof insertStudentSchema>;
@@ -105,6 +114,8 @@ export const feeTransactions = pgTable("fee_transactions", {
   sessionId: varchar("session_id"), // FK to academic_sessions
   status: text("status").notNull().default('active'), // 'active', 'cancelled'
   cancelReason: text("cancel_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const insertFeeTransactionSchema = createInsertSchema(feeTransactions).omit({
@@ -192,6 +203,12 @@ export const academicSessions = pgTable("academic_sessions", {
   // Let's make it global for now as per plan: "Super Admin creates Global Session Definitions".
 });
 
+export const session = pgTable("session", {
+  sid: varchar("sid").primaryKey(),
+  sess: json("sess").notNull(),
+  expire: timestamp("expire", { precision: 6 }).notNull(),
+});
+
 // We need to update schools to link to current session
 // This is a circular dependency if we reference academicSessions here directly in the schools definition above.
 // But we can't change the order easily without breaking things.
@@ -210,6 +227,7 @@ export const studentSessions = pgTable("student_sessions", {
   status: text("status").notNull().default('active'), // promoted, detained, active
   yearlyFeeAmount: decimal("yearly_fee_amount", { precision: 10, scale: 2 }).notNull().default('0'),
   transportFee: decimal("transport_fee", { precision: 10, scale: 2 }).default('0'),
+  isRTE: boolean("is_rte").default(false),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
 });
 
@@ -231,6 +249,8 @@ export const classes = pgTable("classes", {
   schoolId: varchar("school_id").notNull().references(() => schools.id),
   // No unique constraint on (grade, section, schoolId) yet, strictly, but admin usually enforces it.
   // Let's add it to be safe.
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 }, (t) => ({
   unq: {
     name: 'classes_school_grade_section_unique',
@@ -264,6 +284,8 @@ export const attendance = pgTable("attendance", {
   sessionId: varchar("session_id").references(() => academicSessions.id),
   markedBy: varchar("marked_by").references(() => users.id),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 }, (t) => ({
   // Composite unique constraint on student + date to prevent duplicate marking
   // Again, will ensure in SQL migration for robustness.
@@ -281,6 +303,8 @@ export const transportRoutes = pgTable("transport_routes", {
   feeAmount: decimal("fee_amount", { precision: 10, scale: 2 }).notNull(), // Annual Fee
   vehicleNumber: text("vehicle_number"),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const insertTransportRouteSchema = createInsertSchema(transportRoutes).omit({ id: true, schoolId: true });
@@ -295,6 +319,9 @@ export const studentTransport = pgTable("student_transport", {
   yearlyFee: decimal("yearly_fee", { precision: 10, scale: 2 }).notNull().default('0'),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
   sessionId: varchar("session_id").notNull().references(() => academicSessions.id),
+  // Deprecated usage but kept for schema alignment if DB has it
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const insertStudentTransportSchema = createInsertSchema(studentTransport).omit({ id: true, schoolId: true });
@@ -309,6 +336,8 @@ export const transportFeeTransactions = pgTable("transport_fee_transactions", {
   remarks: text("remarks"),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
   sessionId: varchar("session_id").notNull().references(() => academicSessions.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const insertTransportFeeTransactionSchema = createInsertSchema(transportFeeTransactions).omit({ id: true, schoolId: true });

@@ -50,7 +50,8 @@ export function mapStudent(row: any) {
         leavingReason: row.leaving_reason || '',
         category: row.category || 'GEN',
         gender: row.gender || '',
-        transportFee: row.transportFee || row.transport_fee?.toString?.() || '0'
+        transportFee: row.transportFee || row.transport_fee?.toString?.() || '0',
+        isRTE: row.isRTE || row.is_rte || false
     };
 }
 
