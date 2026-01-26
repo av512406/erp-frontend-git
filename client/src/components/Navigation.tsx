@@ -11,7 +11,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   Users,
-  DollarSign,
+  IndianRupee,
   FileText,
   BookOpen,
   Database,
@@ -55,7 +55,7 @@ export default function Navigation({ userRole, userEmail, onLogout, sessions = [
   // Core admin links
   const adminLinks = [
     { path: "/", label: "Dashboard", icon: LayoutDashboard },
-    { path: "/fees", label: "Fees", icon: DollarSign },
+    { path: "/fees", label: "Fees", icon: IndianRupee },
     { path: "/reports", label: "Reports", icon: FileText },
     { path: "/grades", label: "Grades", icon: BookOpen },
     { path: "/data-tools", label: "Data Tools", icon: Database },
@@ -66,7 +66,7 @@ export default function Navigation({ userRole, userEmail, onLogout, sessions = [
   }
 
   if (config.features?.finance) {
-    adminLinks.splice(1, 0, { path: "/finance", label: "Finance", icon: DollarSign });
+    adminLinks.splice(1, 0, { path: "/finance", label: "Finance", icon: IndianRupee });
   }
 
 
@@ -84,7 +84,7 @@ export default function Navigation({ userRole, userEmail, onLogout, sessions = [
 
   const accountantLinks = [
     { path: "/", label: "Dashboard", icon: LayoutDashboard },
-    { path: "/fees", label: "Fees", icon: DollarSign },
+    { path: "/fees", label: "Fees", icon: IndianRupee },
   ];
 
   const links = userRole === 'teacher' ? teacherLinks :

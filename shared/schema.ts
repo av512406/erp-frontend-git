@@ -364,11 +364,37 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true,
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 export type Expense = typeof expenses.$inferSelect;
 
+// --- Staff Management (Session-Independent) ---
+
+export const staff = pgTable("staff", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  position: text("position").notNull(), // e.g., "Teacher", "Accountant", "Peon"
+  monthlySalary: decimal("monthly_salary", { precision: 10, scale: 2 }).notNull(),
+  joiningDate: date("joining_date"),
+  status: text("status").notNull().default('active'), // active, inactive
+  schoolId: varchar("school_id").notNull().references(() => schools.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertStaffSchema = createInsertSchema(staff).omit({
+  id: true,
+  schoolId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertStaff = z.infer<typeof insertStaffSchema>;
+export type Staff = typeof staff.$inferSelect;
+
 // --- Finance: Staff Payments (Salary) ---
 
 export const staffPayments = pgTable("staff_payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  staffId: varchar("staff_id").notNull().references(() => teachers.id), // Linking to teachers table for now
+  staffId: varchar("staff_id").notNull().references(() => staff.id), // Reference new staff table
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   month: text("month").notNull(), // e.g., "January"
   year: integer("year").notNull(), // e.g., 2025

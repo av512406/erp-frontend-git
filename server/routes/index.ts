@@ -12,6 +12,7 @@ import { sessionRouter } from "./sessions";
 import { attendanceRouter } from "./attendance";
 import { transportRouter } from "./transport";
 import { financeRouter } from "./finance";
+import { staffRouter } from "./staff";
 import backupRouter from "../backup_routes";
 import { requireAuth } from "../middleware/auth";
 
@@ -29,6 +30,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     app.use(attendanceRouter);
     app.use(transportRouter);
     app.use(financeRouter);
+    app.use(staffRouter);
 
     // Backup Routes (Kept external)
     app.use("/api/backup", requireAuth, backupRouter);

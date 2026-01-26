@@ -88,41 +88,85 @@ router.delete('/api/expenses/:id', requireAuth, async (req, res) => {
 
 // --- Staff Salary ---
 
+// Get payment history for a specific staff member
+router.get('/api/staff-payments/:staffId', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    try {
+        const { staffId } = req.params;
+
+        // Verify staff belongs to this school
+        const staffCheck = await pool.query(
+            'SELECT id, name, monthly_salary FROM staff WHERE id = $1 AND school_id = $2',
+            [staffId, user.schoolId]
+        );
+
+        if (staffCheck.rowCount === 0) {
+            return res.status(404).json({ message: 'Staff member not found' });
+        }
+
+        // Fetch all payments for this staff member
+        const { rows } = await pool.query(`
+      SELECT * FROM staff_payments 
+      WHERE staff_id = $1 AND school_id = $2
+      ORDER BY payment_date DESC, created_at DESC
+    `, [staffId, user.schoolId]);
+
+        const payments = rows.map(r => ({
+            ...r,
+            amount: parseFloat(r.amount)
+        }));
+
+        res.json({
+            staff: {
+                id: staffCheck.rows[0].id,
+                name: staffCheck.rows[0].name,
+                baseSalary: parseFloat(staffCheck.rows[0].monthly_salary)
+            },
+            payments
+        });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ message: 'Failed to fetch payment history' });
+    }
+});
+
+// Get all staff with payment summary (staff-centric view)
 router.get('/api/staff-salary-summary', requireAuth, async (req, res) => {
     const user = (req as any).user;
     try {
-        const { month, year } = req.query;
-        if (!month || !year) return res.status(400).json({ message: 'Month and Year required' });
-
-        // Fetch all staff (teachers)
-        const teachersRes = await pool.query(`
-      SELECT t.id, t.name, t.salary, t.qualification, t.mobile_number 
-      FROM teachers t 
-      WHERE t.school_id = $1
+        // Fetch all staff
+        const staffRes = await pool.query(`
+      SELECT s.id, s.name, s.monthly_salary, s.phone, s.position, s.email
+      FROM staff s 
+      WHERE s.school_id = $1 AND s.status = 'active'
+      ORDER BY s.name
     `, [user.schoolId]);
 
-        // Fetch payments for this month/year
-        const paymentsRes = await pool.query(`
-      SELECT * FROM staff_payments 
-      WHERE school_id = $1 AND month = $2 AND year = $3
-    `, [user.schoolId, month, year]);
+        // Fetch payment totals and last payment for current year
+        const currentYear = new Date().getFullYear();
 
-        const paymentsMap = new Map();
-        paymentsRes.rows.forEach(p => paymentsMap.set(p.staff_id, p));
+        const summary = await Promise.all(staffRes.rows.map(async (s: any) => {
+            // Get total payments this year
+            const ytdRes = await pool.query(`
+        SELECT SUM(amount) as total, MAX(payment_date) as last_payment
+        FROM staff_payments
+        WHERE staff_id = $1 AND school_id = $2 AND year = $3
+      `, [s.id, user.schoolId, currentYear.toString()]);
 
-        const summary = teachersRes.rows.map(t => {
-            const payment = paymentsMap.get(t.id);
+            const ytdTotal = parseFloat(ytdRes.rows[0]?.total || '0');
+            const lastPayment = ytdRes.rows[0]?.last_payment;
+
             return {
-                id: t.id,
-                name: t.name,
-                baseSalary: parseFloat(t.salary),
-                status: payment ? payment.status : 'Unpaid',
-                payment: payment ? {
-                    ...payment,
-                    amount: parseFloat(payment.amount)
-                } : null
+                id: s.id,
+                name: s.name,
+                baseSalary: parseFloat(s.monthly_salary),
+                ytdTotal,
+                lastPaymentDate: lastPayment,
+                position: s.position,
+                phone: s.phone,
+                email: s.email
             };
-        });
+        }));
 
         res.json(summary);
     } catch (e) {
