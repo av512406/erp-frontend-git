@@ -287,7 +287,26 @@ router.post('/api/students', requireAuth, async (req, res) => {
 router.put('/api/students/:admissionNumber', requireAuth, async (req, res) => {
     const user = (req as any).user;
     try {
-        const admissionNumber = req.params.admissionNumber;
+        let admissionNumber = req.params.admissionNumber;
+
+        // Smart detection: If it looks like a UUID, treat it as student ID and fetch admission number
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(admissionNumber);
+
+        if (isUUID) {
+            // Parameter is actually a student ID, fetch the admission number
+            const studentRes = await pool.query(
+                'SELECT admission_number FROM students WHERE id = $1 AND school_id = $2',
+                [admissionNumber, user.schoolId]
+            );
+
+            if (studentRes.rows.length === 0) {
+                return res.status(404).json({ message: 'Student not found' });
+            }
+
+            admissionNumber = studentRes.rows[0].admission_number;
+        }
+
+        // Continue with normal update logic using admission number
         const data = insertStudentSchema.partial().parse(req.body);
         const existing = await pool.query('SELECT * FROM students WHERE admission_number = $1 AND school_id = $2', [admissionNumber, user.schoolId]);
         if ((existing.rowCount ?? 0) === 0) return res.status(404).json({ message: 'not found' });
