@@ -10,7 +10,11 @@ const router = Router();
 router.get('/api/users', requireAuth, async (req, res) => {
     const user = (req as any).user;
     try {
-        const result = await pool.query('SELECT id, username, role, name, created_at FROM users WHERE school_id = $1 ORDER BY name', [user.schoolId]);
+        // Exclude superadmin users from school admin view for security
+        const result = await pool.query(
+            'SELECT id, username, role, name, created_at FROM users WHERE school_id = $1 AND role != $2 ORDER BY name',
+            [user.schoolId, 'superadmin']
+        );
         res.json(result.rows);
     } catch (e) {
         console.error(e);
@@ -65,8 +69,17 @@ router.put('/api/users/:id', requireAuth, async (req, res) => {
         const id = req.params.id;
         const { password, role, name } = req.body;
 
-        const check = await pool.query('SELECT id FROM users WHERE id = $1 AND school_id = $2', [id, currentUser.schoolId]);
+        // Security: prevent school admins from editing superadmin accounts
+        const check = await pool.query(
+            'SELECT id, role FROM users WHERE id = $1 AND school_id = $2',
+            [id, currentUser.schoolId]
+        );
         if (check.rows.length === 0) return res.status(404).json({ message: 'User not found' });
+
+        // Additional security check: prevent editing superadmin accounts
+        if (check.rows[0].role === 'superadmin') {
+            return res.status(403).json({ message: 'Cannot modify superadmin accounts' });
+        }
 
         const updates: string[] = [];
         const values: any[] = [];
@@ -99,10 +112,19 @@ router.delete('/api/users/:id', requireAuth, async (req, res) => {
     try {
         const id = req.params.id;
 
-        const userRes = await pool.query('SELECT role FROM users WHERE id = $1 AND school_id = $2', [id, currentUser.schoolId]);
+        // Security: prevent school admins from deleting superadmin accounts
+        const userRes = await pool.query(
+            'SELECT role FROM users WHERE id = $1 AND school_id = $2',
+            [id, currentUser.schoolId]
+        );
         if (userRes.rows.length === 0) return res.status(404).json({ message: 'User not found' });
 
         const role = userRes.rows[0].role;
+
+        // Prevent deletion of superadmin accounts
+        if (role === 'superadmin') {
+            return res.status(403).json({ message: 'Cannot delete superadmin accounts' });
+        }
         if (role === 'admin') {
             const countRes = await pool.query('SELECT COUNT(*) as count FROM users WHERE role = $1 AND school_id = $2', ['admin', currentUser.schoolId]);
             const count = parseInt(countRes.rows[0].count);
