@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 import { pool } from '../db';
 import { comparePassword } from '../lib/auth';
 import { requireAuth } from '../middleware/auth';
@@ -10,7 +11,17 @@ if (!process.env.SESSION_SECRET) {
 }
 const JWT_SECRET = process.env.SESSION_SECRET;
 
-router.post('/api/login', async (req, res) => {
+// Rate limiter for authentication endpoints
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // Limit each IP to 5 requests per windowMs
+    message: 'Too many login attempts from this IP, please try again after 15 minutes',
+    standardHeaders: true, // Return rate limit info in RateLimit-* headers
+    legacyHeaders: false, // Disable X-RateLimit-* headers
+    skipSuccessfulRequests: false, // Don't skip successful requests
+});
+
+router.post('/api/login', authLimiter, async (req, res) => {
     try {
         const { username, password } = req.body;
         const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
@@ -19,15 +30,8 @@ router.post('/api/login', async (req, res) => {
         }
         const user = result.rows[0];
 
-        // Check password (supports both hashed and legacy plain text)
-        let isValid = false;
-
-        if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
-            isValid = await comparePassword(password, user.password);
-        } else {
-            // Legacy plain text check
-            isValid = user.password === password;
-        }
+        // Verify password using bcrypt (only hashed passwords supported)
+        const isValid = await comparePassword(password, user.password);
 
         if (!isValid) {
             return res.status(401).json({ message: 'Invalid credentials' });

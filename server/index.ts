@@ -18,7 +18,25 @@ app.use(express.json({
     req.rawBody = buf;
   }
 }));
-app.use(cors());
+// Configure CORS based on environment
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production'
+    ? (process.env.ALLOWED_ORIGINS?.split(',').map(origin => origin.trim()) || [])
+    : '*', // Allow all origins in development
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400 // 24 hours
+};
+
+app.use(cors(corsOptions));
+
+// Log CORS configuration on startup
+if (process.env.NODE_ENV === 'production' && corsOptions.origin !== '*') {
+  console.log('CORS configured for origins:', corsOptions.origin);
+} else if (process.env.NODE_ENV === 'production') {
+  console.warn('WARNING: ALLOWED_ORIGINS not set, CORS will block all cross-origin requests in production');
+}
 app.use(express.urlencoded({ extended: false, limit: '5mb' }));
 
 

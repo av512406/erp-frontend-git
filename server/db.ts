@@ -1,6 +1,6 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import { migrate } from 'drizzle-orm/neon-serverless/migrator';
+import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless';
+import { drizzle as drizzleNeon, NeonDatabase } from 'drizzle-orm/neon-serverless';
+import { migrate as migrateNeon } from 'drizzle-orm/neon-serverless/migrator';
 import * as schema from '@shared/schema';
 import ws from 'ws';
 import { randomUUID } from 'crypto';
@@ -9,7 +9,7 @@ neonConfig.webSocketConstructor = ws;
 
 // Fallback for local development if not using Neon
 import { Pool as PgPool } from 'pg';
-import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
+import { drizzle as drizzlePg, NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { migrate as migratePg } from 'drizzle-orm/node-postgres/migrator';
 
 if (!process.env.DATABASE_URL) {
@@ -17,12 +17,13 @@ if (!process.env.DATABASE_URL) {
 }
 const DATABASE_URL = process.env.DATABASE_URL;
 
-export let pool: any;
-export let db: any;
+// Proper types instead of 'any' - separated to avoid union type conflicts
+export let pool: NeonPool | PgPool;
+export let db: any; // Keep as any for now due to incompatible Neon/Postgres pool types
 
 if (DATABASE_URL.includes('neon.tech')) {
-  pool = new Pool({ connectionString: DATABASE_URL });
-  db = drizzle(pool, { schema });
+  pool = new NeonPool({ connectionString: DATABASE_URL });
+  db = drizzleNeon(pool, { schema });
 } else {
   pool = new PgPool({ connectionString: DATABASE_URL });
   db = drizzlePg(pool, { schema });
@@ -42,7 +43,7 @@ export async function connectAndMigrate() {
   console.log('Running Drizzle migrations...');
   try {
     if (DATABASE_URL.includes('neon.tech')) {
-      await migrate(db, { migrationsFolder: 'migrations' });
+      await migrateNeon(db, { migrationsFolder: 'migrations' });
     } else {
       await migratePg(db, { migrationsFolder: 'migrations' });
     }
@@ -65,6 +66,12 @@ async function seedDefaults() {
     return;
   }
 
+  // Import bcrypt for password hashing
+  const bcrypt = await import('bcryptjs');
+
+  // Hash the password before storing (critical security fix)
+  const hashedPassword = await bcrypt.hash(password, 10);
+
   // Check if user exists using Drizzle or raw SQL. Raw SQL is fine for this specific seed.
   // Using simple pool query to avoid strict Drizzle types for ad-hoc inserts if schema changed differently
   const client = await pool.connect();
@@ -75,7 +82,8 @@ async function seedDefaults() {
             ON CONFLICT (username) DO UPDATE SET 
             password = EXCLUDED.password,
             role = 'superadmin';
-        `, [username, password]);
+        `, [username, hashedPassword]); // Use hashed password, not plaintext
+    console.log('Super Admin user seeded/updated successfully');
   } finally {
     client.release();
   }

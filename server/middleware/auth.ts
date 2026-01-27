@@ -2,14 +2,34 @@ import { Request, Response, NextFunction } from "express";
 import jwt from 'jsonwebtoken';
 import { pool } from "../db";
 
-const JWT_SECRET = process.env.SESSION_SECRET || "super_secret_school_erp_key";
+// Enforce SESSION_SECRET environment variable - fail fast if missing
+if (!process.env.SESSION_SECRET) {
+    throw new Error(
+        "CRITICAL SECURITY ERROR: SESSION_SECRET environment variable is required. " +
+        "Please set a strong secret key for JWT token signing. " +
+        "Generate one using: openssl rand -base64 32"
+    );
+}
 
-// Extend Express Request to include user
+const JWT_SECRET = process.env.SESSION_SECRET;
+
+// JWT Payload interface for type safety
+export interface JWTPayload {
+    id: string;
+    username: string;
+    role: string;
+    name: string;
+    schoolId?: string;
+    iat?: number;
+    exp?: number;
+}
+
+// Extend Express Request to include typed user
 declare global {
     namespace Express {
         interface Request {
-            user?: any;
-            session?: any;
+            user?: JWTPayload;
+            session?: { user: JWTPayload };
         }
     }
 }
@@ -29,7 +49,7 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
     }
 
     try {
-        const decoded = jwt.verify(token, JWT_SECRET, { clockTolerance: 3600 });
+        const decoded = jwt.verify(token, JWT_SECRET, { clockTolerance: 3600 }) as JWTPayload;
         req.user = decoded; // Attach decoded user to request
         // Also attach to session for backward compatibility if needed, but better to migrate
         req.session = { user: decoded };
