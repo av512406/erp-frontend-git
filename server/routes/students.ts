@@ -372,6 +372,94 @@ router.put('/api/students/:admissionNumber', requireAuth, async (req, res) => {
     }
 });
 
+// Alternative route: Update student by ID (UUID) instead of admission number
+router.put('/api/students/by-id/:id', requireAuth, async (req, res) => {
+    const user = (req as any).user;
+    try {
+        const id = req.params.id;
+
+        // Get student's admission number first
+        const studentRes = await pool.query(
+            'SELECT admission_number FROM students WHERE id = $1 AND school_id = $2',
+            [id, user.schoolId]
+        );
+
+        if (studentRes.rows.length === 0) {
+            return res.status(404).json({ message: 'Student not found' });
+        }
+
+        const admissionNumber = studentRes.rows[0].admission_number;
+
+        // Reuse the existing update logic by setting params.admissionNumber
+        req.params.admissionNumber = admissionNumber;
+
+        // Now process the update using the same logic
+        const data = insertStudentSchema.partial().parse(req.body);
+        const existing = await pool.query('SELECT * FROM students WHERE admission_number = $1 AND school_id = $2', [admissionNumber, user.schoolId]);
+        if ((existing.rowCount ?? 0) === 0) return res.status(404).json({ message: 'not found' });
+
+        const keys = Object.keys(data);
+        const values: any[] = [];
+        const sets: string[] = [];
+        const excludedKeys = ['yearlyFeeAmount', 'transportFee', 'session', 'sessionName', 'sessionId', 'isRTE'];
+        keys.forEach((k, i) => {
+            if (excludedKeys.includes(k)) return;
+            const col = k.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase()).replace(/^admission_number$/, 'admission_number');
+            sets.push(`${col} = $${i + 1}`);
+            values.push((data as any)[k]);
+        });
+
+        let q;
+        if (sets.length > 0) {
+            values.push(admissionNumber);
+            values.push(user.schoolId);
+            q = await pool.query(`UPDATE students SET ${sets.join(', ')} WHERE admission_number = $${sets.length + 1} AND school_id = $${sets.length + 2} RETURNING *`, values);
+        } else {
+            q = { rows: [existing.rows[0]] };
+        }
+
+        const { sessionId, transportFee, yearlyFeeAmount, isRTE } = req.body;
+        const isRteBool = isRTE === true || String(isRTE).toLowerCase() === 'true';
+
+        if (sessionId) {
+            const finalTransportFee = isRteBool ? 0 : (transportFee || 0);
+            const finalYearlyFee = isRteBool ? 0 : (yearlyFeeAmount || 0);
+
+            const sessionSets: string[] = [`transport_fee = $1`, `yearly_fee_amount = $2`, `is_rte = $3`];
+            const sessionValues: any[] = [finalTransportFee, finalYearlyFee, isRteBool];
+            let valIdx = 4;
+
+            if (data.grade) {
+                sessionSets.push(`grade = $${valIdx++}`);
+                sessionValues.push(data.grade);
+            }
+            if (data.section) {
+                sessionSets.push(`section = $${valIdx++}`);
+                sessionValues.push(data.section);
+            }
+
+            sessionValues.push(existing.rows[0].id);
+            sessionValues.push(sessionId);
+            sessionValues.push(user.schoolId);
+
+            await pool.query(
+                `UPDATE student_sessions SET ${sessionSets.join(', ')} WHERE student_id = $${valIdx} AND session_id = $${valIdx + 1} AND school_id = $${valIdx + 2}`,
+                sessionValues
+            );
+        }
+
+        const updated = mapStudent(q.rows[0]);
+        (updated as any).transportFee = transportFee || '0';
+        (updated as any).yearlyFeeAmount = yearlyFeeAmount || '0';
+
+        res.json(updated);
+    } catch (e) {
+        if (e instanceof ZodError) return res.status(400).json({ message: 'validation', issues: e.format() });
+        console.error(e);
+        res.status(500).json({ message: 'internal error' });
+    }
+});
+
 router.delete('/api/students/:id', requireAuth, async (req, res) => {
     const user = (req as any).user;
     const id = req.params.id;

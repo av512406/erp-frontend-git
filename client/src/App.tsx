@@ -98,9 +98,14 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
   const handleEditStudent = async (id: string, student: Omit<Student, 'id'>) => {
     // need admissionNumber for PUT endpoint
     const existing = students.find(s => s.id === id);
-    if (!existing) return;
+
+    // Use different endpoint based on whether we have the student in current list
+    const endpoint = existing
+      ? `/api/students/${encodeURIComponent(existing.admissionNumber)}`
+      : `/api/students/by-id/${encodeURIComponent(id)}`;
+
     try {
-      const res = await fetch(`/api/students/${encodeURIComponent(existing.admissionNumber)}`, {
+      const res = await fetch(endpoint, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(student)
