@@ -282,8 +282,10 @@ router.post('/api/students', requireAuth, async (req, res) => {
         );
 
         const isRTE = data.isRTE === true || String(data.isRTE).toLowerCase() === 'true' || String(data.isRTE).toLowerCase() === 'yes';
+
+        // RTE waives ONLY tuition fees, not transport fees
         const finalYearlyFee = isRTE ? 0 : ((data as any).yearlyFeeAmount || 0);
-        const finalTransportFee = isRTE ? 0 : ((data as any).transportFee || 0);
+        const finalTransportFee = (data as any).transportFee || 0; // Transport fee applies to all students
 
         await client.query(
             `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id, transport_fee, yearly_fee_amount, is_rte)
@@ -365,7 +367,8 @@ router.put('/api/students/:admissionNumber', requireAuth, async (req, res) => {
         const isRteBool = isRTE === true || String(isRTE).toLowerCase() === 'true';
 
         if (sessionId) {
-            const finalTransportFee = isRteBool ? 0 : (transportFee || 0);
+            // RTE waives ONLY tuition fees, not transport fees
+            const finalTransportFee = transportFee || 0; // Transport fee applies to all students
             const finalYearlyFee = isRteBool ? 0 : (yearlyFeeAmount || 0);
 
             // Construct sets for session update
@@ -460,7 +463,8 @@ router.put('/api/students/by-id/:id', requireAuth, async (req, res) => {
         const isRteBool = isRTE === true || String(isRTE).toLowerCase() === 'true';
 
         if (sessionId) {
-            const finalTransportFee = isRteBool ? 0 : (transportFee || 0);
+            // RTE waives ONLY tuition fees, not transport fees
+            const finalTransportFee = transportFee || 0; // Transport fee applies to all students
             const finalYearlyFee = isRteBool ? 0 : (yearlyFeeAmount || 0);
 
             const sessionSets: string[] = [`transport_fee = $1`, `yearly_fee_amount = $2`, `is_rte = $3`];
@@ -591,9 +595,11 @@ router.post('/api/students/import', requireAuth, async (req, res) => {
                     added.push(data.admissionNumber);
                 }
 
-                const isRTE = data.isRTE === true || String(data.isRTE).toLowerCase() === 'true' || String(data.isRTE).toLowerCase() === 'yes';
+                const isRTE = String(data.isRTE || '').toLowerCase() === 'true' || String(data.isRTE || '').toLowerCase() === 'yes';
+
+                // RTE waives ONLY tuition fees, not transport fees
                 const finalYearlyFee = isRTE ? 0 : (data.yearlyFeeAmount || 0);
-                const finalTransportFee = isRTE ? 0 : ((data as any).transportFee || 0);
+                const finalTransportFee = (data as any).transportFee || 0; // Transport fee applies to all students
 
                 if (studentId && effectiveSessionId) {
                     const sessCheck = await client.query('SELECT 1 FROM student_sessions WHERE student_id = $1 AND session_id = $2', [studentId, effectiveSessionId]);
