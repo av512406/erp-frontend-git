@@ -240,11 +240,30 @@ router.post('/api/students', requireAuth, async (req, res) => {
     try {
         const data = insertStudentSchema.parse(req.body);
 
-        const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-        const sessionId = schoolRes.rows[0]?.current_session_id;
+        // Priority: Use sessionId from request body, fallback to school's current session
+        let sessionId = (req.body as any).sessionId;
 
         if (!sessionId) {
-            return res.status(400).json({ message: 'Active academic session not set for school' });
+            const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+            sessionId = schoolRes.rows[0]?.current_session_id;
+        }
+
+        if (!sessionId) {
+            return res.status(400).json({
+                message: 'No academic session specified. Please select a session or set an active session for the school.'
+            });
+        }
+
+        // Verify the session belongs to this school
+        const sessionCheck = await client.query(
+            'SELECT id FROM academic_sessions WHERE id = $1 AND school_id = $2',
+            [sessionId, user.schoolId]
+        );
+
+        if (sessionCheck.rows.length === 0) {
+            return res.status(400).json({
+                message: 'Invalid session ID or session does not belong to your school'
+            });
         }
 
         await client.query('BEGIN');
