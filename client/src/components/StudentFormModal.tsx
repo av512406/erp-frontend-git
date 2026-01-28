@@ -363,8 +363,8 @@ export default function StudentFormModal({
                       setFormData({
                         ...formData,
                         isRTE,
+                        // RTE only waives tuition fee, not transport fee
                         yearlyFeeAmount: isRTE ? '0' : formData.yearlyFeeAmount,
-                        transportFee: isRTE ? '0' : (formData as any).transportFee
                       } as any);
                     }}
                     className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
@@ -420,11 +420,9 @@ export default function StudentFormModal({
                     placeholder="0"
                     min="0"
                     step="1"
-                    disabled={(formData as any).isRTE}
-                    className={(formData as any).isRTE ? "bg-muted" : ""}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Optional transport fee amount
+                    Optional transport fee amount (applies to all students including RTE)
                   </p>
                 </div>
               </fieldset>
