@@ -173,7 +173,7 @@ export default function ReceiptDistributionModal({ open, onClose, transaction, s
           </div>
         ) : <p className="text-sm">Loading...</p>}
         <DialogFooter className="mt-6 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>Done</Button>
           <Button onClick={handlePrint} disabled={!valid}>Print Receipt</Button>
         </DialogFooter>
       </DialogContent>

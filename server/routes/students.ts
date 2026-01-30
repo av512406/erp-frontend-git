@@ -522,18 +522,29 @@ router.post('/api/students/import', requireAuth, async (req, res) => {
     const user = (req as any).user;
     const { students: imported, strategy, targetSessionId } = req.body as { students: any[]; strategy?: string; targetSessionId?: string };
     if (!Array.isArray(imported)) return res.status(400).json({ message: 'students array required' });
+
+    if (!targetSessionId) {
+        return res.status(400).json({ message: 'targetSessionId is required for import' });
+    }
+
     const client = await pool.connect();
     try {
-        const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-        const currentActiveSessionId = schoolRes.rows[0]?.current_session_id;
+        // Validate target session belongs to this school
+        const sessionCheck = await client.query(
+            'SELECT id FROM academic_sessions WHERE id = $1 AND school_id = $2',
+            [targetSessionId, user.schoolId]
+        );
+        if (sessionCheck.rowCount === 0) {
+            return res.status(400).json({ message: 'Invalid target session for this school' });
+        }
 
-        const allSessionsRes = await client.query('SELECT id, name FROM academic_sessions');
+        const allSessionsRes = await client.query('SELECT id, name FROM academic_sessions WHERE school_id = $1', [user.schoolId]);
         const sessionMap = new Map<string, string>();
         allSessionsRes.rows.forEach(row => {
             sessionMap.set(row.name.trim().toLowerCase(), row.id);
         });
 
-        const fallbackSessionId = targetSessionId || currentActiveSessionId;
+        // Use targetSessionId (no fallback to database)
 
         await client.query('BEGIN');
         const added: any[] = [];
@@ -560,7 +571,7 @@ router.post('/api/students/import', requireAuth, async (req, res) => {
                 }
 
                 const rowSessionName = (row.session || row['Session'] || row['Session Name'] || row.sessionName || '').toString().trim();
-                let effectiveSessionId = fallbackSessionId;
+                let effectiveSessionId = targetSessionId;  // Use validated targetSessionId
 
                 if (rowSessionName) {
                     const fromMap = sessionMap.get(rowSessionName.toLowerCase());

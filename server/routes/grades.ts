@@ -46,8 +46,25 @@ router.get('/api/grades', requireAuth, async (req, res) => {
 
 router.post('/api/grades', requireAuth, async (req, res) => {
     const user = (req as any).user;
-    const incoming = req.body as any[];
+    const payload = req.body as any;
+
+    // Extract sessionId from the request body
+    const sessionId = payload.sessionId;
+    const incoming = payload.grades || req.body;
+
     if (!Array.isArray(incoming)) return res.status(400).json({ message: 'grades array required' });
+
+    // Validate sessionId if provided
+    if (sessionId) {
+        const sessionCheck = await pool.query(
+            'SELECT id FROM academic_sessions WHERE id = $1 AND school_id = $2',
+            [sessionId, user.schoolId]
+        );
+        if (sessionCheck.rowCount === 0) {
+            return res.status(400).json({ message: 'Invalid session for this school' });
+        }
+    }
+
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -75,18 +92,13 @@ router.post('/api/grades', requireAuth, async (req, res) => {
                 }
 
                 const exists = await client.query('SELECT id FROM grades WHERE student_id=$1 AND subject=$2 AND term=$3 AND school_id=$4', [data.studentId, data.subject, data.term, user.schoolId]);
-                const sessionRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-                let sessionId = sessionRes.rows[0]?.current_session_id;
-                if (!sessionId) {
-                    const activeRes = await client.query('SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1', [user.schoolId]);
-                    sessionId = activeRes.rows[0]?.id;
-                }
 
                 if ((exists.rowCount ?? 0) > 0) {
                     await client.query('UPDATE grades SET marks=$1 WHERE id=$2', [data.marks, exists.rows[0].id]);
                 } else {
                     const id = genId();
-                    await client.query('INSERT INTO grades (id, student_id, subject, marks, term, school_id, session_id) VALUES ($1,$2,$3,$4,$5,$6,$7)', [id, data.studentId, data.subject, data.marks, data.term, user.schoolId, sessionId]);
+                    // Use sessionId from request if provided, otherwise set to null
+                    await client.query('INSERT INTO grades (id, student_id, subject, marks, term, school_id, session_id) VALUES ($1,$2,$3,$4,$5,$6,$7)', [id, data.studentId, data.subject, data.marks, data.term, user.schoolId, sessionId || null]);
                 }
                 keys.push({ studentId: data.studentId, subject: data.subject, term: data.term });
             } catch (e) {

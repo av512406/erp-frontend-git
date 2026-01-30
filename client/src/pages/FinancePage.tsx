@@ -5,24 +5,28 @@ import { PayrollList } from "@/components/finance/PayrollList";
 import { StaffManagement } from "@/components/finance/StaffManagement";
 import { Card, CardContent } from "@/components/ui/card";
 
-export default function FinancePage() {
+interface FinancePageProps {
+    selectedSessionId: string;
+}
+
+export default function FinancePage({ selectedSessionId }: FinancePageProps) {
     return (
-        <div className="container mx-auto p-6 space-y-6">
+        <div className="container mx-auto p-4 md:p-6 space-y-6">
             <div className="flex flex-col gap-2">
                 <h1 className="text-3xl font-bold tracking-tight">Finance Management</h1>
                 <p className="text-muted-foreground">Manage expenses, staff, payroll, and view financial health.</p>
             </div>
 
             <Tabs defaultValue="overview" className="space-y-4">
-                <TabsList>
-                    <TabsTrigger value="overview">Overview</TabsTrigger>
-                    <TabsTrigger value="expenses">Expenses</TabsTrigger>
-                    <TabsTrigger value="staff">Staff</TabsTrigger>
-                    <TabsTrigger value="payroll">Payroll</TabsTrigger>
+                <TabsList className="h-auto flex-wrap justify-start w-full">
+                    <TabsTrigger value="overview" className="flex-1 md:flex-none">Overview</TabsTrigger>
+                    <TabsTrigger value="expenses" className="flex-1 md:flex-none">Expenses</TabsTrigger>
+                    <TabsTrigger value="staff" className="flex-1 md:flex-none">Staff</TabsTrigger>
+                    <TabsTrigger value="payroll" className="flex-1 md:flex-none">Payroll</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="overview" className="space-y-4">
-                    <FinanceOverview />
+                    <FinanceOverview selectedSessionId={selectedSessionId} />
                 </TabsContent>
 
                 <TabsContent value="expenses" className="space-y-4">

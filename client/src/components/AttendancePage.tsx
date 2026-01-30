@@ -39,11 +39,15 @@ interface AbsenteeRecord {
     status: string;
 }
 
-export default function AttendancePage() {
+interface AttendancePageProps {
+    selectedSessionId: string;
+}
+
+export default function AttendancePage({ selectedSessionId }: AttendancePageProps) {
     const [location, setLocation] = useLocation();
     const searchParams = new URLSearchParams(window.location.search);
     const classIdInitial = searchParams.get("classId");
-    const sessionId = searchParams.get("sessionId");
+    // const sessionId = searchParams.get("sessionId"); // Use prop instead
 
     // Default date to today
     const [date, setDate] = useState(() => {
@@ -96,7 +100,7 @@ export default function AttendancePage() {
         } else if (activeTab === "report" && date) {
             fetchAbsentees();
         }
-    }, [classIdInitial, date, sessionId, activeTab]);
+    }, [classIdInitial, date, selectedSessionId, activeTab]);
 
     const fetchAttendance = async () => {
         setLoading(true);
@@ -104,7 +108,7 @@ export default function AttendancePage() {
             const params = new URLSearchParams();
             if (classIdInitial) params.append("classId", classIdInitial);
             if (date) params.append("date", date);
-            if (sessionId) params.append("sessionId", sessionId);
+            if (selectedSessionId) params.append("sessionId", selectedSessionId);
 
             const res = await fetch(`/api/attendance?${params.toString()}`, {
                 headers: getAuthHeaders()
@@ -128,7 +132,7 @@ export default function AttendancePage() {
         try {
             const params = new URLSearchParams();
             params.append("date", date);
-            if (sessionId) params.append("sessionId", sessionId);
+            if (selectedSessionId) params.append("sessionId", selectedSessionId);
 
             const res = await fetch(`/api/attendance/absent?${params.toString()}`, {
                 headers: getAuthHeaders()
@@ -169,7 +173,7 @@ export default function AttendancePage() {
                     date,
                     classId: classIdInitial,
                     records,
-                    sessionId
+                    sessionId: selectedSessionId
                 })
             });
 

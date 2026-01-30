@@ -60,7 +60,7 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 	return (
 		<div className="print-receipt font-serif">
 			{copies.map(copy => (
-				<div key={copy} className="receipt border border-black p-3 mb-4 break-inside-avoid">
+				<div key={copy} className="receipt border border-black p-3 mb-4 break-inside-avoid font-bold">
 					<div className="text-center mb-2">
 						{/* Compact centered header: logo + school name side-by-side to save vertical space */}
 						{/* Compact centered header: logo + school name side-by-side to save vertical space */}
@@ -68,32 +68,32 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 							{config.logoUrl && (
 								<img src={config.logoUrl} alt="School Logo" className="h-14 object-contain" />
 							)}
-							<h1 className="text-2xl font-bold tracking-wide text-center">{config.name}</h1>
+							<h1 className="text-2xl font-black tracking-wide text-center">{config.name}</h1>
 							{/* Special Layout for Glorious Public School: Double Logo */}
 							{config.logoUrl && config.name.toLowerCase().includes('glorious') && (
 								<img src={config.logoUrl} alt="School Logo" className="h-14 object-contain" />
 							)}
 						</div>
-						<p className="text-xs italic">{config.address}</p>
+						<p className="text-xs italic font-bold">{config.address}</p>
 						{/* Merge Fee Receipt and copy label to save vertical space */}
-						<div className="inline-flex items-center gap-2 border px-2 py-0.5 text-sm font-semibold mt-1">
+						<div className="inline-flex items-center gap-2 border px-2 py-0.5 text-sm font-extrabold mt-1">
 							<span>Fee Receipt</span>
-							<span className="text-[11px] font-normal">({copy})</span>
+							<span className="text-[11px] font-bold">({copy})</span>
 						</div>
 					</div>
-					<div className="text-[11px] leading-4 space-y-0.5 mb-2">
-						<div className="flex justify-between"><span>Serial No.: <strong>{String(computedSerial).padStart(4, '0')}</strong></span><span>Date: {paymentDate}</span></div>
-						<div>Name of the Student: <strong>{student.name}</strong></div>
-						{student.fatherName && <div>Father's Name: <strong>{student.fatherName}</strong></div>}
-						<div className="flex justify-between"><span>Class: <strong>{cls || '—'}</strong></span><span>Session: <strong>{sessionValue}</strong></span></div>
-						{student.admissionNumber && <div>Admission No.: <strong>{student.admissionNumber}</strong></div>}
+					<div className="text-[11px] leading-4 space-y-0.5 mb-2 font-bold">
+						<div className="flex justify-between"><span>Serial No.: <strong className="font-black">{String(computedSerial).padStart(4, '0')}</strong></span><span>Date: <strong className="font-black">{paymentDate}</strong></span></div>
+						<div>Name of the Student: <strong className="font-black">{student.name}</strong></div>
+						{student.fatherName && <div>Father's Name: <strong className="font-black">{student.fatherName}</strong></div>}
+						<div className="flex justify-between"><span>Class: <strong className="font-black">{cls || '—'}</strong></span><span>Session: <strong className="font-black">{sessionValue}</strong></span></div>
+						{student.admissionNumber && <div>Admission No.: <strong className="font-black">{student.admissionNumber}</strong></div>}
 					</div>
-					<table className="w-full text-[11px] border border-black border-collapse mb-2">
+					<table className="w-full text-[11px] border border-black border-collapse mb-2 font-bold">
 						<thead>
 							<tr className="bg-gray-100">
-								<th className="border border-black w-10 py-1">S.No.</th>
-								<th className="border border-black py-1">Particulars</th>
-								<th className="border border-black w-24 py-1">Amount (₹)</th>
+								<th className="border border-black w-10 py-1 font-extrabold">S.No.</th>
+								<th className="border border-black py-1 font-extrabold">Particulars</th>
+								<th className="border border-black w-24 py-1 font-extrabold">Amount (₹)</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -104,31 +104,31 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 									<td className="border border-black text-right pr-2 py-1">{row.amount ? row.amount.toFixed(2) : ''}</td>
 								</tr>
 							))}
-							<tr className="font-semibold">
+							<tr className="font-extrabold">
 								<td className="border border-black text-center py-1">{ordered.length + 1}.</td>
 								<td className="border border-black px-2 py-1">Total Amount</td>
 								<td className="border border-black text-right pr-2 py-1">{total.toFixed(2)}</td>
 							</tr>
 						</tbody>
 					</table>
-					<div className="text-[10px] mb-2">Amount In Words: <em>{amountWords}</em></div>
+					<div className="text-[10px] mb-2 font-bold">Amount In Words: <em className="font-extrabold">{amountWords}</em></div>
 					{showSummary && (
-						<div className="text-[10px] mb-3 border border-black px-2 py-1 leading-tight">
-							<span className="font-semibold">Yearly:</span> ₹{yearlyFeeAmount!.toFixed(2)}
+						<div className="text-[10px] mb-3 border border-black px-2 py-1 leading-tight font-bold">
+							<span className="font-extrabold">Yearly:</span> ₹{yearlyFeeAmount!.toFixed(2)}
 							{previousYearDue && previousYearDue > 0 && (
 								<>
 									<span className="mx-1">•</span>
-									<span className="font-semibold">Prev. Due:</span> ₹{previousYearDue.toFixed(2)}
+									<span className="font-extrabold">Prev. Due:</span> ₹{previousYearDue.toFixed(2)}
 								</>
 							)}
 							<span className="mx-1">•</span>
-							<span className="font-semibold">Total Paid:</span> ₹{paidSoFar!.toFixed(2)}
+							<span className="font-extrabold">Total Paid:</span> ₹{paidSoFar!.toFixed(2)}
 							<span className="mx-1">•</span>
-							<span className="font-semibold">Remaining:</span> <span className={computedRemaining! <= 0 ? 'text-green-700 font-semibold' : 'text-red-700 font-semibold'}>₹{computedRemaining! >= 0 ? computedRemaining!.toFixed(2) : `${Math.abs(computedRemaining!).toFixed(2)} (Over)`}</span>
+							<span className="font-extrabold">Remaining:</span> <span className={computedRemaining! <= 0 ? 'text-green-700 font-extrabold' : 'text-red-700 font-extrabold'}>₹{computedRemaining! >= 0 ? computedRemaining!.toFixed(2) : `${Math.abs(computedRemaining!).toFixed(2)} (Over)`}</span>
 						</div>
 					)}
 					<div className="flex justify-end mt-8">
-						<div className="text-center text-[11px]">
+						<div className="text-center text-[11px] font-bold">
 							<div className="h-10" />
 							<div className="border-t border-black pt-1">Signature</div>
 						</div>
@@ -212,41 +212,41 @@ function buildPlainHtml(props: ReceiptProps): string {
 	const showSummary = typeof props.yearlyFeeAmount === 'number' && typeof props.paidSoFar === 'number';
 	const remaining = showSummary ? (typeof props.remainingFee === 'number' ? props.remainingFee : ((props.yearlyFeeAmount! + (props.previousYearDue || 0)) - props.paidSoFar!)) : undefined;
 	const rowsHtml = (copy: string) => `
-	<div style="border:1px solid #000;margin:0 0 4mm 0;font-size:10px;font-family:serif;box-sizing:border-box;padding:4mm;height:134mm;overflow:hidden;">
+	<div style="border:1px solid #000;margin:0 0 4mm 0;font-size:10px;font-family:serif;box-sizing:border-box;padding:4mm;height:134mm;overflow:hidden;font-weight:700;">
 		<div style="text-align:center;margin-bottom:6px;">
 			<div style="display:flex;align-items:center;justify-content:center;gap:12px;min-height:54px;margin-bottom:2px;">
 				${schoolConfig.logoUrl ? `<img src="${schoolConfig.logoUrl}" alt="Logo" style="height:50px;object-fit:contain;"/>` : ''}
-				<div style="font-size:19px;font-weight:700;letter-spacing:.5px;">${schoolConfig.name}</div>
+				<div style="font-size:19px;font-weight:900;letter-spacing:.5px;">${schoolConfig.name}</div>
 				${schoolConfig.logoUrl && schoolConfig.name.toLowerCase().includes('glorious') ? `<img src="${schoolConfig.logoUrl}" alt="Logo" style="height:50px;object-fit:contain;"/>` : ''}
 			</div>
-			<div style="font-size:10px;font-style:italic;">${schoolConfig.address}</div>
-			<div style="display:inline-flex;align-items:center;gap:6px;border:1px solid #000;padding:2px 6px;font-size:12px;font-weight:600;margin-top:4px;">Fee Receipt <span style="font-size:10px;font-weight:400;">(${copy})</span></div>
+			<div style="font-size:10px;font-style:italic;font-weight:700;">${schoolConfig.address}</div>
+			<div style="display:inline-flex;align-items:center;gap:6px;border:1px solid #000;padding:2px 6px;font-size:12px;font-weight:800;margin-top:4px;">Fee Receipt <span style="font-size:10px;font-weight:700;">(${copy})</span></div>
 		</div>
 		<div style="line-height:1.3;margin-bottom:6px;">
-			<div style="display:flex;justify-content:space-between;"><span>Serial No.: <strong>${serial}</strong></span><span>Date: ${props.paymentDate}</span></div>
-			<div>Name of the Student: <strong>${props.student.name}</strong></div>
-			${props.student.fatherName ? `<div>Father's Name: <strong>${props.student.fatherName}</strong></div>` : ''}
-			<div style="display:flex;justify-content:space-between;"><span>Class: <strong>${cls || '—'}</strong></span><span>Session: <strong>${sessionValue}</strong></span></div>
-			${props.student.admissionNumber ? `<div>Admission No.: <strong>${props.student.admissionNumber}</strong></div>` : ''}
+			<div style="display:flex;justify-content:space-between;"><span>Serial No.: <strong style="font-weight:900;">${serial}</strong></span><span>Date: <strong style="font-weight:900;">${props.paymentDate}</strong></span></div>
+			<div>Name of the Student: <strong style="font-weight:900;">${props.student.name}</strong></div>
+			${props.student.fatherName ? `<div>Father's Name: <strong style="font-weight:900;">${props.student.fatherName}</strong></div>` : ''}
+			<div style="display:flex;justify-content:space-between;"><span>Class: <strong style="font-weight:900;">${cls || '—'}</strong></span><span>Session: <strong style="font-weight:900;">${sessionValue}</strong></span></div>
+			${props.student.admissionNumber ? `<div>Admission No.: <strong style="font-weight:900;">${props.student.admissionNumber}</strong></div>` : ''}
 		</div>
-		<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:6px;">
+		<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:6px;font-weight:700;">
 			<thead>
 				<tr>
-					<th style="border:1px solid #000;width:32px;padding:4px;">S.No.</th>
-					<th style="border:1px solid #000;padding:4px;">Particulars</th>
-					<th style="border:1px solid #000;width:90px;padding:4px;">Amount (₹)</th>
+					<th style="border:1px solid #000;width:32px;padding:4px;font-weight:800;">S.No.</th>
+					<th style="border:1px solid #000;padding:4px;font-weight:800;">Particulars</th>
+					<th style="border:1px solid #000;width:90px;padding:4px;font-weight:800;">Amount (₹)</th>
 				</tr>
 			</thead>
 			<tbody>
 				${ordered.map((r, i) => `<tr><td style="border:1px solid #000;text-align:center;padding:4px;">${i + 1}.</td><td style="border:1px solid #000;padding:4px;">${r.label}</td><td style="border:1px solid #000;text-align:right;padding:4px;">${r.amount ? r.amount.toFixed(2) : ''}</td></tr>`).join('')}
-				<tr style="font-weight:600;"><td style="border:1px solid #000;text-align:center;padding:4px;">${ordered.length + 1}.</td><td style="border:1px solid #000;padding:4px;">Total Amount</td><td style="border:1px solid #000;text-align:right;padding:4px;">${total.toFixed(2)}</td></tr>
+				<tr style="font-weight:900;"><td style="border:1px solid #000;text-align:center;padding:4px;">${ordered.length + 1}.</td><td style="border:1px solid #000;padding:4px;">Total Amount</td><td style="border:1px solid #000;text-align:right;padding:4px;">${total.toFixed(2)}</td></tr>
 			</tbody>
 		</table>
-		<div style="font-size:10px;margin-bottom:4px;">Amount In Words: <em>${words}</em></div>
-		${showSummary ? `<div style="font-size:10px;border:1px solid #000;padding:3px 6px;margin-bottom:8px;">
-			<strong>Yearly:</strong> ₹${props.yearlyFeeAmount!.toFixed(2)} ${props.previousYearDue && props.previousYearDue > 0 ? `• <strong>Prev. Due:</strong> ₹${props.previousYearDue.toFixed(2)}` : ''} • <strong>Total Paid:</strong> ₹${props.paidSoFar!.toFixed(2)} • <strong>Remaining:</strong> <span style="color:${remaining! <= 0 ? '#0a7a0a' : '#b10000'};">₹${remaining! >= 0 ? remaining!.toFixed(2) : `${Math.abs(remaining!).toFixed(2)} (Over)`}</span>
+		<div style="font-size:10px;margin-bottom:4px;font-weight:700;">Amount In Words: <em style="font-weight:800;">${words}</em></div>
+		${showSummary ? `<div style="font-size:10px;border:1px solid #000;padding:3px 6px;margin-bottom:8px;font-weight:700;">
+			<strong>Yearly:</strong> ₹${props.yearlyFeeAmount!.toFixed(2)} ${props.previousYearDue && props.previousYearDue > 0 ? `• <strong>Prev. Due:</strong> ₹${props.previousYearDue.toFixed(2)}` : ''} • <strong>Total Paid:</strong> ₹${props.paidSoFar!.toFixed(2)} • <strong>Remaining:</strong> <span style="color:${remaining! <= 0 ? '#0a7a0a' : '#b10000'};font-weight:900;">₹${remaining! >= 0 ? remaining!.toFixed(2) : `${Math.abs(remaining!).toFixed(2)} (Over)`}</span>
 		</div>` : ''}
-		<div style="text-align:right;font-size:11px;margin-top:20px;">
+		<div style="text-align:right;font-size:11px;margin-top:20px;font-weight:700;">
 			<div style="height:40px;"></div>
 			<div style="border-top:1px solid #000;padding-top:4px;display:inline-block;">Signature</div>
 		</div>

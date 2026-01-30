@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Install dependencies
 COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
@@ -20,7 +20,7 @@ WORKDIR /app
 
 # Install production dependencies only
 COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps --omit=dev && \
+RUN npm install --legacy-peer-deps --omit=dev && \
     npm install bcryptjs --legacy-peer-deps
 
 # Copy built artifacts from builder

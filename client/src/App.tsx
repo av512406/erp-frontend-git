@@ -170,7 +170,8 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         amount: String(transaction.amount),
         paymentDate: transaction.date,
         paymentMode: transaction.paymentMode || 'cash',
-        remarks: transaction.remarks || ''
+        remarks: transaction.remarks || '',
+        sessionId: selectedSessionId  // CRITICAL: Use session from navbar
       })
     });
     if (!res.ok) {
@@ -178,8 +179,8 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       throw new Error(msg);
     }
     const created = await res.json();
-    // setTransactions(prev => [created, ...prev]);
-    queryClient.invalidateQueries({ queryKey: ['fees'] });
+    // Force refetch for the current session to ensure new transaction appears immediately
+    await queryClient.refetchQueries({ queryKey: ['fees', selectedSessionId] });
     return created as FeeTransaction;
   };
 
@@ -209,7 +210,10 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       const res = await fetch('/api/grades', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify(payloadToSend)
+        body: JSON.stringify({
+          grades: payloadToSend,
+          sessionId: selectedSessionId  // CRITICAL: Use session from navbar
+        })
       });
       if (res.ok) {
         const payload = await res.json();
@@ -283,7 +287,10 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       const res = await fetch('/api/fees/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify(imported)
+        body: JSON.stringify({
+          transactions: imported,
+          sessionId: selectedSessionId  // CRITICAL: Use session from navbar
+        })
       });
       if (res.ok) {
         const summary = await res.json();
@@ -339,7 +346,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       </Route>
       <Route path="/attendance">
         <ProtectedRoute allowedRoles={['teacher', 'admin']} userRole={user.role}>
-          <AttendancePage />
+          <AttendancePage selectedSessionId={selectedSessionId} />
         </ProtectedRoute>
       </Route>
 
@@ -466,7 +473,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
 
       <Route path="/finance">
         <ProtectedRoute allowedRoles={['admin', 'superadmin']} userRole={user.role}>
-          <FinancePage />
+          <FinancePage selectedSessionId={selectedSessionId} />
         </ProtectedRoute>
       </Route>
 

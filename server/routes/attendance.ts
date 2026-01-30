@@ -32,12 +32,10 @@ router.get('/api/teacher/my-class/students', requireAuth, async (req, res) => {
         if (classRes.rows.length === 0) return res.status(404).json({ message: 'No class assigned' });
         const cls = classRes.rows[0];
 
-        let { sessionId } = req.query;
+        const { sessionId } = req.query;
         if (!sessionId) {
-            const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-            sessionId = schoolRes.rows[0]?.current_session_id;
+            return res.status(400).json({ message: 'sessionId is required' });
         }
-        if (!sessionId) return res.status(400).json({ message: 'No active session' });
 
         const query = `
         SELECT 
@@ -81,10 +79,9 @@ router.get('/api/teacher/my-class/attendance-summary', requireAuth, async (req, 
         if (classRes.rows.length === 0) return res.status(404).json({ message: 'No class assigned' });
         const { grade, section } = classRes.rows[0];
 
-        let targetSessionId = req.query.sessionId;
+        const targetSessionId = req.query.sessionId as string;
         if (!targetSessionId) {
-            const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-            targetSessionId = schoolRes.rows[0]?.current_session_id;
+            return res.status(400).json({ message: 'sessionId is required' });
         }
 
         const sessionId = targetSessionId;
@@ -161,12 +158,10 @@ router.get('/api/attendance', requireAuth, requireFeature('attendance'), async (
     if (!date || !classId) return res.status(400).json({ message: 'Date and Class ID required' });
 
     try {
-        let targetSessionId = sessionId;
+        const targetSessionId = sessionId as string;
         if (!targetSessionId) {
-            const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-            targetSessionId = schoolRes.rows[0]?.current_session_id;
+            return res.status(400).json({ message: 'sessionId is required' });
         }
-        if (!targetSessionId) return res.status(400).json({ message: 'No active session' });
 
         const classRow = await pool.query('SELECT grade, section FROM classes WHERE id = $1', [classId]);
         if (classRow.rows.length === 0) return res.status(404).json({ message: 'Class not found' });
@@ -222,23 +217,10 @@ router.get('/api/attendance/absent', requireAuth, requireFeature('attendance'), 
         ORDER BY ss.grade, ss.section, s.name
       `;
 
-        let targetSessionId = sessionId;
+        const targetSessionId = sessionId as string;
         if (!targetSessionId) {
-            const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-            targetSessionId = schoolRes.rows[0]?.current_session_id;
-
-            if (!targetSessionId) {
-                const sessionRes = await pool.query(
-                    'SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1',
-                    [user.schoolId]
-                );
-                if (sessionRes.rows.length > 0) {
-                    targetSessionId = sessionRes.rows[0].id;
-                }
-            }
+            return res.status(400).json({ message: 'sessionId is required' });
         }
-
-        if (!targetSessionId) return res.status(400).json({ message: "Session not found" });
 
         const { rows } = await pool.query(query, [user.schoolId, reportDate, targetSessionId]);
         res.json(rows.map(row => ({
@@ -258,14 +240,16 @@ router.get('/api/attendance/absent', requireAuth, requireFeature('attendance'), 
 
 router.post('/api/attendance', requireAuth, requireFeature('attendance'), async (req, res) => {
     const user = (req as any).user;
-    const { date, classId, records } = req.body;
+    const { date, classId, records, sessionId } = req.body;
 
     if (!date || !records || !Array.isArray(records)) return res.status(400).json({ message: 'Invalid payload' });
 
+    if (!sessionId) {
+        return res.status(400).json({ message: 'sessionId is required' });
+    }
+
     const client = await pool.connect();
     try {
-        const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-        const sessionId = schoolRes.rows[0]?.current_session_id;
 
         await client.query('BEGIN');
 

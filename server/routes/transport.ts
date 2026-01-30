@@ -83,26 +83,24 @@ router.post('/api/transport/assign', requireAuth, requireFeature('transport'), a
 
     const client = await pool.connect();
     try {
-        const { studentId, transportType, yearlyFee } = req.body;
+        const { studentId, transportType, yearlyFee, sessionId } = req.body;
 
         if (!transportType || yearlyFee === undefined) {
             return res.status(400).json({ message: 'Transport Type and Yearly Fee are required' });
         }
 
-        const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-        let sessionId = schoolRes.rows[0]?.current_session_id;
-
         if (!sessionId) {
-            const sessionRes = await client.query(
-                'SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1',
-                [user.schoolId]
-            );
-            if (sessionRes.rows.length > 0) {
-                sessionId = sessionRes.rows[0].id;
-            }
+            return res.status(400).json({ message: 'sessionId is required' });
         }
 
-        if (!sessionId) return res.status(400).json({ message: 'No active session' });
+        // Validate session belongs to school
+        const sessionCheck = await client.query(
+            'SELECT id FROM academic_sessions WHERE id = $1 AND school_id = $2',
+            [sessionId, user.schoolId]
+        );
+        if (sessionCheck.rowCount === 0) {
+            return res.status(400).json({ message: 'Invalid session for this school' });
+        }
 
         await client.query('BEGIN');
 
@@ -129,24 +127,11 @@ router.get('/api/transport/students', requireAuth, requireFeature('transport'), 
     const user = (req as any).user;
 
     try {
-        let sessionId = req.query.sessionId as string;
+        const sessionId = req.query.sessionId as string;
 
         if (!sessionId) {
-            const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-            sessionId = schoolRes.rows[0]?.current_session_id;
+            return res.status(400).json({ message: 'sessionId is required' });
         }
-
-        if (!sessionId) {
-            const sessionRes = await pool.query(
-                'SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1',
-                [user.schoolId]
-            );
-            if (sessionRes.rows.length > 0) {
-                sessionId = sessionRes.rows[0].id;
-            }
-        }
-
-        if (!sessionId) return res.json([]);
 
         let query = `
         WITH paid_fees AS (
@@ -187,22 +172,11 @@ router.post('/api/transport/pay', requireAuth, requireFeature('transport'), asyn
     if (user.role !== 'admin' && user.role !== 'superadmin') return res.status(403).json({ message: 'Forbidden' });
 
     try {
-        const { studentId, amount, paymentDate, remarks } = req.body;
-
-        const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-        let sessionId = schoolRes.rows[0]?.current_session_id;
+        const { studentId, amount, paymentDate, remarks, sessionId } = req.body;
 
         if (!sessionId) {
-            const sessionRes = await pool.query(
-                'SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1',
-                [user.schoolId]
-            );
-            if (sessionRes.rows.length > 0) {
-                sessionId = sessionRes.rows[0].id;
-            }
+            return res.status(400).json({ message: 'sessionId is required' });
         }
-
-        if (!sessionId) return res.status(400).json({ message: 'No active session' });
 
         const id = genId();
         await pool.query(
@@ -222,17 +196,10 @@ router.get('/api/transport/students/:studentId/transactions', requireAuth, requi
     const { studentId } = req.params;
 
     try {
-        const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-        let sessionId = schoolRes.rows[0]?.current_session_id;
+        const sessionId = req.query.sessionId as string;
 
         if (!sessionId) {
-            const sessionRes = await pool.query(
-                'SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1',
-                [user.schoolId]
-            );
-            if (sessionRes.rows.length > 0) {
-                sessionId = sessionRes.rows[0].id;
-            }
+            return res.status(400).json({ message: 'sessionId is required' });
         }
 
         const { rows } = await pool.query(`
