@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSchoolConfig } from '@/hooks/useSchoolConfig';
+import { REPORT_TEMPLATES, TC_TEMPLATES } from '@/lib/documentTemplates';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/auth";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Pencil, Trash2, Plus } from "lucide-react";
+import { Loader2, Pencil, Trash2, Plus, FileText } from "lucide-react";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -531,6 +532,81 @@ function SchoolSettings() {
   );
 }
 
+function DocumentSettings() {
+  const { config, updateConfig, isSaving, isLoading } = useSchoolConfig();
+  const { toast } = useToast();
+
+  const [reportTemplate, setReportTemplate] = useState('default');
+  const [tcTemplate, setTcTemplate] = useState('default');
+
+  useEffect(() => {
+    if (config.features) {
+      setReportTemplate((config.features.report_card_template as string) || 'default');
+      setTcTemplate((config.features.tc_template as string) || 'default');
+    }
+  }, [config]);
+
+  const handleSave = async () => {
+    try {
+      const newFeatures = {
+        ...config.features,
+        report_card_template: reportTemplate,
+        tc_template: tcTemplate
+      };
+      await updateConfig({ ...config, features: newFeatures });
+      toast({ title: "Success", description: "Document templates updated" });
+    } catch (e: any) {
+      toast({ title: "Error", description: "Failed to update templates", variant: "destructive" });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="w-5 h-5" /> Document Templates
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="space-y-2">
+          <Label>Report Card Format</Label>
+          <Select value={reportTemplate} onValueChange={setReportTemplate}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {REPORT_TEMPLATES.map(t => (
+                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-sm text-muted-foreground">Select the layout for student report cards.</p>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Transfer Certificate Format</Label>
+          <Select value={tcTemplate} onValueChange={setTcTemplate}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TC_TEMPLATES.map(t => (
+                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-sm text-muted-foreground">Select the layout for transfer certificates.</p>
+        </div>
+      </CardContent>
+      <CardFooter>
+        <Button onClick={handleSave} disabled={isSaving || isLoading}>
+          {isSaving ? 'Saving...' : 'Save Preferences'}
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
 export default function AdminSettingsPage() {
   return (
     <div className="container mx-auto p-4 max-w-4xl">
@@ -538,11 +614,15 @@ export default function AdminSettingsPage() {
       <Tabs defaultValue="school">
         <TabsList className="mb-4">
           <TabsTrigger value="school">School Settings</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="sessions">Academic Sessions</TabsTrigger>
           <TabsTrigger value="users">User Management</TabsTrigger>
         </TabsList>
         <TabsContent value="school">
           <SchoolSettings />
+        </TabsContent>
+        <TabsContent value="documents">
+          <DocumentSettings />
         </TabsContent>
         <TabsContent value="sessions">
           <SessionManagement />

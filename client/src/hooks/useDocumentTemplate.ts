@@ -8,6 +8,7 @@ export interface DocumentTemplate {
     type: string;
     content: string;
     config: string | null;
+    styles?: string;
 }
 
 export function useDocumentTemplate(type: 'report_card' | 'transfer_certificate' | 'payslip') {

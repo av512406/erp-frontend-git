@@ -8,7 +8,7 @@ export const defaultSchoolConfig = {
   logoUrl: '/logo.png',
   email: 'admin@school.com',
   examPattern: ["Term 1", "Term 2", "Final"],
-  features: { attendance: false } as Record<string, boolean>
+  features: { attendance: false } as Record<string, boolean | string>
 };
 
 export type SchoolConfig = typeof defaultSchoolConfig & { id?: string; updatedAt?: string | null };

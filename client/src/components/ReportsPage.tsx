@@ -25,7 +25,8 @@ import type { Student } from '@shared/schema';
 import type { GradeEntry } from "./GradesPage";
 import { schoolConfig } from '@/lib/schoolConfig';
 import { useDocumentTemplate } from '@/hooks/useDocumentTemplate';
-import { useSchoolConfig } from '@/hooks/useSchoolConfig'; // Assuming this hook exists
+import { useSchoolConfig } from '@/hooks/useSchoolConfig';
+import { REPORT_TEMPLATES } from '@/lib/documentTemplates';
 
 interface ReportsPageProps {
   students: Student[];
@@ -35,7 +36,15 @@ interface ReportsPageProps {
 export default function ReportsPage({ students, grades }: ReportsPageProps) {
   const { config } = useSchoolConfig();
   const TERMS = config.examPattern || ['Term 1', 'Term 2', 'Final'];
-  const { data: template } = useDocumentTemplate('report_card');
+  const { data: customTemplate } = useDocumentTemplate('report_card');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('default');
+
+  // Load default from config
+  useEffect(() => {
+    if (config.features && config.features.report_card_template) {
+      setSelectedTemplateId(config.features.report_card_template as string);
+    }
+  }, [config]);
 
   const [availableGrades, setAvailableGrades] = useState<string[]>([]);
   const [availableSections, setAvailableSections] = useState<string[]>([]);
@@ -71,161 +80,15 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
     setShowReport(true);
   };
 
-
-
-  const handlePrint = () => {
-    if (!student) return;
-
-    const printWindow = window.open('', '', 'width=800,height=600');
-    if (!printWindow) return;
-
-    const rowsHtml = reportRows.map((row, index) => `
-  < tr >
-        <td style="text-align: center;">${index + 1}</td>
-        <td>${row.subject}</td>
-        <td style="text-align: right;">100</td>
-        <td style="text-align: right;">${row.marks ?? '-'}</td>
-      </tr >
-  `).join('');
-
-    // Default Template Content
-    const defaultContent = `
-  < html >
-        <head>
-          <title>Report Card - ${student.name}</title>
-          <style>
-            body { font-family: 'Times New Roman', serif; margin: 0; padding: 0; }
-            @page { size: A4; margin: 10mm; }
-            .container { 
-                border: 2px solid #000; 
-                padding: 20px; 
-                width: 100%; 
-                max-width: 210mm; 
-                margin: 0 auto; 
-                box-sizing: border-box; 
-                min-height: 90vh; 
-                display: flex; 
-                flex-direction: column; 
-            }
-            .header { text-align: center; margin-bottom: 20px; border-bottom: 1px solid #000; padding-bottom: 10px; }
-            .header-content { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 5px; }
-            .logo { height: 60px; object-fit: contain; }
-            .school-info { text-align: center; }
-            .school-name { font-size: 24px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
-            .school-address { font-size: 12px; font-style: italic; margin-top: 2px; }
-            .contact-info { font-size: 11px; margin-top: 2px; }
-            .report-title { 
-                font-size: 18px; 
-                font-weight: bold; 
-                text-decoration: underline; 
-                text-align: center; 
-                margin: 15px 0; 
-                text-transform: uppercase;
-            }
-            .student-info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; font-size: 13px; }
-            .info-row { display: flex; }
-            .info-label { font-weight: bold; width: 120px; }
-            .info-value { font-weight: 500; }
-            
-            table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px; border: 1px solid #000; }
-            th { border: 1px solid #000; padding: 8px; background-color: #f3f3f3; text-align: left; }
-            td { border: 1px solid #000; padding: 8px; }
-            
-            .footer { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; padding-top: 40px; }
-            .signature { text-align: center; width: 150px; }
-            .sign-line { border-top: 1px solid #000; margin-top: 40px; padding-top: 5px; font-size: 12px; font-weight: bold; }
-            
-            @media print {
-              body { margin: 0; -webkit-print-color-adjust: exact; }
-              .container { border: 2px solid #000; height: 270mm; }
-              .no-print { display: none; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-                <div class="header-content">
-                    ${schoolConfig.logoUrl ? `<img src="${schoolConfig.logoUrl}" alt="Logo" class="logo" />` : ''}
-                    <div class="school-info">
-                        <div class="school-name">${schoolConfig.name}</div>
-                        <div class="school-address">${schoolConfig.address}</div>
-                        <div class="contact-info">Phone: ${schoolConfig.phone} | Email: ${schoolConfig.email}</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="report-title">REPORT CARD - ${selectedTerm}</div>
-            
-            <div class="student-info">
-                <div class="info-row"><span class="info-label">Student Name:</span> <span class="info-value">${student.name}</span></div>
-                <div class="info-row"><span class="info-label">Admission No:</span> <span class="info-value">${student.admissionNumber}</span></div>
-                <div class="info-row"><span class="info-label">Class/Section:</span> <span class="info-value">${student.grade} - ${student.section}</span></div>
-                <div class="info-row"><span class="info-label">Session:</span> <span class="info-value">${schoolConfig.session}</span></div>
-                <div class="info-row"><span class="info-label">Father's Name:</span> <span class="info-value">${student.fatherName || '-'}</span></div>
-                <div class="info-row"><span class="info-label">Date of Birth:</span> <span class="info-value">${student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString() : '-'}</span></div>
-            </div>
-            
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 50px; text-align: center;">S.No</th>
-                        <th>Subject</th>
-                        <th style="text-align: right; width: 100px;">Max Marks</th>
-                        <th style="text-align: right; width: 100px;">Marks Obtained</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rowsHtml}
-                    <tr style="font-weight: bold; background-color: #f9f9f9;">
-                        <td colspan="2" style="text-align: right; padding-right: 20px;">Total</td>
-                        <td style="text-align: right;">${reportRows.length * 100}</td>
-                        <td style="text-align: right;">${total}</td>
-                    </tr>
-                    <tr style="font-weight: bold;">
-                        <td colspan="2" style="text-align: right; padding-right: 20px;">Percentage</td>
-                        <td colspan="2" style="text-align: center;">${average}%</td>
-                    </tr>
-                </tbody>
-            </table>
-            
-            <div class="footer">
-                <div class="signature">
-                    <div class="sign-line">Class Teacher</div>
-                </div>
-                <div class="signature">
-                    <div class="sign-line">Principal</div>
-                </div>
-                <div class="signature">
-                    <div class="sign-line">Parent</div>
-                </div>
-            </div>
-          </div>
-        </body>
-      </html >
-  `;
-
-    if (template) {
-      let html = template.content;
-      // Basic replacements - extend as needed
-      html = html.replace(/{{studentName}}/g, student.name);
-      html = html.replace(/{{admissionNumber}}/g, student.admissionNumber);
-      html = html.replace(/{{grade}}/g, student.grade);
-      html = html.replace(/{{section}}/g, student.section);
-      html = html.replace(/{{term}}/g, selectedTerm);
-      html = html.replace(/{{rows}}/g, rowsHtml);
-      html = html.replace(/{{total}}/g, total.toString());
-      html = html.replace(/{{average}}/g, average);
-
-      printWindow.document.write(html);
-    } else {
-      printWindow.document.write(defaultContent);
-    }
-
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
+  const calculateGrade = (marks: number) => {
+    if (marks >= 91) return 'A1';
+    if (marks >= 81) return 'A2';
+    if (marks >= 71) return 'B1';
+    if (marks >= 61) return 'B2';
+    if (marks >= 51) return 'C1';
+    if (marks >= 41) return 'C2';
+    if (marks >= 33) return 'D';
+    return 'E';
   };
 
   const student = students.find(s => s.id === selectedStudent);
@@ -258,6 +121,277 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
   const reportRows = classSubjects.map(sub => ({ subject: sub, marks: gradeMap.get(sub) }));
   const total = reportRows.reduce((sum, r) => sum + (r.marks ?? 0), 0);
   const average = reportRows.length > 0 ? (total / reportRows.length).toFixed(2) : '0';
+
+  const getReportHtml = () => {
+    if (!student) return '';
+
+    // Data Preparation
+    const logoSection = schoolConfig.logoUrl ? `<img src="${schoolConfig.logoUrl}" alt="Logo" class="logo" style="height: 60px;" />` : '';
+    const dateStr = new Date().toLocaleDateString();
+
+    const rowsHtml = reportRows.map((row, index) => `
+      <tr>
+        <td style="text-align: center;">${index + 1}</td>
+        <td>${row.subject}</td>
+        <td style="text-align: right;">100</td>
+        <td style="text-align: right;">${row.marks ?? '-'}</td>
+      </tr>
+    `).join('');
+
+    const rowsSimple = reportRows.map((row, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${row.subject}</td>
+        <td>100</td>
+        <td>${row.marks ?? '-'}</td>
+        <td>${row.marks && row.marks >= 35 ? 'Pass' : 'Fail'}</td>
+      </tr>
+    `).join('');
+
+    const rowsModern = reportRows.map((row, index) => `
+      <tr>
+        <td class="sub-col" style="text-align: left; padding-left: 10px;">${row.subject}</td>
+        <td>100</td>
+        <td>${row.marks ?? '-'}</td>
+        <td>${calculateGrade(row.marks ?? 0)}</td>
+      </tr>
+    `).join('');
+
+    const gradesTableDPS = `
+      <table>
+        <thead>
+            <tr>
+                <th colspan="3">Academic Performance</th>
+            </tr>
+            <tr>
+                <th style="min-width: 150px; text-align: left; padding-left: 10px;">SUBJECTS</th>
+                <th>MARKS OBTAINED (100)</th>
+                <th>GRADE</th>
+            </tr>
+        </thead>
+        <tbody>
+          ${reportRows.map(row => `
+            <tr>
+                <td class="left-align" style="text-align: left; padding-left: 10px;">${row.subject}</td>
+                <td>${row.marks ?? '-'}</td>
+                <td>${calculateGrade(row.marks ?? 0)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+        <tfoot>
+          <tr style="font-weight: bold; background-color: #f8f9fa;">
+             <td class="left-align" style="text-align: left; padding-left: 10px;">Total</td>
+             <td>${reportRows.reduce((sum, row) => sum + (row.marks || 0), 0)}</td>
+             <td>-</td>
+          </tr>
+          <tr style="font-weight: bold; background-color: #e9ecef;">
+             <td class="left-align" style="text-align: left; padding-left: 10px;">Percentage</td>
+             <td>${(() => {
+        const total = reportRows.reduce((sum, row) => sum + (row.marks || 0), 0);
+        const max = reportRows.length * 100;
+        return max > 0 ? ((total / max) * 100).toFixed(2) : '0';
+      })()}%</td>
+             <td>-</td>
+          </tr>
+        </tfoot>
+      </table>
+    `;
+
+    // Calculate Consolidated Data
+    const consolidatedRows = classSubjects.map(sub => {
+      let totalMarks = 0;
+      let count = 0;
+      const termMarks: Record<string, string | number> = {};
+
+      TERMS.forEach(term => {
+        const g = grades.find(g => g.studentId === student.id && g.subject === sub && g.term === term);
+        if (g && g.marks !== undefined) {
+          termMarks[term] = g.marks;
+          totalMarks += g.marks;
+          count++;
+        } else {
+          termMarks[term] = '-';
+        }
+      });
+
+      return {
+        subject: sub,
+        termMarks,
+        total: totalMarks,
+        grade: count > 0 ? calculateGrade(totalMarks / count) : '-'
+      };
+    });
+
+    const gradesTableConsolidated = `
+      <table>
+        <thead>
+            <tr>
+                <th colspan="${TERMS.length + 2}">Academic Performance</th>
+            </tr>
+            <tr>
+                <th style="min-width: 150px; text-align: left; padding-left: 10px;">SUBJECTS</th>
+                ${TERMS.map(t => `<th>${t.toUpperCase()}</th>`).join('')}
+                <th>TOTAL</th>
+            </tr>
+        </thead>
+        <tbody>
+          ${consolidatedRows.map(row => `
+            <tr>
+                <td class="left-align" style="text-align: left; padding-left: 10px;">${row.subject}</td>
+                ${TERMS.map(t => `<td>${row.termMarks[t]}</td>`).join('')}
+                <td>${row.total}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+        <tfoot>
+          <tr style="font-weight: bold; background-color: #f8f9fa;">
+             <td class="left-align" style="text-align: left; padding-left: 10px;">Total</td>
+             ${TERMS.map(term => {
+      const termTotal = consolidatedRows.reduce((sum, row) => sum + (typeof row.termMarks[term] === 'number' ? (row.termMarks[term] as number) : 0), 0);
+      return `<td>${termTotal}</td>`;
+    }).join('')}
+             <td>${consolidatedRows.reduce((sum, row) => sum + row.total, 0)}</td>
+          </tr>
+          <tr style="font-weight: bold; background-color: #e9ecef;">
+             <td class="left-align" style="text-align: left; padding-left: 10px;">Percentage</td>
+             ${TERMS.map(term => {
+      const termTotal = consolidatedRows.reduce((sum, row) => sum + (typeof row.termMarks[term] === 'number' ? (row.termMarks[term] as number) : 0), 0);
+      const termMax = consolidatedRows.length * 100;
+      return `<td>${termMax > 0 ? ((termTotal / termMax) * 100).toFixed(2) : '0'}%</td>`;
+    }).join('')}
+             <td>${(() => {
+        const grandTotal = consolidatedRows.reduce((sum, row) => sum + row.total, 0);
+        const grandMax = consolidatedRows.length * TERMS.length * 100;
+        return grandMax > 0 ? ((grandTotal / grandMax) * 100).toFixed(2) : '0';
+      })()}%</td>
+          </tr>
+        </tfoot>
+      </table>
+    `;
+
+    let templateContent = '';
+
+    // 1. Custom DB Template (Highest Priority)
+    if (customTemplate) {
+      templateContent = customTemplate.content;
+    }
+    // 2. Selected System Template
+    else {
+      const sysTemplate = REPORT_TEMPLATES.find(t => t.id === selectedTemplateId) || REPORT_TEMPLATES[0];
+      templateContent = sysTemplate.content;
+    }
+
+    const gradesTable = `
+      <table>
+        <thead>
+          <tr>
+            <th>Sr. No.</th>
+            <th>Subject</th>
+            <th>Max Marks</th>
+            <th>Marks Obtained</th>
+            <th>Grade</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${reportRows.map((row, index) => `
+            <tr>
+              <td>${index + 1}</td>
+              <td style="text-align: left;">${row.subject}</td>
+              <td>100</td>
+              <td>${row.marks ?? '-'}</td>
+              <td>${calculateGrade(row.marks ?? 0)}</td>
+            </tr>
+          `).join('')}
+             <tr style="font-weight: bold; background-color: #f8f9fa;">
+            <td colspan="2" style="text-align: right;">Total</td>
+            <td>${reportRows.length * 100}</td>
+            <td>${total}</td>
+            <td>${average}%</td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+
+    // Replacements
+    let html = templateContent;
+    html = html.replace(/{{term}}/g, selectedTerm);
+    html = html.replace(/{{session}}/g, schoolConfig.session);
+    html = html.replace(/{{schoolName}}/g, schoolConfig.name);
+    html = html.replace(/{{schoolAddress}}/g, schoolConfig.address);
+    html = html.replace(/{{schoolPhone}}/g, schoolConfig.phone);
+    html = html.replace(/{{schoolEmail}}/g, schoolConfig.email);
+    html = html.replace(/{{logoSection}}/g, logoSection);
+
+    html = html.replace(/{{studentName}}/g, student.name);
+    html = html.replace(/{{admissionNumber}}/g, student.admissionNumber);
+    html = html.replace(/{{grade}}/g, student.grade);
+    html = html.replace(/{{section}}/g, student.section);
+    html = html.replace(/{{fatherName}}/g, student.fatherName || '-');
+    html = html.replace(/{{motherName}}/g, student.motherName || '-');
+    html = html.replace(/{{dob}}/g, student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString() : '-');
+    html = html.replace(/{{rollNo}}/g, (student as any).rollNumber || '-');
+    html = html.replace(/{{rollNumber}}/g, (student as any).rollNumber || '-');
+
+    html = html.replace(/{{gradesTableDPS}}/g, gradesTableDPS);
+    html = html.replace(/{{gradesTableConsolidated}}/g, gradesTableConsolidated);
+    html = html.replace(/{{gradesTable}}/g, gradesTable);
+    html = html.replace(/{{rows}}/g, rowsHtml);
+    html = html.replace(/{{rowsSimple}}/g, rowsSimple);
+    html = html.replace(/{{rowsModern}}/g, rowsModern);
+
+    html = html.replace(/{{totalMax}}/g, (reportRows.length * 100).toString());
+    html = html.replace(/{{totalObtained}}/g, total.toString());
+    html = html.replace(/{{percentage}}/g, average);
+    html = html.replace(/{{printDate}}/g, dateStr);
+
+    return `
+      <html>
+        <head>
+          <title>Report Card - ${student.name}</title>
+          <style>
+            @page { size: A4; margin: 0; }
+            /* Force A4 size and clear margins */
+            @page { size: A4; margin: 0; }
+            body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
+            
+            /* Inject Template Styles */
+            ${customTemplate?.styles || (REPORT_TEMPLATES.find(t => t.id === selectedTemplateId)?.styles || '')}
+            
+            /* Debug/Fallback Styles if template styles missing */
+            .report-card, .classic-report, .dps-report { width: 100%; min-height: 297mm; box-sizing: border-box; }
+          </style>
+        </head>
+        <body>
+          ${html}
+        </body>
+      </html>
+    `;
+  };
+
+  const handlePrint = () => {
+    if (!student) return;
+
+    const printWindow = window.open('', '', 'width=800,height=600');
+    if (!printWindow) return;
+
+    printWindow.document.write(getReportHtml());
+    printWindow.document.close();
+    printWindow.focus();
+    // Allow images to load before print (basic delay)
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 500);
+  };
+
+  const [previewHtml, setPreviewHtml] = useState('');
+
+  // Update preview when template or data changes if report is shown
+  useEffect(() => {
+    if (showReport && student) {
+      setPreviewHtml(getReportHtml());
+    }
+  }, [showReport, student, selectedTerm, selectedTemplateId, classSubjects, grades]);
 
   return (
     <div className="container mx-auto p-6">
@@ -393,99 +527,50 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
               </Button>
             </div>
           </div>
+
+          <div className="mt-4 pt-4 border-t">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="template-select">Report Template (Override Default)</Label>
+                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                  <SelectTrigger id="template-select" className="w-[300px]">
+                    <SelectValue placeholder="Select Template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REPORT_TEMPLATES.map(t => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {showReport && student && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between print:hidden">
-            <CardTitle>Report Card</CardTitle>
-            <Button onClick={handlePrint} className="gap-2" data-testid="button-print-report">
-              <Printer className="w-4 h-4" />
-              Print
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="text-center border-b pb-4">
-              <h1 className="text-2xl font-semibold">{schoolConfig.name}</h1>
-              <p className="text-sm text-muted-foreground">Academic Report Card</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Student Name</p>
-                <p className="font-semibold">{student.name}</p>
+      {
+        showReport && student && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between print:hidden">
+              <CardTitle>Report Card Preview</CardTitle>
+              <Button onClick={handlePrint} className="gap-2" data-testid="button-print-report">
+                <Printer className="w-4 h-4" />
+                Print
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="w-full h-[800px] border rounded-md overflow-hidden bg-gray-100 flex justify-center p-4">
+                <iframe
+                  title="Report Preview"
+                  srcDoc={previewHtml}
+                  className="w-full h-full bg-white shadow-lg"
+                  style={{ maxWidth: '210mm', height: '100%', border: 'none' }}
+                />
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Student ID</p>
-                <p className="font-mono font-semibold">{student.admissionNumber}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Class / Section</p>
-                <p className="font-semibold">{student.grade} - {student.section}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Term</p>
-                <p className="font-semibold">{selectedTerm}</p>
-              </div>
-            </div>
-
-            <div className="border rounded-lg overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Subject</TableHead>
-                    <TableHead className="text-right">Marks Obtained</TableHead>
-                    <TableHead className="text-right">Maximum Marks</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {reportRows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
-                        No grades available for this term
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    <>
-                      {reportRows.map((row, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium">{row.subject}</TableCell>
-                          <TableCell className="text-right font-semibold">{row.marks ?? ''}</TableCell>
-                          <TableCell className="text-right">100</TableCell>
-                        </TableRow>
-                      ))}
-                      <TableRow className="bg-muted/50">
-                        <TableCell className="font-semibold">Total</TableCell>
-                        <TableCell className="text-right font-bold">{total}</TableCell>
-                        <TableCell className="text-right font-semibold">{reportRows.length * 100}</TableCell>
-                      </TableRow>
-                      <TableRow className="bg-primary/10">
-                        <TableCell className="font-semibold">Average</TableCell>
-                        <TableCell className="text-right font-bold text-primary">{average}%</TableCell>
-                        <TableCell></TableCell>
-                      </TableRow>
-                    </>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-
-            <div className="grid grid-cols-2 gap-8 pt-8 border-t">
-              <div className="text-center">
-                <div className="border-t border-foreground/20 pt-2 mt-12">
-                  <p className="text-sm text-muted-foreground">Class Teacher</p>
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="border-t border-foreground/20 pt-2 mt-12">
-                  <p className="text-sm text-muted-foreground">Principal</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+            </CardContent>
+          </Card>
+        )
+      }
+    </div >
   );
 }

@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -17,9 +17,19 @@ interface TransferCertificateModalProps {
     student: Student | null;
 }
 
+import { REPORT_TEMPLATES, TC_TEMPLATES } from '@/lib/documentTemplates';
+import { useSchoolConfig } from '@/hooks/useSchoolConfig';
+
 export default function TransferCertificateModal({ open, onClose, student }: TransferCertificateModalProps) {
     const printRef = useRef<HTMLDivElement>(null);
-    const { data: template } = useDocumentTemplate('transfer_certificate');
+    const { config } = useSchoolConfig();
+    const { data: customTemplate } = useDocumentTemplate('transfer_certificate');
+
+    // Determine effective template
+    const selectedTemplateId = (config.features?.tc_template as string) || 'default';
+    const systemTemplate = TC_TEMPLATES.find(t => t.id === selectedTemplateId) || TC_TEMPLATES[0];
+    // Prioritize custom DB template if exists, else use selected system template
+    const template = customTemplate || systemTemplate;
 
     if (!student) return null;
 
@@ -43,71 +53,97 @@ export default function TransferCertificateModal({ open, onClose, student }: Tra
 
         const printWindow = window.open('', '', 'width=800,height=600');
         if (printWindow) {
-            // If template exists, use it. Otherwise use default.
-            const content = template ? template.content : `
-        <html>
-          <head>
-            <title>Transfer Certificate - ${student.name}</title>
-            <style>
-              body { font-family: 'Times New Roman', serif; margin: 0; padding: 0; }
-              @page { size: A4; margin: 10mm; }
-              .container { 
-                  border: 2px solid #000; 
-                  padding: 20px; 
-                  width: 100%; 
-                  max-width: 210mm; 
-                  margin: 0 auto; 
-                  box-sizing: border-box; 
-                  height: 95vh; 
-                  display: flex; 
-                  flex-direction: column; 
-                  justify-content: space-between; 
-              }
-              .header { text-align: center; margin-bottom: 20px; border-bottom: 1px solid #000; padding-bottom: 10px; }
-              .header-content { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 5px; }
-              .logo { height: 60px; object-fit: contain; }
-              .school-info { text-align: center; }
-              .school-name { font-size: 24px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
-              .school-address { font-size: 12px; font-style: italic; margin-top: 2px; }
-              .contact-info { font-size: 11px; margin-top: 2px; }
-              .tc-title { 
-                  font-size: 18px; 
-                  font-weight: bold; 
-                  text-decoration: underline; 
-                  text-align: center; 
-                  margin: 15px 0; 
-                  text-transform: uppercase;
-              }
-              .content { font-size: 13px; line-height: 1.5; flex-grow: 1; padding: 0 10px; }
-              .row { display: flex; margin-bottom: 8px; align-items: baseline; }
-              .label { font-weight: bold; width: 200px; flex-shrink: 0; }
-              .value { border-bottom: 1px dotted #000; flex: 1; padding-left: 10px; font-weight: 500; }
-              .footer { margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 20px 20px; }
-              .signature { text-align: center; width: 150px; }
-              .sign-line { border-top: 1px solid #000; margin-top: 40px; padding-top: 5px; font-size: 12px; font-weight: bold; }
-              @media print {
-                body { margin: 0; -webkit-print-color-adjust: exact; }
-                .container { border: 2px solid #000; height: 270mm; }
-                .no-print { display: none; }
-              }
-            </style>
-          </head>
-          <body>
-            ${printContent.innerHTML}
-          </body>
-        </html>
-      `;
+            let html = '';
 
-            // If using template, we need to replace placeholders.
-            // For now, the default logic reuses the innerHTML of the rendered component.
-            // If we switch to full server-side templates later, we'd do string replacement here.
-            // But since the requirement is "different report card... for schools", 
-            // and we are storing HTML in the DB, we should probably render THAT HTML if it exists.
+            if (template) {
+                html = `
+                    <html>
+                        <head>
+                            <title>Transfer Certificate - ${student.name}</title>
+                            <style>
+                                @page { size: A4; margin: 10mm; }
+                                body { margin: 0; padding: 0; }
+                                ${template.styles || ''}
+                            </style>
+                        </head>
+                        <body>
+                            ${template.content}
+                        </body>
+                    </html>
+                `;
 
-            // However, the current component renders the "Default" view into the DOM, and then prints it.
-            // To support a custom template, we should probably render the custom template into the DOM *instead* of the default one.
+                // Replace placeholders
+                html = html.replace(/{{studentName}}/g, student.name);
+                html = html.replace(/{{admissionNumber}}/g, student.admissionNumber);
+                html = html.replace(/{{fatherName}}/g, student.fatherName || '');
+                html = html.replace(/{{motherName}}/g, student.motherName || '');
+                html = html.replace(/{{dob}}/g, student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString() : '');
+                html = html.replace(/{{grade}}/g, student.grade);
+                html = html.replace(/{{session}}/g, schoolConfig.session || '');
+                html = html.replace(/{{schoolName}}/g, schoolConfig.name);
+                html = html.replace(/{{schoolAddress}}/g, schoolConfig.address);
+                html = html.replace(/{{currentDate}}/g, new Date().toLocaleDateString());
 
-            printWindow.document.write(content);
+                const logoSection = schoolConfig.logoUrl ? `<img src="${schoolConfig.logoUrl}" alt="Logo" class="logo" style="height: 60px;" />` : '';
+                html = html.replace(/{{logoSection}}/g, logoSection);
+
+            } else {
+                html = `
+                    <html>
+                      <head>
+                        <title>Transfer Certificate - ${student.name}</title>
+                        <style>
+                          body { font-family: 'Times New Roman', serif; margin: 0; padding: 0; }
+                          @page { size: A4; margin: 10mm; }
+                          .container { 
+                              border: 2px solid #000; 
+                              padding: 20px; 
+                              width: 100%; 
+                              max-width: 210mm; 
+                              margin: 0 auto; 
+                              box-sizing: border-box; 
+                              height: 95vh; 
+                              display: flex; 
+                              flex-direction: column; 
+                              justify-content: space-between; 
+                          }
+                          .header { text-align: center; margin-bottom: 20px; border-bottom: 1px solid #000; padding-bottom: 10px; }
+                          .header-content { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 5px; }
+                          .logo { height: 60px; object-fit: contain; }
+                          .school-info { text-align: center; }
+                          .school-name { font-size: 24px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
+                          .school-address { font-size: 12px; font-style: italic; margin-top: 2px; }
+                          .contact-info { font-size: 11px; margin-top: 2px; }
+                          .tc-title { 
+                              font-size: 18px; 
+                              font-weight: bold; 
+                              text-decoration: underline; 
+                              text-align: center; 
+                              margin: 15px 0; 
+                              text-transform: uppercase;
+                          }
+                          .content { font-size: 13px; line-height: 1.5; flex-grow: 1; padding: 0 10px; }
+                          .row { display: flex; margin-bottom: 8px; align-items: baseline; }
+                          .label { font-weight: bold; width: 200px; flex-shrink: 0; }
+                          .value { border-bottom: 1px dotted #000; flex: 1; padding-left: 10px; font-weight: 500; }
+                          .footer { margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 20px 20px; }
+                          .signature { text-align: center; width: 150px; }
+                          .sign-line { border-top: 1px solid #000; margin-top: 40px; padding-top: 5px; font-size: 12px; font-weight: bold; }
+                          @media print {
+                            body { margin: 0; -webkit-print-color-adjust: exact; }
+                            .container { border: 2px solid #000; height: 270mm; }
+                            .no-print { display: none; }
+                          }
+                        </style>
+                      </head>
+                      <body>
+                        ${printContent.innerHTML}
+                      </body>
+                    </html>
+                  `;
+            }
+
+            printWindow.document.write(html);
             printWindow.document.close();
             printWindow.focus();
             printWindow.print();
