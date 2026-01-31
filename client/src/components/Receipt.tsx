@@ -74,7 +74,10 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 								<img src={config.logoUrl} alt="School Logo" className="h-14 object-contain" />
 							)}
 						</div>
-						<p className="text-xs italic font-bold">{config.address}</p>
+						<p className="text-xs italic font-bold">
+							{config.address}
+							{config.email && <span> | {config.email}</span>}
+						</p>
 						{/* Merge Fee Receipt and copy label to save vertical space */}
 						<div className="inline-flex items-center gap-2 border px-2 py-0.5 text-sm font-extrabold mt-1">
 							<span>Fee Receipt</span>

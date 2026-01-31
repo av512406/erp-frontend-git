@@ -17,7 +17,10 @@ export const GovtStandardTemplate: React.FC<Props> = ({ school, student }) => {
                     )}
                     <div className="text-left">
                         <h1 className="text-3xl font-bold uppercase tracking-wide mb-1">{school.name}</h1>
-                        <p className="text-sm font-bold mb-1">{school.address}</p>
+                        <p className="text-sm font-bold mb-1">
+                            {school.address}
+                            {school.email && <span> | {school.email}</span>}
+                        </p>
                         <div className="flex gap-3 text-xs font-bold mt-1">
                             <span>Affiliation No: {school.affiliationNo}</span>
                             <span>|</span>

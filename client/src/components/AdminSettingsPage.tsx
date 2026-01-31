@@ -402,6 +402,7 @@ function SchoolSettings() {
     name: config.name,
     address: config.address,
     phone: config.phone,
+    email: config.email,
     logoFile: null as File | null
   });
 
@@ -415,6 +416,7 @@ function SchoolSettings() {
       name: config.name,
       address: config.address,
       phone: config.phone,
+      email: config.email,
     }));
     setExamPattern(config.examPattern || ["Term 1", "Term 2", "Final"]);
   }, [config]);
@@ -483,6 +485,10 @@ function SchoolSettings() {
             <div className="space-y-2">
               <Label htmlFor="phone">Phone</Label>
               <Input id="phone" name="phone" value={form.phone} onChange={handleChange} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" name="email" value={form.email} onChange={handleChange} />
             </div>
 
             <div className="space-y-2">

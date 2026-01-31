@@ -376,17 +376,20 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
             .report-card, .classic-report, .dps-report { width: 100%; min-height: 297mm; box-sizing: border-box; }
             
              @media print {
-              .dps-indirapuram-container .header h1,
-              .dps-indirapuram-container .header h2,
-              .dps-indirapuram-container .header h3,
-              .dps-indirapuram-container th,
-              .dps-indirapuram-container .student-info td,
-              .dps-indirapuram-container table,
-              .dps-indirapuram-container table td,
-              .dps-indirapuram-container .scholastic-area th {
-                  color: var(--theme-color, #000) !important;
-                  border-color: var(--theme-color, #000) !important;
-              }
+               .dps-indirapuram-container .header h1,
+               .dps-indirapuram-container .header h2,
+               .dps-indirapuram-container .header h3 {
+                   color: var(--theme-color, #000) !important;
+               }
+               
+               .dps-indirapuram-container th,
+               .dps-indirapuram-container .student-info td,
+               .dps-indirapuram-container table,
+               .dps-indirapuram-container table td,
+               .dps-indirapuram-container .scholastic-area th {
+                   border-color: var(--theme-color, #000) !important;
+                   color: #000 !important;
+               }
               .dps-indirapuram-container .border-outer {
                   border-color: var(--theme-color, #000) !important;
               }

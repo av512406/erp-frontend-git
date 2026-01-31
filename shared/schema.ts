@@ -62,6 +62,7 @@ export const students = pgTable("students", {
   leavingReason: text("leaving_reason"),
   category: text("category").default('GEN'),
   gender: text("gender"),
+  nationality: text("nationality").default('Indian'),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

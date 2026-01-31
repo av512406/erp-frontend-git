@@ -111,7 +111,8 @@ export function TransferCertificateModal({ open, onClose, student }: TransferCer
         address: schoolConfig.address,
         affiliationNo: schoolConfig.affiliationNo || 'PENDING',
         schoolCode: schoolConfig.schoolCode || 'PENDING',
-        logoUrl: schoolConfig.logoUrl
+        logoUrl: schoolConfig.logoUrl,
+        email: schoolConfig.email
     };
 
     const updateField = (field: keyof StudentTCDetails, value: string) => {

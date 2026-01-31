@@ -4,6 +4,8 @@ export const defaultSchoolConfig = {
   name: 'School ERP',
   address: 'School Address',
   phone: '+91-0000-000000',
+  affiliationNo: '000000',
+  schoolCode: '00000',
   session: '2025-2026',
   logoUrl: '/logo.png',
   email: 'admin@school.com',
