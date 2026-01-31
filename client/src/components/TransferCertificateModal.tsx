@@ -1,4 +1,4 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -6,10 +6,14 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Printer } from "lucide-react";
 import type { Student } from '@shared/schema';
 import { schoolConfig } from '@/lib/schoolConfig';
-import { useDocumentTemplate } from '@/hooks/useDocumentTemplate';
+import { GovtStandardTemplate } from './GovtStandardTemplate';
+import { SchoolDetails, StudentTCDetails } from '../types';
 
 interface TransferCertificateModalProps {
     open: boolean;
@@ -17,211 +21,225 @@ interface TransferCertificateModalProps {
     student: Student | null;
 }
 
-import { REPORT_TEMPLATES, TC_TEMPLATES } from '@/lib/documentTemplates';
-import { useSchoolConfig } from '@/hooks/useSchoolConfig';
-
-export default function TransferCertificateModal({ open, onClose, student }: TransferCertificateModalProps) {
+export function TransferCertificateModal({ open, onClose, student }: TransferCertificateModalProps) {
+    const [tcData, setTcData] = useState<StudentTCDetails | null>(null);
     const printRef = useRef<HTMLDivElement>(null);
-    const { config } = useSchoolConfig();
-    const { data: customTemplate } = useDocumentTemplate('transfer_certificate');
 
-    // Determine effective template
-    const selectedTemplateId = (config.features?.tc_template as string) || 'default';
-    const systemTemplate = TC_TEMPLATES.find(t => t.id === selectedTemplateId) || TC_TEMPLATES[0];
-    // Prioritize custom DB template if exists, else use selected system template
-    const template = customTemplate || systemTemplate;
-
-    if (!student) return null;
-
-    // Dynamic configuration for TC fields
-    const tcFields = [
-        { label: "TC Number", value: `TC/${new Date().getFullYear()}/${student.admissionNumber}` },
-        { label: "Admission Number", value: student.admissionNumber },
-        { label: "Name of Student", value: student.name },
-        { label: "Father's/Guardian's Name", value: student.fatherName || '__________________' },
-        { label: "Mother's Name", value: student.motherName || '__________________' },
-        { label: "Date of Birth", value: student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString() : '__________________' },
-        { label: "Class Last Studied", value: `Class ${student.grade}` },
-        { label: "Date of Leaving", value: student.leftDate ? new Date(student.leftDate).toLocaleDateString() : '__________________' },
-        { label: "Reason for Leaving", value: student.leavingReason || '__________________' },
-        { label: "General Conduct", value: "Good" }, // Default value, could be dynamic later
-    ];
+    useEffect(() => {
+        if (student) {
+            // Map student data to TC details
+            const initialData: StudentTCDetails = {
+                tcNumber: `TC/${new Date().getFullYear()}/${student.admissionNumber}`,
+                admissionNumber: student.admissionNumber,
+                studentName: student.name,
+                motherName: student.motherName || '',
+                fatherName: student.fatherName || '',
+                dob: student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString('en-GB') : '',
+                nationality: student.nationality || 'Indian',
+                casteCategory: student.category || 'General',
+                dateOfAdmission: student.admissionDate ? new Date(student.admissionDate).toLocaleDateString('en-GB') : '',
+                classAdmitted: '', // info not always available in basic student record
+                currentClass: `${student.grade} - ${student.section}`,
+                lastExamResult: 'Passed',
+                qualifiedForPromotion: 'Yes',
+                subjectsStudied: 'English, Hindi, Mathematics, Science, Social Science',
+                // Handle schema typo if present: aaparId vs apaarId
+                apaarId: (student as any).aaparId || (student as any).apaarId || '',
+                penNumber: (student as any).penNumber || '',
+                generalConduct: 'Good',
+                dateOfIssue: new Date().toLocaleDateString('en-GB'),
+                reasonForLeaving: student.leavingReason || 'Parent\'s Request'
+            };
+            setTcData(initialData);
+        }
+    }, [student]);
 
     const handlePrint = () => {
-        const printContent = printRef.current;
-        if (!printContent) return;
+        if (!printRef.current) return;
 
-        const printWindow = window.open('', '', 'width=800,height=600');
-        if (printWindow) {
-            let html = '';
+        const printContent = printRef.current.innerHTML;
+        const width = 1000;
+        const height = 900;
+        const left = (window.screen.width / 2) - (width / 2);
+        const top = (window.screen.height / 2) - (height / 2);
 
-            if (template) {
-                html = `
-                    <html>
-                        <head>
-                            <title>Transfer Certificate - ${student.name}</title>
-                            <style>
-                                @page { size: A4; margin: 10mm; }
-                                body { margin: 0; padding: 0; }
-                                ${template.styles || ''}
-                            </style>
-                        </head>
-                        <body>
-                            ${template.content}
-                        </body>
-                    </html>
-                `;
+        const printWindow = window.open('', '', `width=${width},height=${height},top=${top},left=${left}`);
+        if (!printWindow) return;
 
-                // Replace placeholders
-                html = html.replace(/{{studentName}}/g, student.name);
-                html = html.replace(/{{admissionNumber}}/g, student.admissionNumber);
-                html = html.replace(/{{fatherName}}/g, student.fatherName || '');
-                html = html.replace(/{{motherName}}/g, student.motherName || '');
-                html = html.replace(/{{dob}}/g, student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString() : '');
-                html = html.replace(/{{grade}}/g, student.grade);
-                html = html.replace(/{{session}}/g, schoolConfig.session || '');
-                html = html.replace(/{{schoolName}}/g, schoolConfig.name);
-                html = html.replace(/{{schoolAddress}}/g, schoolConfig.address);
-                html = html.replace(/{{currentDate}}/g, new Date().toLocaleDateString());
+        // Collect logic to get styles
+        const styles = Array.from(document.styleSheets)
+            .map(sheet => {
+                try {
+                    return Array.from(sheet.cssRules).map(rule => rule.cssText).join('');
+                } catch (e) {
+                    return '';
+                }
+            })
+            .join('\n');
 
-                const logoSection = schoolConfig.logoUrl ? `<img src="${schoolConfig.logoUrl}" alt="Logo" class="logo" style="height: 60px;" />` : '';
-                html = html.replace(/{{logoSection}}/g, logoSection);
-
-            } else {
-                html = `
-                    <html>
-                      <head>
-                        <title>Transfer Certificate - ${student.name}</title>
-                        <style>
-                          body { font-family: 'Times New Roman', serif; margin: 0; padding: 0; }
-                          @page { size: A4; margin: 10mm; }
-                          .container { 
-                              border: 2px solid #000; 
-                              padding: 20px; 
-                              width: 100%; 
-                              max-width: 210mm; 
-                              margin: 0 auto; 
-                              box-sizing: border-box; 
-                              height: 95vh; 
-                              display: flex; 
-                              flex-direction: column; 
-                              justify-content: space-between; 
-                          }
-                          .header { text-align: center; margin-bottom: 20px; border-bottom: 1px solid #000; padding-bottom: 10px; }
-                          .header-content { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 5px; }
-                          .logo { height: 60px; object-fit: contain; }
-                          .school-info { text-align: center; }
-                          .school-name { font-size: 24px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
-                          .school-address { font-size: 12px; font-style: italic; margin-top: 2px; }
-                          .contact-info { font-size: 11px; margin-top: 2px; }
-                          .tc-title { 
-                              font-size: 18px; 
-                              font-weight: bold; 
-                              text-decoration: underline; 
-                              text-align: center; 
-                              margin: 15px 0; 
-                              text-transform: uppercase;
-                          }
-                          .content { font-size: 13px; line-height: 1.5; flex-grow: 1; padding: 0 10px; }
-                          .row { display: flex; margin-bottom: 8px; align-items: baseline; }
-                          .label { font-weight: bold; width: 200px; flex-shrink: 0; }
-                          .value { border-bottom: 1px dotted #000; flex: 1; padding-left: 10px; font-weight: 500; }
-                          .footer { margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 20px 20px; }
-                          .signature { text-align: center; width: 150px; }
-                          .sign-line { border-top: 1px solid #000; margin-top: 40px; padding-top: 5px; font-size: 12px; font-weight: bold; }
-                          @media print {
-                            body { margin: 0; -webkit-print-color-adjust: exact; }
-                            .container { border: 2px solid #000; height: 270mm; }
-                            .no-print { display: none; }
-                          }
-                        </style>
-                      </head>
-                      <body>
-                        ${printContent.innerHTML}
-                      </body>
-                    </html>
-                  `;
-            }
-
-            printWindow.document.write(html);
-            printWindow.document.close();
-            printWindow.focus();
-            printWindow.print();
-            printWindow.close();
-        }
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Transfer Certificate - ${tcData?.studentName}</title>
+                    <style>
+                        ${styles}
+                        body { background: white; padding: 20px; }
+                        @media print {
+                            body { -webkit-print-color-adjust: exact; padding: 0; }
+                            @page { size: A4; margin: 0; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${printContent}
+                    <script>
+                        window.onload = () => {
+                            window.print();
+                            // window.close(); // Optional: close after print
+                        };
+                    </script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
     };
 
-    // Helper to render the default view or the custom template
-    const renderContent = () => {
-        if (template) {
-            // Simple placeholder replacement for now. 
-            // In a real app, we might use a proper template engine or just more robust replacement.
-            let html = template.content;
-            // Replace basic fields
-            html = html.replace(/{{studentName}}/g, student.name);
-            html = html.replace(/{{admissionNumber}}/g, student.admissionNumber);
-            // ... add more replacements as needed
-            return <div dangerouslySetInnerHTML={{ __html: html }} />;
-        }
+    if (!student || !tcData) return null;
 
-        return (
-            <div className="container" style={{ border: '2px solid #000', padding: '20px', minHeight: '800px', display: 'flex', flexDirection: 'column' }}>
-                <div className="header" style={{ borderBottom: '1px solid #000', paddingBottom: '10px', marginBottom: '20px', textAlign: 'center' }}>
-                    <div className="header-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
-                        {schoolConfig.logoUrl && (
-                            <img src={schoolConfig.logoUrl} alt="Logo" style={{ height: '60px', objectFit: 'contain' }} />
-                        )}
-                        <div className="school-info">
-                            <div className="school-name" style={{ fontSize: '24px', fontWeight: 'bold', textTransform: 'uppercase' }}>{schoolConfig.name}</div>
-                            <div className="school-address" style={{ fontSize: '12px', fontStyle: 'italic' }}>{schoolConfig.address}</div>
-                            <div className="contact-info" style={{ fontSize: '11px' }}>Phone: {schoolConfig.phone} | Email: {schoolConfig.email}</div>
-                        </div>
-                    </div>
-                </div>
+    const schoolDetails: SchoolDetails = {
+        name: schoolConfig.name,
+        address: schoolConfig.address,
+        affiliationNo: schoolConfig.affiliationNo || 'PENDING',
+        schoolCode: schoolConfig.schoolCode || 'PENDING',
+        logoUrl: schoolConfig.logoUrl
+    };
 
-                <div className="tc-title" style={{ fontSize: '18px', fontWeight: 'bold', textDecoration: 'underline', textAlign: 'center', margin: '15px 0', textTransform: 'uppercase' }}>
-                    TRANSFER CERTIFICATE
-                </div>
-
-                <div className="content" style={{ fontSize: '13px', lineHeight: '1.5', flexGrow: 1, padding: '0 10px' }}>
-                    {tcFields.map((field, index) => (
-                        <div key={index} className="row" style={{ display: 'flex', marginBottom: '8px', alignItems: 'baseline' }}>
-                            <div className="label" style={{ fontWeight: 'bold', width: '200px', flexShrink: 0 }}>{field.label}:</div>
-                            <div className="value" style={{ borderBottom: '1px dotted #000', flex: 1, paddingLeft: '10px', fontWeight: 500 }}>{field.value}</div>
-                        </div>
-                    ))}
-                </div>
-
-                <div className="footer" style={{ marginTop: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', padding: '0 20px 20px' }}>
-                    <div className="signature" style={{ textAlign: 'center', width: '150px' }}>
-                        <div className="sign-line" style={{ borderTop: '1px solid #000', marginTop: '40px', paddingTop: '5px', fontSize: '12px', fontWeight: 'bold' }}>Prepared By</div>
-                    </div>
-                    <div className="signature" style={{ textAlign: 'center', width: '150px' }}>
-                        <div className="sign-line" style={{ borderTop: '1px solid #000', marginTop: '40px', paddingTop: '5px', fontSize: '12px', fontWeight: 'bold' }}>Class Teacher</div>
-                    </div>
-                    <div className="signature" style={{ textAlign: 'center', width: '150px' }}>
-                        <div className="sign-line" style={{ borderTop: '1px solid #000', marginTop: '40px', paddingTop: '5px', fontSize: '12px', fontWeight: 'bold' }}>Principal</div>
-                    </div>
-                </div>
-            </div>
-        );
+    const updateField = (field: keyof StudentTCDetails, value: string) => {
+        setTcData(prev => prev ? { ...prev, [field]: value } : null);
     };
 
     return (
         <Dialog open={open} onOpenChange={onClose}>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>Transfer Certificate Preview</DialogTitle>
+            <DialogContent className="max-w-[95vw] h-[95vh] flex flex-col p-0 gap-0">
+                <DialogHeader className="px-6 py-4 border-b">
+                    <DialogTitle>Generate Transfer Certificate</DialogTitle>
                 </DialogHeader>
 
-                <div className="flex justify-end mb-4">
-                    <Button onClick={handlePrint} className="gap-2">
-                        <Printer className="w-4 h-4" /> Print TC
-                    </Button>
-                </div>
+                <div className="flex flex-1 overflow-hidden">
+                    {/* Left Panel: Form */}
+                    <ScrollArea className="w-1/3 border-r bg-muted/10">
+                        <div className="p-6 space-y-4">
+                            <h3 className="font-semibold mb-4">Edit Details</h3>
 
-                <div className="border p-4 bg-white text-black font-serif" ref={printRef}>
-                    {renderContent()}
+                            <div className="space-y-4">
+                                <div className="grid gap-2">
+                                    <Label>TC Number</Label>
+                                    <Input value={tcData.tcNumber} onChange={e => updateField('tcNumber', e.target.value)} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Admission No</Label>
+                                    <Input value={tcData.admissionNumber} onChange={e => updateField('admissionNumber', e.target.value)} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Student Name</Label>
+                                    <Input value={tcData.studentName} onChange={e => updateField('studentName', e.target.value)} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label>Mother's Name</Label>
+                                        <Input value={tcData.motherName} onChange={e => updateField('motherName', e.target.value)} />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Father's Name</Label>
+                                        <Input value={tcData.fatherName} onChange={e => updateField('fatherName', e.target.value)} />
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>DOB (DD/MM/YYYY)</Label>
+                                    <div className="flex gap-2">
+                                        <Input value={tcData.dob} onChange={e => updateField('dob', e.target.value)} />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label>Nationality</Label>
+                                        <Input value={tcData.nationality} onChange={e => updateField('nationality', e.target.value)} />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Category</Label>
+                                        <Input value={tcData.casteCategory} onChange={e => updateField('casteCategory', e.target.value)} />
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Date of Admission</Label>
+                                    <div className="flex gap-2">
+                                        <Input value={tcData.dateOfAdmission} onChange={e => updateField('dateOfAdmission', e.target.value)} />
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Current Class</Label>
+                                    <Input value={tcData.currentClass} onChange={e => updateField('currentClass', e.target.value)} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Last Exam Result</Label>
+                                    <Input value={tcData.lastExamResult} onChange={e => updateField('lastExamResult', e.target.value)} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Qualified for Promotion</Label>
+                                    <Input value={tcData.qualifiedForPromotion} onChange={e => updateField('qualifiedForPromotion', e.target.value)} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Subjects Studied</Label>
+                                    <Input value={tcData.subjectsStudied} onChange={e => updateField('subjectsStudied', e.target.value)} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label>APAAR ID</Label>
+                                        <Input value={tcData.apaarId} onChange={e => updateField('apaarId', e.target.value)} />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>PEN</Label>
+                                        <Input value={tcData.penNumber} onChange={e => updateField('penNumber', e.target.value)} />
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>General Conduct</Label>
+                                    <Input value={tcData.generalConduct} onChange={e => updateField('generalConduct', e.target.value)} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label>Date of Issue</Label>
+                                        <Input value={tcData.dateOfIssue} onChange={e => updateField('dateOfIssue', e.target.value)} />
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Reason for Leaving</Label>
+                                    <Input value={tcData.reasonForLeaving} onChange={e => updateField('reasonForLeaving', e.target.value)} />
+                                </div>
+                            </div>
+                        </div>
+                    </ScrollArea>
+
+                    {/* Right Panel: Preview */}
+                    <div className="flex-1 flex flex-col bg-slate-100">
+                        <div className="p-4 border-b bg-white flex justify-between items-center shadow-sm z-10">
+                            <h3 className="font-semibold text-slate-700">Live Preview</h3>
+                            <Button onClick={handlePrint} className="gap-2">
+                                <Printer className="w-4 h-4" />
+                                Print Certificate
+                            </Button>
+                        </div>
+                        <ScrollArea className="flex-1 p-8">
+                            <div className="max-w-[210mm] mx-auto shadow-lg bg-white origin-top scale-100">
+                                <div ref={printRef}>
+                                    <GovtStandardTemplate
+                                        school={schoolDetails}
+                                        student={tcData}
+                                    />
+                                </div>
+                            </div>
+                        </ScrollArea>
+                    </div>
                 </div>
             </DialogContent>
         </Dialog>

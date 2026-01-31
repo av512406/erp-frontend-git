@@ -561,12 +561,12 @@ function DocumentSettings() {
   const { toast } = useToast();
 
   const [reportTemplate, setReportTemplate] = useState('default');
-  const [tcTemplate, setTcTemplate] = useState('default');
+
 
   useEffect(() => {
     if (config.features) {
       setReportTemplate((config.features.report_card_template as string) || 'default');
-      setTcTemplate((config.features.tc_template as string) || 'default');
+
     }
   }, [config]);
 
@@ -575,7 +575,7 @@ function DocumentSettings() {
       const newFeatures = {
         ...config.features,
         report_card_template: reportTemplate,
-        tc_template: tcTemplate
+
       };
       await updateConfig({ ...config, features: newFeatures });
       toast({ title: "Success", description: "Document templates updated" });
@@ -607,20 +607,7 @@ function DocumentSettings() {
           <p className="text-sm text-muted-foreground">Select the layout for student report cards.</p>
         </div>
 
-        <div className="space-y-2">
-          <Label>Transfer Certificate Format</Label>
-          <Select value={tcTemplate} onValueChange={setTcTemplate}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TC_TEMPLATES.map(t => (
-                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-sm text-muted-foreground">Select the layout for transfer certificates.</p>
-        </div>
+
       </CardContent>
       <CardFooter>
         <Button onClick={handleSave} disabled={isSaving || isLoading}>

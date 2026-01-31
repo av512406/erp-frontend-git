@@ -8,10 +8,11 @@ export interface DocumentTemplate {
   type: 'report_card' | 'transfer_certificate' | 'payslip';
 }
 
+
 export const REPORT_TEMPLATES: DocumentTemplate[] = [
   {
     id: 'system-modern-dps',
-    name: 'Standard Format (DPS Style)',
+    name: 'Single Term Report',
     description: 'Term-specific report card with professional header',
     type: 'report_card',
     content: `
@@ -143,7 +144,7 @@ export const REPORT_TEMPLATES: DocumentTemplate[] = [
         
         table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-weight: bold; }
         table, th, td { border: 1px solid var(--theme-color, #000); }
-        th, td { padding: 3px; text-align: center; font-size: 11px; }
+        th, td { padding: 3px; text-align: center; font-size: 11px; color: #000 !important; }
         .left-align { text-align: left; }
         
         .scholastic-area { flex-grow: 1; }
@@ -157,7 +158,7 @@ export const REPORT_TEMPLATES: DocumentTemplate[] = [
   },
   {
     id: 'system-modern-dps-consolidated',
-    name: 'Consolidated (DPS Style)',
+    name: 'Full Session Report',
     description: 'All-terms report card with professional header',
     type: 'report_card',
     content: `
@@ -290,7 +291,7 @@ export const REPORT_TEMPLATES: DocumentTemplate[] = [
         
         table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-weight: bold; }
         table, th, td { border: 1px solid var(--theme-color, #000); }
-        th, td { padding: 3px; text-align: center; font-size: 11px; }
+        th, td { padding: 3px; text-align: center; font-size: 11px; color: #000 !important; }
         .left-align { text-align: left; }
         
         .scholastic-area { flex-grow: 1; }
@@ -304,143 +305,7 @@ export const REPORT_TEMPLATES: DocumentTemplate[] = [
   }
 ];
 
-export const TC_TEMPLATES: DocumentTemplate[] = [
-  {
-    id: 'system-default-tc',
-    name: 'Standard TC',
-    description: 'Standard Transfer Certificate',
-    type: 'transfer_certificate',
-    content: `
-      <div class="tc-document">
-        <div class="tc-header">
-          {{logoSection}}
-          <div class="tc-school-details">
-            <h1>{{schoolName}}</h1>
-            <p>{{schoolAddress}}</p>
-          </div>
-        </div>
-        <h2 class="tc-title">TRANSFER CERTIFICATE</h2>
-        
-        <div class="tc-body">
-          <p>This is to certify that <strong>{{studentName}}</strong>, son/daughter of Mr./Mrs. <strong>{{fatherName}}</strong>, Admission No. <strong>{{admissionNumber}}</strong>, was a bona fide student of this school.</p>
-          
-          <p>He/She has passed the <strong>{{grade}}</strong> examination held in <strong>{{session}}</strong>.</p>
-          
-          <p>His/Her date of birth as per school records is <strong>{{dob}}</strong>.</p>
-          
-          <p>General Conduct: <strong>Good</strong></p>
-          
-          <div class="tc-dates">
-            <p>Date of Application: {{currentDate}}</p>
-            <p>Date of Issue: {{currentDate}}</p>
-          </div>
-        </div>
-        
-        <div class="tc-footer">
-          <div class="seal">School Seal</div>
-          <div class="principal-sig">Principal Signature</div>
-        </div>
-      </div>
-    `,
-    styles: `
-      .tc-document { max-width: 800px; margin: 40px auto; font-family: 'Times New Roman', serif; line-height: 1.6; }
-      .tc-header { display: flex; justify-content: center; align-items: center; margin-bottom: 40px; border-bottom: 2px solid #000; padding-bottom: 20px; }
-      .tc-school-details { text-align: center; margin-left: 20px; }
-      .tc-title { text-align: center; text-decoration: underline; font-size: 24px; margin-bottom: 40px; letter-spacing: 2px; }
-      .tc-body p { margin-bottom: 20px; font-size: 18px; text-align: justify; }
-      .tc-footer { display: flex; justify-content: space-between; margin-top: 80px; align-items: flex-end; }
-      .principal-sig { border-top: 1px solid #000; width: 200px; text-align: center; padding-top: 10px; }
-    `
-  },
-  {
-    id: 'system-classic-tc',
-    name: 'Classic TC (Bordered)',
-    description: 'Traditional bordered Transfer Certificate',
-    type: 'transfer_certificate',
-    content: `
-      <div class="tc-classic-container">
-        <div class="tc-border-inner">
-          <div class="tc-header">
-            <div class="school-logo">{{logoSection}}</div>
-            <div class="school-details">
-              <h1>{{schoolName}}</h1>
-              <p>{{schoolAddress}}</p>
-              <p>Affiliated to CBSE, New Delhi</p>
-            </div>
-          </div>
-          
-          <div class="tc-heading">TRANSFER CERTIFICATE</div>
-          
-          <div class="tc-body">
-            <p><strong>TC Number: </strong> TC/2024/{{admissionNumber}}</p>
-            <p><strong>Admission No: </strong> {{admissionNumber}}</p>
-            
-            <div class="tc-content-lines">
-              <p>This is to certify that <strong>{{studentName}}</strong></p>
-              <p>Son/Daughter of Mr. <strong>{{fatherName}}</strong> and Mrs. <strong>{{motherName}}</strong></p>
-              <p>was a bonafide student of this school from <strong>...</strong> to <strong>...</strong>.</p>
-              <p>He/She has passed the <strong>{{grade}}</strong> examination held in <strong>{{session}}</strong>.</p>
-              <p>Date of Birth as per record: <strong>{{dob}}</strong></p>
-              <p>General Conduct: <strong>GOOD</strong></p>
-            </div>
-            
-            <div class="tc-date">
-              Date of Issue: {{currentDate}}
-            </div>
-          </div>
-          
-          <div class="tc-footer">
-            <div class="sign-box">Prepared By</div>
-            <div class="sign-box">Checked By</div>
-            <div class="sign-box">Principal</div>
-          </div>
-        </div>
-      </div>
-    `,
-    styles: `
-      .tc-classic-container { padding: 5px; border: 6px double #000; height: 98vh; box-sizing: border-box; background: #fff; position: relative; }
-      .tc-border-inner { border: 2px solid #222; height: 100%; padding: 30px; display: flex; flex-direction: column; justify-content: space-between; position: relative; z-index: 2; }
-      
-      /* Watermark-like background effect */
-      .tc-classic-container::before {
-        content: "TRANSFER CERTIFICATE";
-        position: absolute;
-        top: 50%; left: 50%;
-        transform: translate(-50%, -50%) rotate(-45deg);
-        font-size: 80px;
-        color: rgba(0,0,0,0.03);
-        font-weight: bold;
-        white-space: nowrap;
-        pointer-events: none;
-        z-index: 1;
-      }
-      
-      .tc-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 20px; }
-      .school-logo { margin-bottom: 15px; text-align: center; } 
-      .school-logo img { height: 80px; width: auto; }
-      
-      .school-details h1 { font-family: 'Times New Roman', serif; font-size: 36px; text-transform: uppercase; margin: 0 0 5px; letter-spacing: 1px; color: #000; }
-      .school-details p { font-family: 'Georgia', serif; font-style: italic; font-size: 14px; margin: 2px 0; color: #444; }
-      
-      .tc-heading { 
-        text-align: center; font-size: 28px; font-weight: 900; 
-        text-decoration: underline; text-underline-offset: 5px; 
-        margin: 30px 0; font-family: 'Times New Roman', serif;
-        text-transform: uppercase; letter-spacing: 2px;
-      }
-      
-      .tc-body { font-size: 18px; line-height: 2.2; font-family: 'Georgia', 'Times New Roman', serif; color: #111; padding: 0 20px; }
-      
-      .tc-content-lines p { margin: 15px 0; border-bottom: 1px dotted #999; padding-bottom: 5px; }
-      .tc-content-lines strong { font-family: 'Times New Roman', serif; font-size: 20px; font-weight: bold; margin: 0 5px; color: #000; }
-      
-      .tc-date { margin-top: 40px; font-style: italic; text-align: left; font-weight: bold; }
-      
-      .tc-footer { display: flex; justify-content: space-between; margin-top: 60px; padding: 0 20px; }
-      .sign-box { width: 200px; border-top: 1px solid #000; padding-top: 10px; text-align: center; font-weight: bold; font-family: 'Times New Roman', serif; font-size: 15px; }
-    `
-  }
-];
+export const TC_TEMPLATES: DocumentTemplate[] = [];
 
-export const getAllTemplates = () => [...REPORT_TEMPLATES, ...TC_TEMPLATES];
+export const getAllTemplates = () => [...REPORT_TEMPLATES];
 export const getTemplateById = (id: string) => getAllTemplates().find(t => t.id === id);

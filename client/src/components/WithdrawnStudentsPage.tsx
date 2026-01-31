@@ -3,7 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { RotateCcw, FileText } from 'lucide-react';
 import type { Student } from '@shared/schema';
-import TransferCertificateModal from './TransferCertificateModal';
+import { TransferCertificateModal } from './TransferCertificateModal';
 
 interface WithdrawnStudentsPageProps {
   students: Student[]; // expects status==='left'
