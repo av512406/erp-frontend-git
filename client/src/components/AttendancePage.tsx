@@ -29,7 +29,8 @@ interface StudentAttendance {
 }
 
 interface AbsenteeRecord {
-    studentId: string; // Added ID for DataTable generic constraint
+    id: string; // Added ID for DataTable generic constraint
+    studentId: string;
     name: string;
     admissionNumber: string;
     fatherName: string;
@@ -140,7 +141,7 @@ export default function AttendancePage({ selectedSessionId }: AttendancePageProp
             if (res.ok) {
                 const data = await res.json();
                 // Add ID for DataTable
-                setAbsentees(data.map((r: any, idx: number) => ({ ...r, studentId: r.admissionNumber || String(idx) })));
+                setAbsentees(data.map((r: any, idx: number) => ({ ...r, id: r.admissionNumber || String(idx), studentId: r.admissionNumber || String(idx) })));
             }
         } catch (e: any) {
             console.error(e);

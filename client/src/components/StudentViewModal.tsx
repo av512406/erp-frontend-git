@@ -34,7 +34,7 @@ export default function StudentViewModal({ isOpen, onClose, student }: StudentVi
               <Detail label="Aadhar" value={student.aadharNumber} />
               <Detail label="PEN" value={student.penNumber} />
               <Detail label="Aapar ID" value={student.aaparId} />
-              <Detail label="Yearly Fee" value={`₹${(Number(student.yearlyFeeAmount)||0).toLocaleString('en-IN')}`} />
+              <Detail label="Yearly Fee" value={`₹${(Number((student as any).yearlyFeeAmount) || 0).toLocaleString('en-IN')}`} />
             </section>
             {student.status === 'left' && (
               <section className="border rounded-md p-3 bg-muted/30">
@@ -59,7 +59,7 @@ function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-1">
       <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium break-words" data-testid={`student-view-${label.toLowerCase().replace(/[^a-z0-9]+/g,'-')}`}>{value || '—'}</p>
+      <p className="text-sm font-medium break-words" data-testid={`student-view-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>{value || '—'}</p>
     </div>
   );
 }

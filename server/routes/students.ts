@@ -333,11 +333,11 @@ router.put('/api/students/:admissionNumber', requireAuth, async (req, res) => {
         if ((existing.rowCount ?? 0) === 0) return res.status(404).json({ message: 'not found' });
 
         // DEBUG LOGGING
-        console.log(`[PUT /students/${admissionNumber}] Raw Body:`, req.body);
+
+
+
 
         const keys = Object.keys(data);
-        console.log(`[PUT /students/${admissionNumber}] Parsed keys:`, keys);
-
         const values: any[] = [];
         const sets: string[] = [];
         const excludedKeys = ['yearlyFeeAmount', 'transportFee', 'session', 'sessionName', 'sessionId', 'isRTE'];
@@ -348,7 +348,7 @@ router.put('/api/students/:admissionNumber', requireAuth, async (req, res) => {
             values.push((data as any)[k]);
         });
 
-        console.log(`[PUT /students/${admissionNumber}] Sets:`, sets);
+
 
         // if (sets.length === 0) return res.json(mapStudent(existing.rows[0])); 
         // We can't return early if we have session updates to do.

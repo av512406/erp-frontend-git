@@ -525,7 +525,7 @@ function SchoolSettings() {
               <div className="flex gap-2">
                 <Input
                   type="color"
-                  value={config.features?.reportColor || '#d35400'}
+                  value={(config.features?.reportColor as string) || '#d35400'}
                   onChange={(e) => {
                     // Optimistic update or just trigger save
                     updateConfig({ features: { ...config.features, reportColor: e.target.value } });
@@ -533,7 +533,7 @@ function SchoolSettings() {
                   className="w-12 h-10 p-1 cursor-pointer"
                 />
                 <Input
-                  value={config.features?.reportColor || '#d35400'}
+                  value={(config.features?.reportColor as string) || '#d35400'}
                   onChange={(e) => {
                     updateConfig({ features: { ...config.features, reportColor: e.target.value } });
                   }}

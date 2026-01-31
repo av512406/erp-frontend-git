@@ -23,6 +23,7 @@ export default function DataToolsPageExample() {
   return (
     <DataToolsPage
       students={mockStudents}
+      sessions={[]}
       onImportStudents={handleImportStudents}
       onImportGrades={handleImportGrades}
       onUpsertStudents={handleUpsertStudents}

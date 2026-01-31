@@ -14,6 +14,7 @@ export default function StudentFormModalExample() {
     <div className="p-6">
       <Button onClick={() => setIsOpen(true)}>Open Form Modal</Button>
       <StudentFormModal
+        sessions={[]}
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
         onSave={handleSave}

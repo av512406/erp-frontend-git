@@ -23,10 +23,10 @@ export let db: any; // Keep as any for now due to incompatible Neon/Postgres poo
 
 if (DATABASE_URL.includes('neon.tech')) {
   pool = new NeonPool({ connectionString: DATABASE_URL });
-  db = drizzleNeon(pool, { schema });
+  db = drizzleNeon(pool as NeonPool, { schema });
 } else {
   pool = new PgPool({ connectionString: DATABASE_URL });
-  db = drizzlePg(pool, { schema });
+  db = drizzlePg(pool as any, { schema });
 }
 
 export async function connectAndMigrate() {
@@ -57,7 +57,7 @@ export async function connectAndMigrate() {
   }
 }
 
-async function seedDefaults() {
+export async function seedDefaults() {
   const username = process.env.SUPER_ADMIN_EMAIL;
   const password = process.env.SUPER_ADMIN_PASSWORD;
 

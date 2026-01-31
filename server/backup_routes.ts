@@ -119,7 +119,7 @@ router.post("/restore", requireSchoolAdmin, async (req: Request, res: Response) 
         }
 
         // Transactional Restore
-        await db.transaction(async (tx) => {
+        await db.transaction(async (tx: any) => {
             // 0. Break circular dependency: Set current_session_id to NULL in schools table
             await tx.update(schools).set({ currentSessionId: null }).where(eq(schools.id, schoolId));
 

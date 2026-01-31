@@ -732,8 +732,8 @@ router.get('/api/finance/transactions/pdf', requireAuth, async (req, res) => {
                 <td>
                     <div class="font-bold">${t.description}</div>
                     <div style="font-size: 10px; color: #666;">
-                        ${t.receiptSerial ? `RCPT #${t.receiptSerial}` : ''} 
-                        ${t.transactionId ? `TXN: ${t.transactionId}` : ''}
+                        ${'receiptSerial' in t && t.receiptSerial ? `RCPT #${t.receiptSerial}` : ''} 
+                        ${'transactionId' in t && t.transactionId ? `TXN: ${t.transactionId}` : ''}
                     </div>
                 </td>
                 <td>${t.paymentMode || '-'}</td>

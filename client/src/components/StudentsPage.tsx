@@ -11,8 +11,10 @@ import PromoteStudentModal from "./PromoteStudentModal";
 import type { Student, InsertStudent } from "@shared/schema";
 import { getAuthHeaders, clearToken } from "@/lib/auth";
 
+type ExtendedStudent = Student & { yearlyFeeAmount?: string | number };
+
 interface StudentsPageProps {
-  students: Student[];
+  students: ExtendedStudent[];
   onAddStudent: (student: Omit<Student, 'id'>) => void;
   onEditStudent: (id: string, student: Omit<Student, 'id'>) => void;
   onDeleteStudent: (id: string) => void;
@@ -169,14 +171,14 @@ export default function StudentsPage({
     setIsViewOpen(true);
   };
 
-  const columns: Column<Student>[] = [
+  const columns: Column<ExtendedStudent>[] = [
 
     { header: "Admission No.", accessorKey: "admissionNumber", className: "font-mono", sortable: true },
     { header: "Name", accessorKey: "name", className: "font-medium", sortable: true },
     { header: "Class", accessorKey: "grade", sortable: true },
     { header: "Section", accessorKey: "section", sortable: true },
     { header: "Mobile", accessorKey: "mobileNumber", className: "font-mono" },
-    ...(userRole !== 'teacher' ? [{ header: "Yearly Fee", cell: (s: Student) => `₹${(Number(s.yearlyFeeAmount) || 0).toLocaleString('en-IN')}` }] : []),
+    ...(userRole !== 'teacher' ? [{ header: "Yearly Fee", cell: (s: ExtendedStudent) => `₹${(Number(s.yearlyFeeAmount) || 0).toLocaleString('en-IN')}` }] : []),
     !isReadOnly && {
       header: "Actions",
       className: "text-right",
@@ -225,7 +227,7 @@ export default function StudentsPage({
         </div>
       )
     }
-  ].filter(Boolean) as Column<Student>[];
+  ].filter(Boolean) as Column<ExtendedStudent>[];
 
   return (
     <div className="container mx-auto p-6">

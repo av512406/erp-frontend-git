@@ -1,4 +1,4 @@
-import { pool, ensureTables, genId, genTransactionId, seedDefaults } from './db';
+import { pool, genId, genTransactionId, seedDefaults } from './db';
 
 // Reset (truncate) all application tables. Optionally seed with sample data when --sample is passed.
 // Usage:
@@ -10,12 +10,7 @@ async function truncateAll() {
   await pool.query('TRUNCATE fee_transactions, grades, class_subjects, subjects, students, users, schools RESTART IDENTITY CASCADE');
 
   // Re-seed default super admin
-  const client = await pool.connect();
-  try {
-    await seedDefaults(client);
-  } finally {
-    client.release();
-  }
+  await seedDefaults();
 }
 
 async function seedSample() {
@@ -88,7 +83,9 @@ async function count(table: string) {
 
 async function main() {
   const sample = process.argv.includes('--sample');
-  await ensureTables();
+  // await ensureTables(); // Handled by migrations or connectAndMigrate during dev start usually, but here we assume schema exists or we should migrate.
+  // Actually reset-db usually assumes schema exists. If not, we might need migrate.
+  // But let's just remove the call as requested.
   await truncateAll();
   if (sample) {
     await seedSample();

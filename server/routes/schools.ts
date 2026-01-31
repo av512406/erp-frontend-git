@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool, db, genId } from '../db';
 import { requireAuth } from '../middleware/auth';
+import { hashPassword } from '../lib/auth';
 import { documentTemplates } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 
@@ -95,15 +96,26 @@ router.post('/api/schools', requireAuth, async (req, res) => {
         const adminId = genId();
         const adminUsername = `admin@${slug}.com`;
         const adminPassword = `${slug}123`; // Default password
+        const hashedAdminPassword = await hashPassword(adminPassword);
 
         await client.query(
             'INSERT INTO users (id, username, password, role, name, school_id) VALUES ($1, $2, $3, $4, $5, $6)',
-            [adminId, adminUsername, adminPassword, 'admin', 'School Admin', id]
+            [adminId, adminUsername, hashedAdminPassword, 'admin', 'School Admin', id]
         );
 
         // 3. Seed Academic Sessions (Fix for Consistency)
         const existingSessions = await client.query('SELECT DISTINCT ON (name) name, start_date, end_date, is_active FROM academic_sessions');
-        for (const s of existingSessions.rows) {
+
+        let sessionTemplates = existingSessions.rows;
+        if (sessionTemplates.length === 0) {
+            // Default sessions if none exist (First school)
+            sessionTemplates = [
+                { name: '2024-2025', start_date: '2024-04-01', end_date: '2025-03-31', is_active: false },
+                { name: '2025-2026', start_date: '2025-04-01', end_date: '2026-03-31', is_active: true }
+            ];
+        }
+
+        for (const s of sessionTemplates) {
             await client.query(
                 `INSERT INTO academic_sessions (id, name, start_date, end_date, is_active, school_id) VALUES ($1, $2, $3, $4, $5, $6)`,
                 [genId(), s.name, s.start_date, s.end_date, s.is_active, id]
@@ -154,6 +166,8 @@ router.post('/api/schools/:id/admin', requireAuth, async (req, res) => {
 
         if (!username || !password) return res.status(400).json({ message: 'Username and password required' });
 
+        const hashedPassword = await hashPassword(password);
+
         // Check if username exists (globally unique)
         const existing = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
         if (existing.rows.length > 0) {
@@ -161,12 +175,12 @@ router.post('/api/schools/:id/admin', requireAuth, async (req, res) => {
             if (existingUser.rows[0].school_id !== id) {
                 return res.status(409).json({ message: 'Username already taken by another user' });
             }
-            await pool.query('UPDATE users SET password = $1 WHERE username = $2', [password, username]);
+            await pool.query('UPDATE users SET password = $1 WHERE username = $2', [hashedPassword, username]);
         } else {
             const adminId = genId();
             await pool.query(
                 'INSERT INTO users (id, username, password, role, name, school_id) VALUES ($1, $2, $3, $4, $5, $6)',
-                [adminId, username, password, 'admin', 'School Admin', id]
+                [adminId, username, hashedPassword, 'admin', 'School Admin', id]
             );
         }
 
