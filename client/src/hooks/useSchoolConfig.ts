@@ -54,7 +54,8 @@ export function useSchoolConfig() {
         phone: payload.phone ?? currentConfig.phone,
         session: payload.session ?? currentConfig.session,
         logoUrl: logoUrl ?? currentConfig.logoUrl,
-        examPattern: payload.examPattern ?? currentConfig.examPattern
+        examPattern: payload.examPattern ?? currentConfig.examPattern,
+        features: payload.features ?? currentConfig.features
       };
 
       // We need the ID to update. It should be in the query data or current config.

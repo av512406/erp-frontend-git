@@ -56,7 +56,7 @@ export default function Navigation({ userRole, userEmail, onLogout, sessions = [
   const adminLinks = [
     { path: "/", label: "Dashboard", icon: LayoutDashboard },
     { path: "/fees", label: "Fees", icon: IndianRupee },
-    { path: "/reports", label: "Reports", icon: FileText },
+    { path: "/reports", label: "Report Card", icon: FileText },
     { path: "/grades", label: "Grades", icon: BookOpen },
     { path: "/data-tools", label: "Data Tools", icon: Database },
   ];

@@ -8,6 +8,7 @@ export const defaultSchoolConfig = {
   logoUrl: '/logo.png',
   email: 'admin@school.com',
   examPattern: ["Term 1", "Term 2", "Final"],
+  reportColor: "#d35400",
   features: { attendance: false } as Record<string, boolean | string>
 };
 

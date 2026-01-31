@@ -514,6 +514,30 @@ function SchoolSettings() {
               <p className="text-xs text-muted-foreground">Define the exam terms for your school (e.g., Term 1, Term 2, Final).</p>
             </div>
 
+            <div className="space-y-2">
+              <Label>Report Card Theme Color</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="color"
+                  value={config.features?.reportColor || '#d35400'}
+                  onChange={(e) => {
+                    // Optimistic update or just trigger save
+                    updateConfig({ features: { ...config.features, reportColor: e.target.value } });
+                  }}
+                  className="w-12 h-10 p-1 cursor-pointer"
+                />
+                <Input
+                  value={config.features?.reportColor || '#d35400'}
+                  onChange={(e) => {
+                    updateConfig({ features: { ...config.features, reportColor: e.target.value } });
+                  }}
+                  placeholder="#d35400"
+                  className="w-32"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">Select the primary color for report cards (headers, borders, etc).</p>
+            </div>
+
             <div className="text-xs text-muted-foreground">Updating settings immediately affects receipts and other areas using school metadata.</div>
           </CardContent>
           <CardFooter className="flex flex-col items-end gap-2">

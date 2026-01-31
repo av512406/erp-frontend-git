@@ -26,7 +26,7 @@ import type { GradeEntry } from "./GradesPage";
 import { schoolConfig } from '@/lib/schoolConfig';
 import { useDocumentTemplate } from '@/hooks/useDocumentTemplate';
 import { useSchoolConfig } from '@/hooks/useSchoolConfig';
-import { REPORT_TEMPLATES } from '@/lib/documentTemplates';
+import { REPORT_TEMPLATES, getTemplateById } from '@/lib/documentTemplates';
 
 interface ReportsPageProps {
   students: Student[];
@@ -34,7 +34,7 @@ interface ReportsPageProps {
 }
 
 export default function ReportsPage({ students, grades }: ReportsPageProps) {
-  const { config } = useSchoolConfig();
+  const { config, updateConfig } = useSchoolConfig();
   const TERMS = config.examPattern || ['Term 1', 'Term 2', 'Final'];
   const { data: customTemplate } = useDocumentTemplate('report_card');
   const [selectedTemplateId, setSelectedTemplateId] = useState('default');
@@ -45,6 +45,16 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
       setSelectedTemplateId(config.features.report_card_template as string);
     }
   }, [config]);
+
+  // Local state for immediate color updates - declare BEFORE useEffect that uses it
+  const [reportColor, setReportColor] = useState(config.features?.reportColor || '#d35400');
+
+  // Sync local state when config changes
+  useEffect(() => {
+    if (config.features?.reportColor) {
+      setReportColor(config.features.reportColor);
+    }
+  }, [config.features?.reportColor]);
 
   const [availableGrades, setAvailableGrades] = useState<string[]>([]);
   const [availableSections, setAvailableSections] = useState<string[]>([]);
@@ -58,6 +68,9 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
   const [isStudentSelectOpen, setIsStudentSelectOpen] = useState(false);
   const [selectedTerm, setSelectedTerm] = useState("");
   const [showReport, setShowReport] = useState(false);
+
+  // Debounce logic replaced by manual save for explicit user control
+
 
   useEffect(() => {
     fetch('/api/classes/grades', { headers: getAuthHeaders() })
@@ -270,15 +283,18 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
     `;
 
     let templateContent = '';
+    let templateStyles = '';
 
     // 1. Custom DB Template (Highest Priority)
     if (customTemplate) {
       templateContent = customTemplate.content;
+      templateStyles = customTemplate.styles || '';
     }
     // 2. Selected System Template
     else {
       const sysTemplate = REPORT_TEMPLATES.find(t => t.id === selectedTemplateId) || REPORT_TEMPLATES[0];
       templateContent = sysTemplate.content;
+      templateStyles = sysTemplate.styles || '';
     }
 
     const gradesTable = `
@@ -349,16 +365,32 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
         <head>
           <title>Report Card - ${student.name}</title>
           <style>
+            :root {
+              --theme-color: ${reportColor};
+            }
             @page { size: A4; margin: 0; }
-            /* Force A4 size and clear margins */
-            @page { size: A4; margin: 0; }
-            body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
-            
-            /* Inject Template Styles */
-            ${customTemplate?.styles || (REPORT_TEMPLATES.find(t => t.id === selectedTemplateId)?.styles || '')}
+            body { margin: 0; padding: 20px; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            ${templateStyles}
             
             /* Debug/Fallback Styles if template styles missing */
             .report-card, .classic-report, .dps-report { width: 100%; min-height: 297mm; box-sizing: border-box; }
+            
+             @media print {
+              .dps-indirapuram-container .header h1,
+              .dps-indirapuram-container .header h2,
+              .dps-indirapuram-container .header h3,
+              .dps-indirapuram-container th,
+              .dps-indirapuram-container .student-info td,
+              .dps-indirapuram-container table,
+              .dps-indirapuram-container table td,
+              .dps-indirapuram-container .scholastic-area th {
+                  color: var(--theme-color, #000) !important;
+                  border-color: var(--theme-color, #000) !important;
+              }
+              .dps-indirapuram-container .border-outer {
+                  border-color: var(--theme-color, #000) !important;
+              }
+            }
           </style>
         </head>
         <body>
@@ -391,13 +423,16 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
     if (showReport && student) {
       setPreviewHtml(getReportHtml());
     }
-  }, [showReport, student, selectedTerm, selectedTemplateId, classSubjects, grades]);
+  }, [showReport, student, selectedTerm, selectedTemplateId, classSubjects, grades, reportColor]);
+
+  // Duplicates removed
+
 
   return (
     <div className="container mx-auto p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Report Cards</h1>
-        <p className="text-muted-foreground">Generate student report cards</p>
+        <h1 className="text-2xl font-semibold">Report Card</h1>
+        <p className="text-muted-foreground">Generate student report card</p>
       </div>
 
       <Card className="mb-6">
@@ -542,6 +577,36 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Theme Color (Live Preview)</Label>
+                <div className="flex gap-2 items-center">
+                  <Input
+                    type="color"
+                    value={reportColor as string}
+                    onChange={(e) => setReportColor(e.target.value)}
+                    className="w-12 h-10 p-1 cursor-pointer"
+                  />
+                  <Input
+                    value={reportColor as string}
+                    onChange={(e) => setReportColor(e.target.value)}
+                    placeholder="#d35400"
+                    className="w-28"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      updateConfig({ features: { ...config.features, reportColor: reportColor as string } })
+                        .then(() => alert('Color saved successfully!'))
+                        .catch(() => alert('Failed to save color.'));
+                    }}
+                  >
+                    Save Color
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Click save to apply this color permanently.</p>
               </div>
             </div>
           </div>
