@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/auth";
+import { sortGrades } from "@/lib/utils";
 
 export interface FeeTransaction {
   id: string;
@@ -62,7 +63,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
   // Use local date for default
   const [date, setDate] = useState(() => {
     const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return `${now.getFullYear()} -${String(now.getMonth() + 1).padStart(2, '0')} -${String(now.getDate()).padStart(2, '0')} `;
   });
   // payslip removed; use distribution modal directly
   const [paymentMode, setPaymentMode] = useState<string>('cash');
@@ -126,7 +127,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
   }, [students, transactions]);
 
   const uniquePendingClasses = useMemo(() => {
-    return Array.from(new Set(studentsWithPendingFees.map(s => s.grade))).sort((a, b) => Number(a) - Number(b));
+    return sortGrades(Array.from(new Set(studentsWithPendingFees.map(s => s.grade))).filter(Boolean));
   }, [studentsWithPendingFees]);
 
   const uniquePendingSections = useMemo(() => {
@@ -193,7 +194,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `pending-fees-${pendingFilterClass === 'all' ? 'all' : pendingFilterClass}-${pendingFilterSection === 'all' ? 'all' : pendingFilterSection}-${new Date().toISOString().split('T')[0]}.xlsx`;
+      a.download = `pending - fees - ${pendingFilterClass === 'all' ? 'all' : pendingFilterClass} -${pendingFilterSection === 'all' ? 'all' : pendingFilterSection} -${new Date().toISOString().split('T')[0]}.xlsx`;
       a.click();
       window.URL.revokeObjectURL(url);
     } catch (e) {
@@ -206,7 +207,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     const params = new URLSearchParams(window.location.search);
     if (params.get('filter') === 'today') {
       const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const today = `${now.getFullYear()} -${String(now.getMonth() + 1).padStart(2, '0')} -${String(now.getDate()).padStart(2, '0')} `;
       setFilterDate(today);
     } else {
       setFilterDate(null);
@@ -220,7 +221,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
   useEffect(() => {
     fetch('/api/classes/grades', { headers: getAuthHeaders() })
       .then(res => res.ok ? res.json() : [])
-      .then(data => setAvailableGrades(data))
+      .then(data => setAvailableGrades(sortGrades(data)))
       .catch(() => setAvailableGrades([]));
   }, []);
 
@@ -228,9 +229,9 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     setAvailableSections([]);
     if (!filterGrade || filterGrade === 'all') return;
 
-    fetch(`/api/classes/${encodeURIComponent(filterGrade)}/sections`, { headers: getAuthHeaders() })
+    fetch(`/ api / classes / ${encodeURIComponent(filterGrade)}/sections`, { headers: getAuthHeaders() })
       .then(res => res.ok ? res.json() : [])
-      .then(data => setAvailableSections(data))
+      .then(data => setAvailableSections(data.sort()))
       .catch(() => setAvailableSections([]));
   }, [filterGrade]);
 
@@ -467,7 +468,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                         <SelectContent>
                           <SelectItem value="all">All classes</SelectItem>
                           {availableGrades.map(g => (
-                            <SelectItem key={g} value={g}>Class {g}</SelectItem>
+                            <SelectItem key={g} value={g}>{g}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -688,7 +689,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                       <SelectContent>
                         <SelectItem value="all">All Classes</SelectItem>
                         {uniquePendingClasses.map(c => (
-                          <SelectItem key={c} value={c}>Class {c}</SelectItem>
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

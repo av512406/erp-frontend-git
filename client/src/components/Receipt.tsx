@@ -33,6 +33,7 @@ export interface ReceiptProps {
 const DEFAULT_ORDER = [
 	'Admission Fee',
 	'Teaching Fee',
+	'Transport Fee',
 	'Exam. Fee',
 	'Computer Fee',
 	'Development',

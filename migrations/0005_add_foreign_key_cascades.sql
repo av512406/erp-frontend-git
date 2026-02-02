@@ -94,15 +94,16 @@ ALTER TABLE classes
   ON UPDATE CASCADE;
 
 -- Staff Payments - CASCADE when staff is deleted
-ALTER TABLE staff_payments 
-  DROP CONSTRAINT IF EXISTS staff_payments_staff_id_staff_id_fk;
+-- (Commented out because staff table is created in 0006)
+-- ALTER TABLE staff_payments 
+--   DROP CONSTRAINT IF EXISTS staff_payments_staff_id_staff_id_fk;
 
-ALTER TABLE staff_payments
-  ADD CONSTRAINT staff_payments_staff_id_staff_id_fk
-  FOREIGN KEY (staff_id) 
-  REFERENCES staff(id) 
-  ON DELETE CASCADE 
-  ON UPDATE CASCADE;
+-- ALTER TABLE staff_payments
+--   ADD CONSTRAINT staff_payments_staff_id_staff_id_fk
+--   FOREIGN KEY (staff_id) 
+--   REFERENCES staff(id) 
+--   ON DELETE CASCADE 
+--   ON UPDATE CASCADE;
 
 -- Summary of cascade policies:
 -- CASCADE: Related records deleted automatically (attendance, grades, student_sessions)

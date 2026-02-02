@@ -32,7 +32,7 @@ export default function FinancePage({ selectedSessionId }: FinancePageProps) {
                 <TabsContent value="expenses" className="space-y-4">
                     <Card>
                         <CardContent className="pt-6">
-                            <ExpenseList />
+                            <ExpenseList selectedSessionId={selectedSessionId} />
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -48,7 +48,7 @@ export default function FinancePage({ selectedSessionId }: FinancePageProps) {
                 <TabsContent value="payroll" className="space-y-4">
                     <Card>
                         <CardContent className="pt-6">
-                            <PayrollList />
+                            <PayrollList selectedSessionId={selectedSessionId} />
                         </CardContent>
                     </Card>
                 </TabsContent>

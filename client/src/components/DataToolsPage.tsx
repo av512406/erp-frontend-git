@@ -241,7 +241,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
             const motherName = normalize(row.mothername || row["mother's name"] || row['mother name'] || row.mother || row.motherName);
             const category = normalize(row.category || 'GEN');
             const gender = normalize(row.gender || '');
-            const isRTE = normalize(row.isRTE || row.is_rte || row['RTE'] || row['rte']);
+            const isRTE = normalize(row.isrte || row.isRTE || row.is_rte || row['RTE'] || row['rte']);
 
             validStudents.push({
               admissionNumber,
@@ -381,7 +381,7 @@ export default function DataToolsPage({ students, onImportStudents, onUpsertStud
             if (typeof (onImportTransactions as any) === 'function') {
               summary = await (onImportTransactions as any)(imported.map((r: any) => ({ studentId: r.studentId, amount: r.amount, paymentDate: r.paymentDate, paymentMode: r.paymentMode, remarks: r.remarks })));
             } else {
-              const res = await fetch('/api/fees/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(imported.map((r: any) => ({ studentId: r.studentId, amount: r.amount, paymentDate: r.paymentDate, paymentMode: r.paymentMode, remarks: r.remarks }))) });
+              const res = await fetch('/api/fees/import', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }, body: JSON.stringify(imported.map((r: any) => ({ studentId: r.studentId, amount: r.amount, paymentDate: r.paymentDate, paymentMode: r.paymentMode, remarks: r.remarks }))) });
               if (!res.ok) throw new Error('Import failed');
               summary = await res.json();
             }

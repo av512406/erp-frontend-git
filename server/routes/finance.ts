@@ -10,7 +10,7 @@ const router = Router();
 router.get('/api/expenses', requireAuth, async (req, res) => {
     const user = (req as any).user;
     try {
-        const { startDate, endDate, category } = req.query;
+        const { startDate, endDate, category, sessionId } = req.query;
 
         let query = `
       SELECT e.*, u.name as "recordedByName" 
@@ -20,6 +20,11 @@ router.get('/api/expenses', requireAuth, async (req, res) => {
     `;
         const params: any[] = [user.schoolId];
         let idx = 2;
+
+        if (sessionId) {
+            query += ` AND e.session_id = $${idx++}`;
+            params.push(sessionId);
+        }
 
         if (startDate) {
             query += ` AND e.date >= $${idx++}`;
@@ -55,12 +60,18 @@ router.post('/api/expenses', requireAuth, async (req, res) => {
     const user = (req as any).user;
     try {
         const data = insertExpenseSchema.parse(req.body);
+        const { sessionId } = req.body; // Explicitly get sessionId
+
+        if (!sessionId) {
+            return res.status(400).json({ message: 'sessionId is required' });
+        }
+
         const id = genId();
 
         const { rows } = await pool.query(
-            `INSERT INTO expenses (id, description, amount, category, date, payment_method, receipt_url, recorded_by, school_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [id, data.description, data.amount, data.category, data.date, data.paymentMethod, data.receiptUrl, user.id, user.schoolId]
+            `INSERT INTO expenses (id, description, amount, category, date, payment_method, receipt_url, recorded_by, school_id, session_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+            [id, data.description, data.amount, data.category, data.date, data.paymentMethod, data.receiptUrl, user.id, user.schoolId, sessionId]
         );
 
         res.status(201).json({ ...rows[0], amount: parseFloat(rows[0].amount) });
@@ -190,11 +201,15 @@ router.post('/api/salary-payments', requireAuth, async (req, res) => {
             return res.status(409).json({ message: 'Salary already paid for this month' });
         }
 
+        if (!req.body.sessionId) {
+            return res.status(400).json({ message: 'sessionId is required' });
+        }
+
         const id = genId();
         const { rows } = await pool.query(
-            `INSERT INTO staff_payments (id, staff_id, amount, month, year, payment_date, status, remarks, school_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [id, data.staffId, data.amount, data.month, data.year, data.paymentDate, data.status || 'Paid', data.remarks, user.schoolId]
+            `INSERT INTO staff_payments (id, staff_id, amount, month, year, payment_date, status, remarks, school_id, session_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+            [id, data.staffId, data.amount, data.month, data.year, data.paymentDate, data.status || 'Paid', data.remarks, user.schoolId, req.body.sessionId]
         );
 
         res.status(201).json({ ...rows[0], amount: parseFloat(rows[0].amount) });
@@ -251,7 +266,7 @@ router.get('/api/finance/transactions', requireAuth, async (req, res) => {
             ORDER BY f.created_at DESC
         `;
 
-        // Fetch expenses for the date
+        // Fetch expenses for the date - FILTERED BY SESSION
         const expenseQuery = `
             SELECT 
                 e.id,
@@ -264,11 +279,12 @@ router.get('/api/finance/transactions', requireAuth, async (req, res) => {
                 'expense' as type
             FROM expenses e
             WHERE e.school_id = $1 
+                AND e.session_id = $3
                 AND e.date = $2
             ORDER BY e.created_at DESC
         `;
 
-        // Fetch salary payments for the date
+        // Fetch salary payments for the date - FILTERED BY SESSION
         const salaryQuery = `
             SELECT 
                 sp.id,
@@ -283,14 +299,15 @@ router.get('/api/finance/transactions', requireAuth, async (req, res) => {
             FROM staff_payments sp
             JOIN staff st ON st.id = sp.staff_id
             WHERE sp.school_id = $1 
+                AND sp.session_id = $3
                 AND sp.payment_date = $2
             ORDER BY sp.created_at DESC
         `;
 
         const [feeRes, expRes, salRes] = await Promise.all([
             pool.query(feeQuery, [user.schoolId, dateParam, sessionId]),
-            pool.query(expenseQuery, [user.schoolId, dateParam]),
-            pool.query(salaryQuery, [user.schoolId, dateParam])
+            pool.query(expenseQuery, [user.schoolId, dateParam, sessionId]),
+            pool.query(salaryQuery, [user.schoolId, dateParam, sessionId])
         ]);
 
         // Map fee transactions
@@ -408,39 +425,17 @@ router.get('/api/finance/stats', requireAuth, async (req, res) => {
       SELECT SUM(amount) as total 
       FROM expenses e 
       WHERE e.school_id = $1
+      AND e.session_id = $2
       ${dateFilterExp}
     `;
 
-        // Staff Payments (Salary) - considered as Expense?
-        // "We want to see -> Collection - Expenses"
-        // Usually salaries are a major expense. Should we include them?
-        // The prompt says "Expense management plus staff salary management".
-        // Usually "Expenses" is operational. Net Balance should logically be Collection - (Expenses + Salaries).
-        // Let's ask or assume. Usually for daily collection/expense, salaries (monthly) might distort daily graphs if not careful.
-        // But for "Net Balance", it should definitely include salaries.
-        // However, if we filter by *today*, salaries paid today should count.
-
-        // Note: dateFilterSal, paramsSal, and pSal are already defined above in the stats endpoint
-
+        // Staff Payments (Salary)
         if (dateParam && !dateFilterSal) {
-            dateFilterSal = `AND s.payment_date = ${pSal(dateParam)}`;
+            dateFilterSal = `AND sp.payment_date = ${pSal(dateParam)}`;
         } else if (month && year) {
-            dateFilterSal = `AND s.year = ${pSal(year)} AND s.month = ${pSal(month)}`; // or payment_date extract
-            // Staff payments table has month/year columns, but also payment_date. 
-            // If filtering by "Jan 2025" stats, we usually mean payments FOR Jan or payments MADE IN Jan?
-            // For now using the month/year fields.
+            dateFilterSal = `AND EXTRACT(MONTH FROM sp.payment_date) = ${pSal(month)} AND EXTRACT(YEAR FROM sp.payment_date) = ${pSal(year)}`;
         } else if (startDate && endDate) {
-            dateFilterSal = `AND s.payment_date BETWEEN ${pSal(startDate)} AND ${pSal(endDate)}`;
-        }
-
-        // Similar for months but need conversion or best is payment_date.
-        // Ideally: if filtering by month, use payment_date >= '2025-01-01' AND payment_date < '2025-02-01'
-        if (month && year) {
-            // Reset params for this block if we want to use payment_date extract same as others
-            // Or just rely on input. 
-            // Let's stick to payment_date for cash stats.
-            // Re-building filter for salary based on payment_date
-            dateFilterSal = `AND EXTRACT(MONTH FROM s.payment_date) = ${pSal(month)} AND EXTRACT(YEAR FROM s.payment_date) = ${pSal(year)}`;
+            dateFilterSal = `AND sp.payment_date BETWEEN ${pSal(startDate)} AND ${pSal(endDate)}`;
         }
 
 
@@ -448,13 +443,72 @@ router.get('/api/finance/stats', requireAuth, async (req, res) => {
       SELECT SUM(amount) as total
       FROM staff_payments sp
       WHERE sp.school_id = $1
+      AND sp.session_id = $2
       ${dateFilterSal}
     `;
 
+        // Add sessionId to params arrays (it was already in paramsFee)
+        // Ensure paramsExp has sessionId at index 2
+        // paramsExp was [schoolId, ...dates]. We need to inject sessionId.
+        // Actually, helper pExp pushed to paramsExp. We need to respect the order.
+        // Let's rebuild params carefully.
+
+        // Re-construct params to be safe and clear
+        const newParamsFee = [user.schoolId, sessionId];
+        const newParamsExp = [user.schoolId, sessionId];
+        const newParamsSal = [user.schoolId, sessionId];
+
+        let newDateFilterFee = '';
+        let newDateFilterExp = '';
+        let newDateFilterSal = '';
+
+        const npFee = (val: any) => { newParamsFee.push(val); return `$${newParamsFee.length}`; };
+        const npExp = (val: any) => { newParamsExp.push(val); return `$${newParamsExp.length}`; };
+        const npSal = (val: any) => { newParamsSal.push(val); return `$${newParamsSal.length}`; };
+
+        if (dateParam) {
+            newDateFilterFee = `AND f.payment_date = ${npFee(dateParam)}`;
+            newDateFilterExp = `AND e.date = ${npExp(dateParam)}`;
+            newDateFilterSal = `AND sp.payment_date = ${npSal(dateParam)}`;
+        } else if (month && year) {
+            newDateFilterFee = `AND EXTRACT(MONTH FROM f.payment_date) = ${npFee(month)} AND EXTRACT(YEAR FROM f.payment_date) = ${npFee(year)}`;
+            newDateFilterExp = `AND EXTRACT(MONTH FROM e.date) = ${npExp(month)} AND EXTRACT(YEAR FROM e.date) = ${npExp(year)}`;
+            newDateFilterSal = `AND EXTRACT(MONTH FROM sp.payment_date) = ${npSal(month)} AND EXTRACT(YEAR FROM sp.payment_date) = ${npSal(year)}`;
+        } else if (startDate && endDate) {
+            newDateFilterFee = `AND f.payment_date BETWEEN ${npFee(startDate)} AND ${npFee(endDate)}`;
+            newDateFilterExp = `AND e.date BETWEEN ${npExp(startDate)} AND ${npExp(endDate)}`;
+            newDateFilterSal = `AND sp.payment_date BETWEEN ${npSal(startDate)} AND ${npSal(endDate)}`;
+        }
+
+        const finalFeeQuery = `
+          SELECT SUM(amount) as total 
+          FROM fee_transactions f
+          WHERE f.school_id = $1 
+          AND f.session_id = $2
+          AND f.status = 'active'
+          ${newDateFilterFee}
+        `;
+
+        const finalExpQuery = `
+          SELECT SUM(amount) as total 
+          FROM expenses e 
+          WHERE e.school_id = $1
+          AND e.session_id = $2
+          ${newDateFilterExp}
+        `;
+
+        const finalSalQuery = `
+          SELECT SUM(amount) as total
+          FROM staff_payments sp
+          WHERE sp.school_id = $1
+          AND sp.session_id = $2
+          ${newDateFilterSal}
+        `;
+
         const [feeRes, expRes, salRes] = await Promise.all([
-            pool.query(feeQuery, paramsFee),
-            pool.query(expQuery, paramsExp),
-            pool.query(salQuery, paramsSal)
+            pool.query(finalFeeQuery, newParamsFee),
+            pool.query(finalExpQuery, newParamsExp),
+            pool.query(finalSalQuery, newParamsSal)
         ]);
 
         const collection = parseFloat(feeRes.rows[0].total || '0');
@@ -846,7 +900,7 @@ router.get('/api/finance/statement-data', requireAuth, async (req, res) => {
             ORDER BY f.payment_date DESC, f.created_at DESC
         `;
 
-        const expenseQuery = `
+        const finalExpenseQuery = `
             SELECT 
                 e.id,
                 e.description,
@@ -858,11 +912,12 @@ router.get('/api/finance/statement-data', requireAuth, async (req, res) => {
                 'expense' as type
             FROM expenses e
             WHERE e.school_id = $1 
+                AND e.session_id = ${sessionIdPlaceholder}
                 ${dateFilterExpStr}
             ORDER BY e.date DESC, e.created_at DESC
         `;
 
-        const salaryQuery = `
+        const finalSalaryQuery = `
             SELECT 
                 sp.id,
                 sp.amount,
@@ -876,14 +931,15 @@ router.get('/api/finance/statement-data', requireAuth, async (req, res) => {
             FROM staff_payments sp
             JOIN staff st ON st.id = sp.staff_id
             WHERE sp.school_id = $1 
+                AND sp.session_id = ${sessionIdPlaceholder}
                 ${dateFilterSalStr}
             ORDER BY sp.payment_date DESC, sp.created_at DESC
         `;
 
         const [feeRes, expRes, salRes] = await Promise.all([
             pool.query(feeQuery, feeParams),
-            pool.query(expenseQuery, commonParams),
-            pool.query(salaryQuery, commonParams)
+            pool.query(finalExpenseQuery, feeParams),
+            pool.query(finalSalaryQuery, feeParams)
         ]);
 
         const feeTransactions = feeRes.rows.map(r => ({

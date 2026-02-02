@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, decimal, date, integer, boolean, timestamp, json } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, decimal, date, integer, boolean, timestamp, json, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -43,7 +43,7 @@ export type User = typeof users.$inferSelect;
 
 export const students = pgTable("students", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  admissionNumber: text("admission_number").notNull().unique(),
+  admissionNumber: text("admission_number").notNull(),
   name: text("name").notNull(),
   dateOfBirth: date("date_of_birth").notNull(),
   admissionDate: date("admission_date").notNull(),
@@ -66,7 +66,9 @@ export const students = pgTable("students", {
   schoolId: varchar("school_id").notNull().references(() => schools.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (t) => ({
+  unq: uniqueIndex("students_school_admission_unique").on(t.schoolId, t.admissionNumber),
+}));
 
 export const insertStudentSchema = createInsertSchema(students).omit({
   id: true,
@@ -133,7 +135,7 @@ export type FeeTransaction = typeof feeTransactions.$inferSelect;
 
 export const grades = pgTable("grades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  studentId: varchar("student_id").notNull().references(() => students.id),
+  studentId: varchar("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
   subject: text("subject").notNull(),
   marks: decimal("marks", { precision: 5, scale: 2 }).notNull(),
   term: text("term").notNull(),
@@ -151,10 +153,12 @@ export type Grade = typeof grades.$inferSelect;
 
 export const subjects = pgTable("subjects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  code: text("code").notNull().unique(),
+  code: text("code").notNull(),
   name: text("name").notNull(),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
-});
+}, (t) => ({
+  unq: uniqueIndex("subjects_school_code_unique").on(t.schoolId, t.code),
+}));
 
 export const insertSubjectSchema = createInsertSchema(subjects).omit({ id: true, schoolId: true });
 export type InsertSubject = z.infer<typeof insertSubjectSchema>;
@@ -220,8 +224,8 @@ export const session = pgTable("session", {
 
 export const studentSessions = pgTable("student_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  studentId: varchar("student_id").notNull().references(() => students.id),
-  sessionId: varchar("session_id").notNull().references(() => academicSessions.id),
+  studentId: varchar("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  sessionId: varchar("session_id").notNull().references(() => academicSessions.id, { onDelete: "cascade" }),
   grade: text("grade").notNull(),
   section: text("section").notNull(),
   rollNumber: text("roll_number"),
@@ -230,7 +234,9 @@ export const studentSessions = pgTable("student_sessions", {
   transportFee: decimal("transport_fee", { precision: 10, scale: 2 }).default('0'),
   isRTE: boolean("is_rte").default(false),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
-});
+}, (t) => ({
+  unq: uniqueIndex("student_sessions_student_session_unique").on(t.studentId, t.sessionId),
+}));
 
 export const insertAcademicSessionSchema = createInsertSchema(academicSessions).omit({ id: true });
 export type InsertAcademicSession = z.infer<typeof insertAcademicSessionSchema>;
@@ -248,30 +254,11 @@ export const classes = pgTable("classes", {
   section: text("section").notNull(),
   classTeacherId: text("class_teacher_id").references(() => users.id),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
-  // No unique constraint on (grade, section, schoolId) yet, strictly, but admin usually enforces it.
-  // Let's add it to be safe.
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (t) => ({
-  unq: {
-    name: 'classes_school_grade_section_unique',
-    // @ts-ignore
-    columns: [t.schoolId, t.grade, t.section]
-    // Using unique constraint in Drizzle slightly different syntax depending on version but this is standard.
-    // Actually, let's use the t.unique(...) helper if strictly available or use the table 3rd arg array
-  }
+  unq: uniqueIndex("classes_school_grade_section_unique").on(t.schoolId, t.grade, t.section),
 }));
-// Re-doing classes table definition to fix syntax if needed for composite unique
-// Drizzle valid syntax:
-/*
-export const classes = pgTable("classes", {
-  ...
-}, (t) => ({
-  unq: unique().on(t.schoolId, t.grade, t.section),
-}));
-*/
-// But let's stick to simple definition and rely on SQL migration for composite constraints to avoid TS hassle if types mismatch.
-// Actually I'll just add it to `ensureTables` SQL migration.
 
 export const insertClassSchema = createInsertSchema(classes).omit({ id: true, schoolId: true });
 export type InsertClass = z.infer<typeof insertClassSchema>;
@@ -279,7 +266,7 @@ export type Class = typeof classes.$inferSelect;
 
 export const attendance = pgTable("attendance", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  studentId: varchar("student_id").notNull().references(() => students.id),
+  studentId: varchar("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
   date: date("date").notNull(),
   status: text("status").notNull(), // Present, Absent, Leave, Late
   sessionId: varchar("session_id").references(() => academicSessions.id),
@@ -314,7 +301,7 @@ export type TransportRoute = typeof transportRoutes.$inferSelect;
 
 export const studentTransport = pgTable("student_transport", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  studentId: varchar("student_id").notNull().references(() => students.id),
+  studentId: varchar("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
   // routeId: varchar("route_id").notNull().references(() => transportRoutes.id), // Deprecated/Removed
   transportType: text("transport_type").notNull().default('Bus'), // 'Bus' or 'Van'
   yearlyFee: decimal("yearly_fee", { precision: 10, scale: 2 }).notNull().default('0'),
@@ -357,6 +344,7 @@ export const expenses = pgTable("expenses", {
   receiptUrl: text("receipt_url"), // Optional URL to stored image
   recordedBy: varchar("recorded_by").references(() => users.id), // User who entered the record
   schoolId: varchar("school_id").notNull().references(() => schools.id),
+  sessionId: varchar("session_id").references(() => academicSessions.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -403,6 +391,7 @@ export const staffPayments = pgTable("staff_payments", {
   status: text("status").notNull().default('Paid'), // 'Paid', 'Pending'
   remarks: text("remarks"),
   schoolId: varchar("school_id").notNull().references(() => schools.id),
+  sessionId: varchar("session_id").references(() => academicSessions.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

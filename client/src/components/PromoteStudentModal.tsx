@@ -20,6 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
+import { sortGrades } from "@/lib/utils";
 
 interface Session {
     id: string;
@@ -149,7 +150,7 @@ export default function PromoteStudentModal({
         }
     };
 
-    const uniqueSourceGrades = Array.from(new Set(candidates.map(c => c.grade))).sort((a, b) => parseInt(a) - parseInt(b));
+    const uniqueSourceGrades = sortGrades(Array.from(new Set(candidates.map(c => c.grade))));
 
     const filteredCandidates = candidates.filter(c => filterSourceGrade === 'all' || c.grade === filterSourceGrade);
 
@@ -186,7 +187,7 @@ export default function PromoteStudentModal({
                             <SelectContent>
                                 <SelectItem value="all">All Classes</SelectItem>
                                 {uniqueSourceGrades.map(g => (
-                                    <SelectItem key={g} value={g}>Class {g}</SelectItem>
+                                    <SelectItem key={g} value={g}>{g}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
@@ -223,7 +224,7 @@ export default function PromoteStudentModal({
                                         <div className="text-sm">
                                             <span className="font-semibold">{c.name}</span>
                                             <span className="text-muted-foreground ml-2">({c.admissionNumber})</span>
-                                            <span className="ml-4 badge text-xs bg-secondary px-1 rounded">Class {c.grade} - {c.section}</span>
+                                            <span className="ml-4 badge text-xs bg-secondary px-1 rounded">{c.grade} - {c.section}</span>
                                         </div>
                                     </div>
                                 ))}
@@ -242,7 +243,7 @@ export default function PromoteStudentModal({
                             <SelectContent>
                                 {/* Generate classes 1-12 and Nursery/KG */}
                                 {["Nursery", "LKG", "UKG", ...Array.from({ length: 12 }, (_, i) => String(i + 1))].map(c => (
-                                    <SelectItem key={c} value={c}>Class {c}</SelectItem>
+                                    <SelectItem key={c} value={c}>{c}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>

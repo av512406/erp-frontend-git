@@ -5,11 +5,22 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, Column } from "@/components/ui/data-table";
 import { Plus, Pencil, Trash2, Search, UserX, Eye, GraduationCap } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import StudentFormModal from "./StudentFormModal";
 import StudentViewModal from "./StudentViewModal";
 import PromoteStudentModal from "./PromoteStudentModal";
 import type { Student, InsertStudent } from "@shared/schema";
 import { getAuthHeaders, clearToken } from "@/lib/auth";
+import { sortGrades } from "@/lib/utils";
 
 type ExtendedStudent = Student & { yearlyFeeAmount?: string | number };
 
@@ -17,12 +28,12 @@ interface StudentsPageProps {
   students: ExtendedStudent[];
   onAddStudent: (student: Omit<Student, 'id'>) => void;
   onEditStudent: (id: string, student: Omit<Student, 'id'>) => void;
-  onDeleteStudent: (id: string) => void;
-  onMarkWithdrawn?: (admissionNumber: string, payload: { leftDate?: string; reason?: string }) => Promise<void> | void;
-  isReadOnly?: boolean;
-  sessions?: { id: string, name: string }[];
   selectedSessionId?: string;
   onStudentPromoted?: () => void;
+  onDeleteStudent: (id: string) => Promise<void> | void;
+  onMarkWithdrawn?: (admissionNumber: string, data: { reason: string }) => Promise<void>;
+  isReadOnly?: boolean;
+  sessions?: any[];
 }
 
 export default function StudentsPage({
@@ -46,6 +57,8 @@ export default function StudentsPage({
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [isPromoteOpen, setIsPromoteOpen] = useState(false);
+  const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Pagination State
   const [isServerPaginated, setIsServerPaginated] = useState(true);
@@ -114,13 +127,22 @@ export default function StudentsPage({
     };
 
     fetchPage();
-  }, [isServerPaginated, page, limit, selectedSessionId, filterGrade, filterSection, searchTerm]); // Added filters to dep array
+  }, [isServerPaginated, page, limit, selectedSessionId, filterGrade, filterSection, searchTerm, refreshTrigger]); // Added filters to dep array
+
+  const handleConfirmDelete = async () => {
+    if (studentToDelete) {
+      await onDeleteStudent(studentToDelete);
+      setStudentToDelete(null);
+      // Trigger refresh
+      setRefreshTrigger(prev => prev + 1);
+    }
+  };
 
   // Determine active data
   const activeData = isServerPaginated ? serverData : students;
 
   // Derive unique grades/sections from ALL students (props.students) to ensure filters are complete
-  const uniqueGrades = Array.from(new Set(students.map(s => s.grade))).sort((a, b) => parseInt(a) - parseInt(b));
+  const uniqueGrades = sortGrades(Array.from(new Set(students.map(s => s.grade))));
   const uniqueSections = Array.from(new Set(students.map(s => s.section))).sort();
 
   const filteredStudents = activeData.filter(student => {
@@ -202,7 +224,7 @@ export default function StudentsPage({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onDeleteStudent(student.id)}
+            onClick={() => setStudentToDelete(student.id)}
           >
             <Trash2 className="w-4 h-4" />
           </Button>
@@ -256,6 +278,8 @@ export default function StudentsPage({
           <div className="relative w-full md:max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
+              id="search-students"
+              name="search"
               placeholder="Search by name or admission number..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -272,7 +296,7 @@ export default function StudentsPage({
               <SelectContent>
                 <SelectItem value="all">All classes</SelectItem>
                 {uniqueGrades.map(g => (
-                  <SelectItem key={g} value={g}>Class {g}</SelectItem>
+                  <SelectItem key={g} value={g}>{g}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -349,6 +373,23 @@ export default function StudentsPage({
           }}
         />
       )}
+
+      <AlertDialog open={!!studentToDelete} onOpenChange={(open) => !open && setStudentToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the student and all associated records.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

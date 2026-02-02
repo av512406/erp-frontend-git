@@ -1,7 +1,8 @@
+import { db, pool, genId } from '../db';
+import { students, studentSessions, schools, classes, academicSessions, insertStudentSchema } from '@shared/schema';
+import { eq, and, or, ilike, sql, count } from 'drizzle-orm';
 import { Router } from 'express';
-import { pool, genId } from '../db';
 import { requireAuth } from '../middleware/auth';
-import { insertStudentSchema } from '@shared/schema';
 import { mapStudent } from '../lib/mappers';
 import { ZodError } from 'zod';
 
@@ -15,16 +16,24 @@ router.get('/api/students', requireAuth, async (req, res) => {
         // Resolve Session ID
         let targetSessionId = sessionId as string;
         if (!targetSessionId) {
-            const schoolRes = await pool.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-            targetSessionId = schoolRes.rows[0]?.current_session_id;
+            // Fetch school's current session
+            const schoolRes = await db.select({ currentSessionId: schools.currentSessionId })
+                .from(schools)
+                .where(eq(schools.id, user.schoolId))
+                .limit(1);
+
+            targetSessionId = schoolRes[0]?.currentSessionId || '';
 
             if (!targetSessionId) {
-                const sessionRes = await pool.query(
-                    'SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1',
-                    [user.schoolId]
-                );
-                if (sessionRes.rows.length > 0) {
-                    targetSessionId = sessionRes.rows[0].id;
+                // Fallback to latest active academic session
+                const sessionRes = await db.select({ id: academicSessions.id })
+                    .from(academicSessions)
+                    .where(and(eq(academicSessions.isActive, true), eq(academicSessions.schoolId, user.schoolId))) // Assuming schoolId needed if strictly multi-tenant, else remove schoolId check if sessions global
+                    .orderBy(sql`${academicSessions.endDate} DESC`) // Order by date desc
+                    .limit(1);
+
+                if (sessionRes.length > 0) {
+                    targetSessionId = sessionRes[0].id;
                 }
             }
         }
@@ -39,84 +48,79 @@ router.get('/api/students', requireAuth, async (req, res) => {
         const section = req.query.section as string;
         const searchTerm = req.query.q as string;
 
-        const params: any[] = [targetSessionId, user.schoolId];
-        const conditions: string[] = [
-            "ss.session_id = $1",
-            "ss.school_id = $2",
-            "(ss.status = 'active' OR ss.status = 'promoted')"
+        // Build Conditions
+        const filters = [
+            eq(studentSessions.sessionId, targetSessionId),
+            eq(studentSessions.schoolId, user.schoolId),
+            or(eq(studentSessions.status, 'active'), eq(studentSessions.status, 'promoted'))
         ];
 
         if (grade && grade !== 'all') {
-            conditions.push(`ss.grade = $${params.length + 1}`);
-            params.push(grade);
+            filters.push(eq(studentSessions.grade, grade));
         }
 
         if (section && section !== 'all') {
-            conditions.push(`ss.section = $${params.length + 1}`);
-            params.push(section);
+            filters.push(eq(studentSessions.section, section));
         }
 
         if (user.role === 'teacher') {
-            const classRes = await pool.query('SELECT grade, section FROM classes WHERE class_teacher_id = $1', [user.id]);
-            if (classRes.rows.length === 0) {
+            const classRes = await db.select({ grade: classes.grade, section: classes.section })
+                .from(classes)
+                .where(eq(classes.classTeacherId, user.id))
+                .limit(1);
+
+            if (classRes.length === 0) {
                 return res.json({ data: [], meta: { total: 0, page: 1, limit: 10 } });
             }
-            const assigned = classRes.rows[0];
-            conditions.push(`ss.grade = $${params.length + 1}`);
-            params.push(assigned.grade);
-            conditions.push(`ss.section = $${params.length + 1}`);
-            params.push(assigned.section);
+            const assigned = classRes[0];
+            filters.push(eq(studentSessions.grade, assigned.grade));
+            filters.push(eq(studentSessions.section, assigned.section));
         }
 
         if (searchTerm) {
             const q = `%${searchTerm}%`;
-            conditions.push(`(s.name ILIKE $${params.length + 1} OR s.admission_number ILIKE $${params.length + 1})`);
-            params.push(q);
+            filters.push(or(
+                ilike(students.name, q),
+                ilike(students.admissionNumber, q)
+            ));
         }
 
-        const whereClause = "WHERE " + conditions.join(" AND ");
+        const whereClause = and(...filters);
 
+        // Fetch Data
         if (page && limit) {
             const offset = (page - 1) * limit;
 
-            const countQuery = `
-          SELECT COUNT(*) as total
-          FROM students s
-          INNER JOIN student_sessions ss ON s.id = ss.student_id
-          ${whereClause}
-        `;
-            const countRes = await pool.query(countQuery, params);
-            const total = parseInt(countRes.rows[0].total);
+            // Count Total
+            const countRes = await db.select({ value: count() })
+                .from(students)
+                .innerJoin(studentSessions, eq(students.id, studentSessions.studentId))
+                .where(whereClause);
 
-            const dataQuery = `
-          SELECT 
-            s.*,
-            ss.grade as session_grade,
-            ss.section as session_section,
-            ss.status as session_status,
-            ss.roll_number,
-            ss.roll_number,
-            ss.transport_fee,
-            ss.is_rte,
-            ss.yearly_fee_amount as session_fee
-          FROM students s
-          INNER JOIN student_sessions ss ON s.id = ss.student_id
-          ${whereClause}
-          ORDER BY ss.grade, ss.section, s.name
-          LIMIT $${params.length + 1} OFFSET $${params.length + 2}
-        `;
-            const queryParams = [...params, limit, offset];
-            const { rows } = await pool.query(dataQuery, queryParams);
+            const total = countRes[0].value;
 
-            const mapped = rows.map(row => ({
-                ...mapStudent(row),
-                grade: row.session_grade || row.grade,
-                section: row.session_section || row.section,
-                status: row.session_status || row.status,
-                rollNumber: row.roll_number,
-                transportFee: row.transport_fee?.toString?.() || '0',
-                yearlyFeeAmount: row.session_fee?.toString?.() || '0',
-                isRTE: row.is_rte || false
+            // Fetch Page
+            const rows = await db.select({
+                student: students,
+                session: studentSessions
+            })
+                .from(students)
+                .innerJoin(studentSessions, eq(students.id, studentSessions.studentId))
+                .where(whereClause)
+                .orderBy(studentSessions.grade, studentSessions.section, students.name)
+                .limit(limit)
+                .offset(offset);
+
+            const mapped = rows.map(({ student, session }) => ({
+                ...mapStudent(student),
+                // Overlay session specific data
+                grade: session.grade,
+                section: session.section,
+                status: session.status,
+                rollNumber: session.rollNumber,
+                transportFee: session.transportFee || '0',
+                yearlyFeeAmount: session.yearlyFeeAmount || '0',
+                isRTE: session.isRTE || false
             }));
 
             return res.json({
@@ -124,32 +128,27 @@ router.get('/api/students', requireAuth, async (req, res) => {
                 meta: { total, page, limit }
             });
         } else {
-            const query = `
-          SELECT 
-            s.*,
-            ss.grade as session_grade,
-            ss.section as session_section,
-            ss.status as session_status,
-            ss.roll_number,
-            ss.transport_fee,
-            ss.is_rte,
-            ss.yearly_fee_amount as session_fee
-          FROM students s
-          INNER JOIN student_sessions ss ON s.id = ss.student_id
-          ${whereClause}
-          ORDER BY ss.grade, ss.section, s.name
-        `;
-            const { rows } = await pool.query(query, params);
-            const mapped = rows.map(row => ({
-                ...mapStudent(row),
-                grade: row.session_grade || row.grade,
-                section: row.session_section || row.section,
-                status: row.session_status || row.status,
-                rollNumber: row.roll_number,
-                transportFee: row.transport_fee?.toString?.() || '0',
-                yearlyFeeAmount: row.session_fee?.toString?.() || '0',
-                isRTE: row.is_rte || false
+            // No Pagination
+            const rows = await db.select({
+                student: students,
+                session: studentSessions
+            })
+                .from(students)
+                .innerJoin(studentSessions, eq(students.id, studentSessions.studentId))
+                .where(whereClause)
+                .orderBy(studentSessions.grade, studentSessions.section, students.name);
+
+            const mapped = rows.map(({ student, session }) => ({
+                ...mapStudent(student),
+                grade: session.grade,
+                section: session.section,
+                status: session.status,
+                rollNumber: session.rollNumber,
+                transportFee: session.transportFee || '0',
+                yearlyFeeAmount: session.yearlyFeeAmount || '0',
+                isRTE: session.isRTE || false
             }));
+
             res.json(mapped);
         }
     } catch (e) {
@@ -236,7 +235,6 @@ router.post('/api/students/promote', requireAuth, async (req, res) => {
 
 router.post('/api/students', requireAuth, async (req, res) => {
     const user = (req as any).user;
-    const client = await pool.connect();
     try {
         const data = insertStudentSchema.parse(req.body);
 
@@ -244,8 +242,11 @@ router.post('/api/students', requireAuth, async (req, res) => {
         let sessionId = (req.body as any).sessionId;
 
         if (!sessionId) {
-            const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-            sessionId = schoolRes.rows[0]?.current_session_id;
+            const schoolRes = await db.select({ currentSessionId: schools.currentSessionId })
+                .from(schools)
+                .where(eq(schools.id, user.schoolId))
+                .limit(1);
+            sessionId = schoolRes[0]?.currentSessionId;
         }
 
         if (!sessionId) {
@@ -255,53 +256,89 @@ router.post('/api/students', requireAuth, async (req, res) => {
         }
 
         // Verify the session belongs to this school
-        const sessionCheck = await client.query(
-            'SELECT id FROM academic_sessions WHERE id = $1 AND school_id = $2',
-            [sessionId, user.schoolId]
-        );
+        const sessionCheck = await db.select({ id: academicSessions.id })
+            .from(academicSessions)
+            .where(and(eq(academicSessions.id, sessionId), eq(academicSessions.schoolId, user.schoolId)))
+            .limit(1);
 
-        if (sessionCheck.rows.length === 0) {
+        if (sessionCheck.length === 0) {
             return res.status(400).json({
                 message: 'Invalid session ID or session does not belong to your school'
             });
         }
 
-        await client.query('BEGIN');
+        const result = await db.transaction(async (tx) => {
+            // Check for existing admission number
+            const exists = await tx.select({ id: students.id })
+                .from(students)
+                .where(and(eq(students.admissionNumber, data.admissionNumber), eq(students.schoolId, user.schoolId)))
+                .limit(1);
 
-        const exists = await client.query('SELECT 1 FROM students WHERE admission_number = $1 AND school_id = $2', [data.admissionNumber, user.schoolId]);
-        if ((exists.rowCount ?? 0) > 0) {
-            await client.query('ROLLBACK');
+            if (exists.length > 0) {
+                // Return a specific custom error object to be caught below or just throw
+                throw new Error('ADMISSION_EXISTS');
+            }
+
+            // Insert Student
+            // Note: Drizzle insertSchema expects fields matching existing columns.
+            // We need to exclude 'yearlyFeeAmount', 'transportFee', etc. from the insert payload to 'students' table
+            // const { ...studentData } = data; // destructuring not checking types
+
+            const studentInsert = {
+                admissionNumber: data.admissionNumber,
+                name: data.name,
+                dateOfBirth: data.dateOfBirth,
+                admissionDate: data.admissionDate,
+                aadharNumber: data.aadharNumber,
+                penNumber: data.penNumber,
+                aaparId: data.aaparId,
+                mobileNumber: data.mobileNumber,
+                address: data.address,
+                grade: data.grade,
+                section: data.section,
+                fatherName: (data as any).fatherName,
+                motherName: (data as any).motherName,
+                status: 'active',
+                schoolId: user.schoolId,
+                // Optional fields if in schema but might be undefined
+                previousYearDue: (data as any).previousYearDue || '0',
+                leavingReason: (data as any).leavingReason,
+                category: (data as any).category,
+                gender: (data as any).gender,
+                nationality: (data as any).nationality
+            };
+
+            const insertedStudents = await tx.insert(students).values(studentInsert as any).returning();
+            const newStudent = insertedStudents[0];
+
+            const isRTE = data.isRTE === true || String(data.isRTE).toLowerCase() === 'true' || String(data.isRTE).toLowerCase() === 'yes';
+            const finalYearlyFee = isRTE ? '0' : ((data as any).yearlyFeeAmount?.toString() || '0');
+            const finalTransportFee = (data as any).transportFee?.toString() || '0';
+
+            // Insert Student Session
+            await tx.insert(studentSessions).values({
+                studentId: newStudent.id,
+                sessionId: sessionId,
+                grade: data.grade,
+                section: data.section,
+                status: 'active',
+                schoolId: user.schoolId,
+                transportFee: finalTransportFee,
+                yearlyFeeAmount: finalYearlyFee,
+                isRTE: isRTE
+            });
+
+            return newStudent;
+        });
+
+        res.status(201).json(mapStudent(result));
+    } catch (e: any) {
+        if (e.message === 'ADMISSION_EXISTS') {
             return res.status(409).json({ message: 'admissionNumber exists' });
         }
-
-        const id = genId();
-        const q = await client.query(
-            `INSERT INTO students (id, admission_number, name, date_of_birth, admission_date, aadhar_number, pen_number, aapar_id, mobile_number, address, grade, section, father_name, mother_name, status, school_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'active', $15) RETURNING *`,
-            [id, data.admissionNumber, data.name, data.dateOfBirth, data.admissionDate, data.aadharNumber, data.penNumber, data.aaparId, data.mobileNumber, data.address, data.grade, data.section, (data as any).fatherName || null, (data as any).motherName || null, user.schoolId]
-        );
-
-        const isRTE = data.isRTE === true || String(data.isRTE).toLowerCase() === 'true' || String(data.isRTE).toLowerCase() === 'yes';
-
-        // RTE waives ONLY tuition fees, not transport fees
-        const finalYearlyFee = isRTE ? 0 : ((data as any).yearlyFeeAmount || 0);
-        const finalTransportFee = (data as any).transportFee || 0; // Transport fee applies to all students
-
-        await client.query(
-            `INSERT INTO student_sessions (id, student_id, session_id, grade, section, status, school_id, transport_fee, yearly_fee_amount, is_rte)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [genId(), id, sessionId, data.grade, data.section, 'active', user.schoolId, finalTransportFee, finalYearlyFee, isRTE]
-        );
-
-        await client.query('COMMIT');
-        res.status(201).json(mapStudent(q.rows[0]));
-    } catch (e) {
-        await client.query('ROLLBACK');
         if (e instanceof ZodError) return res.status(400).json({ message: 'validation', issues: e.format() });
-        console.error(e);
+        console.error('Error creating student:', e);
         res.status(500).json({ message: 'internal error' });
-    } finally {
-        client.release();
     }
 });
 
@@ -314,101 +351,103 @@ router.put('/api/students/:admissionNumber', requireAuth, async (req, res) => {
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(admissionNumber);
 
         if (isUUID) {
-            // Parameter is actually a student ID, fetch the admission number
-            const studentRes = await pool.query(
-                'SELECT admission_number FROM students WHERE id = $1 AND school_id = $2',
-                [admissionNumber, user.schoolId]
-            );
+            const studentRes = await db.select({ admissionNumber: students.admissionNumber })
+                .from(students)
+                .where(and(eq(students.id, admissionNumber), eq(students.schoolId, user.schoolId)));
 
-            if (studentRes.rows.length === 0) {
+            if (studentRes.length === 0) {
                 return res.status(404).json({ message: 'Student not found' });
             }
-
-            admissionNumber = studentRes.rows[0].admission_number;
+            admissionNumber = studentRes[0].admissionNumber;
         }
 
-        // Continue with normal update logic using admission number
         const data = insertStudentSchema.partial().parse(req.body);
-        const existing = await pool.query('SELECT * FROM students WHERE admission_number = $1 AND school_id = $2', [admissionNumber, user.schoolId]);
-        if ((existing.rowCount ?? 0) === 0) return res.status(404).json({ message: 'not found' });
 
-        // DEBUG LOGGING
+        // Check if student exists
+        const existingRes = await db.select()
+            .from(students)
+            .where(and(eq(students.admissionNumber, admissionNumber), eq(students.schoolId, user.schoolId)));
 
+        if (existingRes.length === 0) {
+            return res.status(404).json({ message: 'not found' });
+        }
+        const existingStudent = existingRes[0];
 
+        // Prepare updates
+        // Filter out session fields from student data
+        const { yearlyFeeAmount, transportFee, session, sessionName, sessionId, isRTE, ...studentFields } = data as any;
 
+        const updateResult = await db.transaction(async (tx) => {
+            let updatedStudent = existingStudent;
 
-        const keys = Object.keys(data);
-        const values: any[] = [];
-        const sets: string[] = [];
-        const excludedKeys = ['yearlyFeeAmount', 'transportFee', 'session', 'sessionName', 'sessionId', 'isRTE'];
-        keys.forEach((k, i) => {
-            if (excludedKeys.includes(k)) return;
-            const col = k.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase()).replace(/^admission_number$/, 'admission_number');
-            sets.push(`${col} = $${i + 1}`);
-            values.push((data as any)[k]);
+            // Update Students Table if there are fields
+            if (Object.keys(studentFields).length > 0) {
+                const updated = await tx.update(students)
+                    .set(studentFields)
+                    .where(and(eq(students.admissionNumber, admissionNumber), eq(students.schoolId, user.schoolId)))
+                    .returning();
+                if (updated.length > 0) updatedStudent = updated[0];
+            }
+
+            // Update Student Session if sessionId provided
+            let finalTransportFee = '0';
+            let finalYearlyFee = '0';
+            let finalIsRTE = false;
+
+            if (sessionId) {
+                const isRteBool = isRTE === true || String(isRTE).toLowerCase() === 'true' || String(isRTE).toLowerCase() === 'yes';
+
+                // RTE Logic
+                finalTransportFee = transportFee || '0';
+                finalYearlyFee = isRteBool ? '0' : (yearlyFeeAmount || '0');
+                finalIsRTE = isRteBool;
+
+                const sessionUpdate: any = {
+                    transportFee: finalTransportFee,
+                    yearlyFeeAmount: finalYearlyFee,
+                    isRTE: isRteBool
+                };
+
+                if (data.grade) sessionUpdate.grade = data.grade;
+                if (data.section) sessionUpdate.section = data.section;
+
+                await tx.update(studentSessions)
+                    .set(sessionUpdate)
+                    .where(and(
+                        eq(studentSessions.studentId, updatedStudent.id),
+                        eq(studentSessions.sessionId, sessionId),
+                        eq(studentSessions.schoolId, user.schoolId)
+                    ));
+            } else {
+                // If no session ID provided, we might still want to return current fee info if possible?
+                // Or just return 0s if not updated.
+                // The legacy code only updated session if sessionId provided.
+            }
+
+            // Return combined object
+            // We need to fetch the session data again or confirm passing it?
+            // Legacy code manually constructed the return
+            return {
+                ...updatedStudent,
+                transportFee: sessionId ? finalTransportFee : 'unknown', // or optional
+                yearlyFeeAmount: sessionId ? finalYearlyFee : 'unknown',
+            };
         });
 
+        // We might need to conform to mapStudent expectations or just map the result
+        const mapped = mapStudent(updateResult);
+        // Ensure fee fields are set if mapStudent didn't pick them up (mapStudent expects raw or camel if we updated logic)
+        // Drizzle result `updatedStudent` is camelCase. `mapStudent` handles camelCase now.
+        // But `transportFee` et al are not on `updatedStudent` (the table row), they are overlaid.
+        // `updateResult` has them.
+        (mapped as any).transportFee = (updateResult as any).transportFee;
+        (mapped as any).yearlyFeeAmount = (updateResult as any).yearlyFeeAmount;
 
+        res.json(mapped);
 
-        // if (sets.length === 0) return res.json(mapStudent(existing.rows[0])); 
-        // We can't return early if we have session updates to do.
-
-        let q;
-        if (sets.length > 0) {
-            values.push(admissionNumber);
-            values.push(user.schoolId);
-            q = await pool.query(`UPDATE students SET ${sets.join(', ')} WHERE admission_number = $${sets.length + 1} AND school_id = $${sets.length + 2} RETURNING *`, values);
-        } else {
-            // Just fetch existing to return
-            q = { rows: [existing.rows[0]] };
-        }
-
-        const { sessionId, transportFee, yearlyFeeAmount, isRTE } = req.body;
-        const isRteBool = isRTE === true || String(isRTE).toLowerCase() === 'true';
-
-        if (sessionId) {
-            // RTE waives ONLY tuition fees, not transport fees
-            const finalTransportFee = transportFee || 0; // Transport fee applies to all students
-            const finalYearlyFee = isRteBool ? 0 : (yearlyFeeAmount || 0);
-
-            // Construct sets for session update
-            const sessionSets: string[] = [`transport_fee = $1`, `yearly_fee_amount = $2`, `is_rte = $3`];
-            const sessionValues: any[] = [finalTransportFee, finalYearlyFee, isRteBool];
-            let valIdx = 4;
-
-            // If grade/section provided in body, update them in session too
-            if (data.grade) {
-                sessionSets.push(`grade = $${valIdx++}`);
-                sessionValues.push(data.grade);
-            }
-            if (data.section) {
-                sessionSets.push(`section = $${valIdx++}`);
-                sessionValues.push(data.section);
-            }
-
-            sessionValues.push(existing.rows[0].id); // student_id
-            sessionValues.push(sessionId); // session_id
-            sessionValues.push(user.schoolId); // school_id
-
-            await pool.query(
-                `UPDATE student_sessions SET ${sessionSets.join(', ')} WHERE student_id = $${valIdx} AND session_id = $${valIdx + 1} AND school_id = $${valIdx + 2}`,
-                sessionValues
-            );
-        }
-
-        // Re-fetch to return complete object
-        // Actually, let's just construct the return object or do a heavy query?
-        // Map student handles the core fields. The 'transportFee' needs to be merged in from the update we just did.
-        // For simplicity, we can just return what we updated in students table + the transport fee provided.
-        // But better to be consistent if possible.
-        const updated = mapStudent(q.rows[0]);
-        (updated as any).transportFee = transportFee || '0';
-        (updated as any).yearlyFeeAmount = yearlyFeeAmount || '0';
-
-        res.json(updated);
-    } catch (e) {
+    } catch (e: any) {
         if (e instanceof ZodError) return res.status(400).json({ message: 'validation', issues: e.format() });
-        console.error(e);
+        console.error('Error updating student:', e);
         res.status(500).json({ message: 'internal error' });
     }
 });
@@ -506,12 +545,34 @@ router.delete('/api/students/:id', requireAuth, async (req, res) => {
     const user = (req as any).user;
     const id = req.params.id;
     try {
-        await pool.query('DELETE FROM students WHERE id = $1 AND school_id = $2', [id, user.schoolId]);
+        await db.delete(students)
+            .where(and(eq(students.id, id), eq(students.schoolId, user.schoolId)));
+
         res.json({ deleted: id });
     } catch (e: any) {
         if (e.code === '23503') {
-            const table = e.table || 'related records';
-            return res.status(409).json({ message: `Cannot delete student because they have existing references in ${table}. Please withdraw the student instead or delete related data first.` });
+            // Check specific tables to give a helpful error message
+            // Dynamic import of modules if needed or query blindly?
+            // Since we don't have all tables imported, we can query raw SQL or rely on imported schema if we update imports.
+            // Let's use raw SQL for checks to avoid importing everything if not needed, OR better, update imports.
+            // We'll update imports in a separate/preceding step if possible. For now, let's assume we can use db.execute(sql) for checks.
+
+            // Actually, we can just use sql`` helper.
+            const feeCheck = await db.execute(sql`SELECT count(*) as c FROM fee_transactions WHERE student_id = ${id}`);
+            const transportFeeCheck = await db.execute(sql`SELECT count(*) as c FROM transport_fee_transactions WHERE student_id = ${id}`);
+
+            const feeCount = parseInt(feeCheck.rows[0]?.c?.toString() || '0');
+            const transportFeeCount = parseInt(transportFeeCheck.rows[0]?.c?.toString() || '0');
+
+            const parts = [];
+            if (feeCount > 0) parts.push(`${feeCount} Fee Transaction(s)`);
+            if (transportFeeCount > 0) parts.push(`${transportFeeCount} Transport Fee Transaction(s)`);
+
+            const msg = parts.length > 0
+                ? `Cannot delete: Student has ${parts.join(' and ')}. Please delete these financial records first.`
+                : `Cannot delete: Student has related records in table '${e.table || 'unknown'}' (Foreign Key Constraint).`;
+
+            return res.status(409).json({ message: msg });
         }
         console.error('Delete student error:', e);
         res.status(500).json({ message: 'Failed to delete student' });
@@ -653,35 +714,87 @@ router.get('/api/students/withdrawn', requireAuth, async (req, res) => {
 
 router.put('/api/students/:admissionNumber/withdraw', requireAuth, async (req, res) => {
     const user = (req as any).user;
+    const client = await pool.connect();
     try {
         const admissionNumber = req.params.admissionNumber;
         const { leftDate, reason } = req.body as { leftDate?: string; reason?: string };
-        const existing = await pool.query('SELECT * FROM students WHERE admission_number=$1 AND school_id=$2', [admissionNumber, user.schoolId]);
-        if ((existing.rowCount ?? 0) === 0) return res.status(404).json({ message: 'not found' });
+
+        await client.query('BEGIN');
+
+        const existing = await client.query('SELECT * FROM students WHERE admission_number=$1 AND school_id=$2', [admissionNumber, user.schoolId]);
+        if ((existing.rowCount ?? 0) === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'not found' });
+        }
+
         const dateToSet = leftDate || new Date().toISOString().slice(0, 10);
-        const q = await pool.query('UPDATE students SET status=$1, left_date=$2, leaving_reason=$3 WHERE admission_number=$4 AND school_id=$5 RETURNING *', ['left', dateToSet, reason || null, admissionNumber, user.schoolId]);
+        const q = await client.query('UPDATE students SET status=$1, left_date=$2, leaving_reason=$3 WHERE admission_number=$4 AND school_id=$5 RETURNING *', ['left', dateToSet, reason || null, admissionNumber, user.schoolId]);
+
+        // Sync to current session
+        const studentId = q.rows[0].id;
+        const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+        const currentSessionId = schoolRes.rows[0]?.current_session_id;
+
+        if (currentSessionId) {
+            await client.query(
+                `UPDATE student_sessions SET status = 'left' WHERE student_id = $1 AND session_id = $2`,
+                [studentId, currentSessionId]
+            );
+        }
+
+        await client.query('COMMIT');
         res.json(mapStudent(q.rows[0]));
     } catch (e) {
+        await client.query('ROLLBACK');
         console.error(e);
         res.status(500).json({ message: 'failed to mark withdrawn' });
+    } finally {
+        client.release();
     }
 });
 
 router.put('/api/students/:admissionNumber/restore', requireAuth, async (req, res) => {
     const user = (req as any).user;
+    const client = await pool.connect();
     try {
         const admissionNumber = req.params.admissionNumber;
-        const existing = await pool.query('SELECT * FROM students WHERE admission_number=$1 AND school_id=$2', [admissionNumber, user.schoolId]);
-        if ((existing.rowCount ?? 0) === 0) return res.status(404).json({ message: 'student not found' });
+
+        await client.query('BEGIN');
+
+        const existing = await client.query('SELECT * FROM students WHERE admission_number=$1 AND school_id=$2', [admissionNumber, user.schoolId]);
+        if ((existing.rowCount ?? 0) === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'student not found' });
+        }
+
         const current = existing.rows[0];
         if (current.status !== 'left') {
+            await client.query('ROLLBACK');
             return res.json(mapStudent(current));
         }
-        const q = await pool.query('UPDATE students SET status=$1, left_date=NULL, leaving_reason=NULL WHERE admission_number=$2 AND school_id=$3 RETURNING *', ['active', admissionNumber, user.schoolId]);
+
+        const q = await client.query('UPDATE students SET status=$1, left_date=NULL, leaving_reason=NULL WHERE admission_number=$2 AND school_id=$3 RETURNING *', ['active', admissionNumber, user.schoolId]);
+
+        // Sync to current session
+        const studentId = q.rows[0].id;
+        const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+        const currentSessionId = schoolRes.rows[0]?.current_session_id;
+
+        if (currentSessionId) {
+            await client.query(
+                `UPDATE student_sessions SET status = 'active' WHERE student_id = $1 AND session_id = $2`,
+                [studentId, currentSessionId]
+            );
+        }
+
+        await client.query('COMMIT');
         res.json(mapStudent(q.rows[0]));
     } catch (e: any) {
+        await client.query('ROLLBACK');
         console.error('restore error', e);
         res.status(500).json({ message: e?.message || 'failed to restore' });
+    } finally {
+        client.release();
     }
 });
 

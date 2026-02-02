@@ -30,6 +30,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/auth";
 import { Loader2, Plus, Trash2, UserPlus } from "lucide-react";
+import { sortGrades } from "@/lib/utils";
 
 interface ClassItem {
     id: string;
@@ -71,8 +72,15 @@ export default function AdminClassesPage() {
             ]);
 
             if (clsRes.ok) {
-                const data = await clsRes.json();
+                const data: ClassItem[] = await clsRes.json();
                 console.log('Classes Data:', data);
+                // Sort classes by grade using sortGrades helper for consistent order
+                data.sort((a, b) => {
+                    const sorted = sortGrades([a.grade, b.grade]);
+                    if (sorted[0] === a.grade && sorted[1] !== a.grade) return -1;
+                    if (sorted[0] === b.grade && sorted[1] !== b.grade) return 1;
+                    return a.section.localeCompare(b.section);
+                });
                 setClasses(data);
             }
             if (teaRes.ok) setTeachers(await teaRes.json());

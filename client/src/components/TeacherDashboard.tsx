@@ -151,7 +151,7 @@ export default function TeacherDashboard({ selectedSessionId }: { selectedSessio
                     {info.class && (
                         <div className="flex items-center gap-2">
                             <Badge variant="outline" className="text-lg px-4 py-1">
-                                Class {info.class.grade}-{info.class.section}
+                                {info.class.grade}-{info.class.section}
                             </Badge>
                         </div>
                     )}
@@ -221,7 +221,7 @@ export default function TeacherDashboard({ selectedSessionId }: { selectedSessio
                             <CardHeader className="flex flex-row items-center justify-between">
                                 <div>
                                     <CardTitle>Student List</CardTitle>
-                                    <CardDescription>Details of students in Class {info.class?.grade}-{info.class?.section}</CardDescription>
+                                    <CardDescription>Details of students in {info.class?.grade}-{info.class?.section}</CardDescription>
                                 </div>
                                 <Button size="sm" variant="outline" onClick={handleAssignRollNumbers}>
                                     <RefreshCcw className="h-4 w-4 mr-2" />

@@ -83,6 +83,7 @@ export async function seedDefaults() {
             password = EXCLUDED.password,
             role = 'superadmin';
         `, [username, hashedPassword]); // Use hashed password, not plaintext
+
     console.log('Super Admin user seeded/updated successfully');
   } finally {
     client.release();

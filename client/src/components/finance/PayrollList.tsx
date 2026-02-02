@@ -44,7 +44,11 @@ interface PaymentHistory {
     payments: StaffPayment[];
 }
 
-export function PayrollList() {
+interface PayrollListProps {
+    selectedSessionId: string;
+}
+
+export function PayrollList({ selectedSessionId }: PayrollListProps) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const [selectedStaff, setSelectedStaff] = useState<StaffSummary | null>(null);
@@ -53,7 +57,7 @@ export function PayrollList() {
 
     // Fetch all staff with summary
     const { data: staffList = [], isLoading } = useQuery<StaffSummary[]>({
-        queryKey: ['staff-salary-summary'],
+        queryKey: ['staff-salary-summary'], // Global staff summary
         queryFn: async () => {
             const res = await fetch('/api/staff-salary-summary', { headers: getAuthHeaders() });
             if (!res.ok) throw new Error('Failed to fetch staff');
@@ -88,7 +92,7 @@ export function PayrollList() {
             const res = await fetch('/api/salary-payments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                body: JSON.stringify(data)
+                body: JSON.stringify({ ...data, sessionId: selectedSessionId })
             });
             if (!res.ok) {
                 const error = await res.json();

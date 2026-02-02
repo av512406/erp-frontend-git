@@ -19,7 +19,7 @@ router.get('/api/school-config', requireAuth, async (req, res) => {
             features: { attendance: true, sms: true, finance: true }, // Enable all by default for superadmin context
             logoUrl: '',
             examPattern: ["Term 1", "Term 2"],
-            session: '2024-2025'
+            session: '2025-26'
         });
     }
 
@@ -110,8 +110,7 @@ router.post('/api/schools', requireAuth, async (req, res) => {
         if (sessionTemplates.length === 0) {
             // Default sessions if none exist (First school)
             sessionTemplates = [
-                { name: '2024-2025', start_date: '2024-04-01', end_date: '2025-03-31', is_active: false },
-                { name: '2025-2026', start_date: '2025-04-01', end_date: '2026-03-31', is_active: true }
+                { name: '2025-26', start_date: '2025-04-01', end_date: '2026-03-31', is_active: true }
             ];
         }
 

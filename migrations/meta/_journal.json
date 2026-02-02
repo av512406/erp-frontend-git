@@ -29,6 +29,27 @@
       "when": 1769279562322,
       "tag": "0003_lame_violations",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1769880941000,
+      "tag": "0004_add_performance_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1769880942000,
+      "tag": "0005_add_foreign_key_cascades",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1769880943000,
+      "tag": "0006_thick_albert_cleary",
+      "breakpoints": true
     }
   ]
 }

@@ -15,7 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-export function ExpenseList() {
+interface ExpenseListProps {
+    selectedSessionId: string;
+}
+
+export function ExpenseList({ selectedSessionId }: ExpenseListProps) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const [isAddOpen, setIsAddOpen] = useState(false);
@@ -26,18 +30,20 @@ export function ExpenseList() {
     });
 
     const { data: expenses = [], isLoading } = useQuery<Expense[]>({
-        queryKey: ['expenses'],
+        queryKey: ['expenses', selectedSessionId],
         queryFn: async () => {
-            const res = await apiRequest('GET', '/api/expenses');
+            const res = await apiRequest('GET', `/api/expenses?sessionId=${selectedSessionId}`);
             return res.json();
-        }
+        },
+        enabled: !!selectedSessionId
     });
 
     const addMutation = useMutation({
         mutationFn: async (data: Partial<Expense>) => {
             const res = await apiRequest('POST', '/api/expenses', {
                 ...data,
-                amount: data.amount?.toString() // Send as string for decimal type
+                amount: data.amount?.toString(), // Send as string for decimal type
+                sessionId: selectedSessionId
             });
             return res.json();
         },

@@ -69,8 +69,10 @@ CREATE INDEX IF NOT EXISTS idx_users_role
   ON users(role, school_id);
 
 -- Staff indexes
-CREATE INDEX IF NOT EXISTS idx_staff_school_status 
-  ON staff(school_id, status);
+-- Staff indexes
+-- (Commented out because staff table is created in 0006)
+-- CREATE INDEX IF NOT EXISTS idx_staff_school_status 
+--   ON staff(school_id, status);
 
 -- Transport indexes
 CREATE INDEX IF NOT EXISTS idx_student_transport_session 

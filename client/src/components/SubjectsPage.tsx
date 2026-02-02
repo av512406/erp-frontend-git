@@ -8,6 +8,7 @@ import { DataTable, Column } from "@/components/ui/data-table";
 import type { Student } from "@shared/schema";
 import { Plus, Trash2, CheckCircle2 } from "lucide-react";
 import { getAuthHeaders } from "@/lib/auth";
+import { sortGrades } from "@/lib/utils";
 
 type Subject = {
   id: string;
@@ -41,18 +42,16 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
         const res = await fetch('/api/classes/grades', { headers: getAuthHeaders() });
         if (res.ok) {
           const data: string[] = await res.json();
-          setAllGrades(data);
+          setAllGrades(sortGrades(data));
           setSelectedGrade(prev => prev || data[0] || "");
         } else {
           // fallback from students if API not available
-          const fallback = Array.from(new Set(students.map(s => s.grade))).filter(Boolean) as string[];
-          fallback.sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+          const fallback = sortGrades(Array.from(new Set(students.map(s => s.grade))).filter(Boolean) as string[]);
           setAllGrades(fallback);
           setSelectedGrade(prev => prev || fallback[0] || "");
         }
       } catch {
-        const fallback = Array.from(new Set(students.map(s => s.grade))).filter(Boolean) as string[];
-        fallback.sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+        const fallback = sortGrades(Array.from(new Set(students.map(s => s.grade))).filter(Boolean) as string[]);
         setAllGrades(fallback);
         setSelectedGrade(prev => prev || fallback[0] || "");
       }
@@ -252,7 +251,7 @@ export default function SubjectsPage({ students }: SubjectsPageProps) {
                   </SelectTrigger>
                   <SelectContent>
                     {allGrades.map(g => (
-                      <SelectItem key={g} value={g}>Class {g}</SelectItem>
+                      <SelectItem key={g} value={g}>{g}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

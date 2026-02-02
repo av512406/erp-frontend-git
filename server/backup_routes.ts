@@ -1,11 +1,8 @@
 import { Router, Request, Response } from "express";
 import { db } from "./db";
-import {
-    schools, academicSessions, subjects, teachers, students,
-    studentSessions, classSubjects, feeTransactions, grades,
-    attendance, classes, transportRoutes, studentTransport, transportFeeTransactions
-} from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { schools } from "@shared/schema";
+import { orderedBackupTables } from "@shared/backup_config";
+import { eq, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -22,77 +19,44 @@ router.get("/export", requireSchoolAdmin, async (req: Request, res: Response) =>
     try {
         const schoolId = (req as any).user!.schoolId!;
 
-        // Fetch data concurrently
-        const [
-            fetchedSchools,
-            fetchedSessions,
-            fetchedSubjects,
-            fetchedTeachers,
-            fetchedStudents,
-            fetchedStudentSessions,
-            fetchedClassSubjects,
-            fetchedFees,
-            fetchedGrades,
-            fetchedAttendance,
-            fetchedClasses,
-            fetchedTransportRoutes,
-            fetchedStudentTransport,
-            fetchedTransportFeeTransactions
-        ] = await Promise.all([
-            db.select().from(schools).where(eq(schools.id, schoolId)),
-            db.select().from(academicSessions).where(eq(academicSessions.schoolId, schoolId)),
-            db.select().from(subjects).where(eq(subjects.schoolId, schoolId)),
-            db.select().from(teachers).where(eq(teachers.schoolId, schoolId)),
-            db.select().from(students).where(eq(students.schoolId, schoolId)),
-            db.select().from(studentSessions).where(eq(studentSessions.schoolId, schoolId)),
-            db.select().from(classSubjects).where(eq(classSubjects.schoolId, schoolId)),
-            db.select().from(feeTransactions).where(eq(feeTransactions.schoolId, schoolId)),
-            db.select().from(grades).where(eq(grades.schoolId, schoolId)),
-            db.select().from(attendance).where(eq(attendance.schoolId, schoolId)),
-            db.select().from(classes).where(eq(classes.schoolId, schoolId)),
-            db.select().from(transportRoutes).where(eq(transportRoutes.schoolId, schoolId)),
-            db.select().from(studentTransport).where(eq(studentTransport.schoolId, schoolId)),
-            db.select().from(transportFeeTransactions).where(eq(transportFeeTransactions.schoolId, schoolId)),
-        ]);
+        // 1. Generic Fetch
+        // Iterate over registry to fetch data for each table
+        const combinedData: Record<string, any[]> = {};
+        const recordCounts: Record<string, number> = {};
+
+        for (const config of orderedBackupTables) {
+            // Special handling for 'schools' or tables that might need specific filters?
+            // The schema tables usually have 'schoolId'.
+            // centralized logic: db.select().from(table).where(eq(table.schoolId, schoolId))
+            // We need to access the 'schoolId' column safely.
+            // In Drizzle, config.table.schoolId works if it exists.
+
+            // Checking if table has schoolId column:
+            if ('schoolId' in config.table) {
+                const rows = await db.select().from(config.table).where(eq(config.table.schoolId, schoolId));
+                combinedData[config.name] = rows;
+                recordCounts[config.name] = rows.length;
+            } else if (config.name === 'schools') {
+                // Schools table check by ID
+                const rows = await db.select().from(config.table).where(eq(config.table.id, schoolId));
+                combinedData[config.name] = rows;
+                recordCounts[config.name] = rows.length;
+            } else {
+                // Fallback or skip if no schoolId (should not happen based on our schema, except maybe global enums?)
+                // For now, empty or log warning.
+                combinedData[config.name] = [];
+                recordCounts[config.name] = 0;
+            }
+        }
 
         const backupData = {
             meta: {
                 timestamp: new Date().toISOString(),
                 schoolId: schoolId,
-                version: "1.0",
-                recordCounts: {
-                    schools: fetchedSchools.length,
-                    academicSessions: fetchedSessions.length,
-                    subjects: fetchedSubjects.length,
-                    teachers: fetchedTeachers.length,
-                    students: fetchedStudents.length,
-                    studentSessions: fetchedStudentSessions.length,
-                    classSubjects: fetchedClassSubjects.length,
-                    feeTransactions: fetchedFees.length,
-                    grades: fetchedGrades.length,
-                    attendance: fetchedAttendance.length,
-                    classes: fetchedClasses.length,
-                    transportRoutes: fetchedTransportRoutes.length,
-                    studentTransport: fetchedStudentTransport.length,
-                    transportFeeTransactions: fetchedTransportFeeTransactions.length
-                }
+                version: "2.0", // Bump version for new format logic
+                recordCounts: recordCounts
             },
-            data: {
-                schools: fetchedSchools,
-                academicSessions: fetchedSessions,
-                subjects: fetchedSubjects,
-                teachers: fetchedTeachers,
-                students: fetchedStudents,
-                studentSessions: fetchedStudentSessions,
-                classSubjects: fetchedClassSubjects,
-                feeTransactions: fetchedFees,
-                grades: fetchedGrades,
-                attendance: fetchedAttendance,
-                classes: fetchedClasses,
-                transportRoutes: fetchedTransportRoutes,
-                studentTransport: fetchedStudentTransport,
-                transportFeeTransactions: fetchedTransportFeeTransactions
-            }
+            data: combinedData
         };
 
         res.setHeader("Content-Type", "application/json");
@@ -123,42 +87,40 @@ router.post("/restore", requireSchoolAdmin, async (req: Request, res: Response) 
             // 0. Break circular dependency: Set current_session_id to NULL in schools table
             await tx.update(schools).set({ currentSessionId: null }).where(eq(schools.id, schoolId));
 
-            // 1. Delete existing data in reverse order of dependencies
-            await tx.delete(transportFeeTransactions).where(eq(transportFeeTransactions.schoolId, schoolId));
-            await tx.delete(attendance).where(eq(attendance.schoolId, schoolId));
-            await tx.delete(studentTransport).where(eq(studentTransport.schoolId, schoolId));
-            await tx.delete(grades).where(eq(grades.schoolId, schoolId));
-            await tx.delete(feeTransactions).where(eq(feeTransactions.schoolId, schoolId));
-            await tx.delete(studentSessions).where(eq(studentSessions.schoolId, schoolId));
-            await tx.delete(classes).where(eq(classes.schoolId, schoolId));
-            await tx.delete(classSubjects).where(eq(classSubjects.schoolId, schoolId));
-            await tx.delete(transportRoutes).where(eq(transportRoutes.schoolId, schoolId));
-            // Teachers and Students might have circular dependcies or other links? 
-            // Usually students depend on schools.
-            await tx.delete(students).where(eq(students.schoolId, schoolId));
-            await tx.delete(teachers).where(eq(teachers.schoolId, schoolId));
-            await tx.delete(subjects).where(eq(subjects.schoolId, schoolId));
-            await tx.delete(academicSessions).where(eq(academicSessions.schoolId, schoolId));
+            // 1. Delete existing data in REVERSE dependency order
+            // clone array and reverse
+            const deletionOrder = [...orderedBackupTables].reverse();
 
-            // Note: We do NOT delete the 'schools' record itself, just the data within it.
+            for (const config of deletionOrder) {
+                if (config.name === 'schools') continue; // Do not delete the school itself!
 
-            // 2. Insert new data in order of dependencies
-            // We assume the backup data has valid IDs and references.
+                // Skip users delete to prevent lockout, as per audit decision
+                if (config.name === 'users') continue;
+
+                if ('schoolId' in config.table) {
+                    await tx.delete(config.table).where(eq(config.table.schoolId, schoolId));
+                }
+            }
+
+            // 2. Insert new data in dependency order
             const d = backup.data;
+            for (const config of orderedBackupTables) {
+                const rows = d[config.name];
+                if (rows && rows.length > 0) {
+                    // Special handling for 'schools' - we update, not insert
+                    if (config.name === 'schools') {
+                        // We don't restore the school record itself usually as we are "in" it.
+                        // Maybe update fields? For now, skip to be safe/simple.
+                        continue;
+                    }
 
-            if (d.academicSessions?.length) await tx.insert(academicSessions).values(d.academicSessions);
-            if (d.subjects?.length) await tx.insert(subjects).values(d.subjects);
-            if (d.teachers?.length) await tx.insert(teachers).values(d.teachers);
-            if (d.transportRoutes?.length) await tx.insert(transportRoutes).values(d.transportRoutes);
-            if (d.students?.length) await tx.insert(students).values(d.students);
-            if (d.classSubjects?.length) await tx.insert(classSubjects).values(d.classSubjects);
-            if (d.classes?.length) await tx.insert(classes).values(d.classes);
-            if (d.studentSessions?.length) await tx.insert(studentSessions).values(d.studentSessions);
-            if (d.feeTransactions?.length) await tx.insert(feeTransactions).values(d.feeTransactions);
-            if (d.grades?.length) await tx.insert(grades).values(d.grades);
-            if (d.studentTransport?.length) await tx.insert(studentTransport).values(d.studentTransport);
-            if (d.attendance?.length) await tx.insert(attendance).values(d.attendance);
-            if (d.transportFeeTransactions?.length) await tx.insert(transportFeeTransactions).values(d.transportFeeTransactions);
+                    // Special handling for users - Skip or Upsert?
+                    // Audit decision: Skip for now to avoid lockout.
+                    if (config.name === 'users') continue;
+
+                    await tx.insert(config.table).values(rows);
+                }
+            }
 
             // 3. Restore current_session_id
             if (d.schools && d.schools.length > 0) {

@@ -125,10 +125,23 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         headers: getAuthHeaders()
       });
       if (res.ok) {
-        // setStudents(prev => prev.filter(s => s.id !== id));
         queryClient.invalidateQueries({ queryKey: ['students'] });
+        toast({ title: "Student deleted successfully" });
+      } else {
+        const errorData = await res.json();
+        toast({
+          title: "Failed to delete student",
+          description: errorData.message || "Unknown error",
+          variant: "destructive"
+        });
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      toast({
+        title: "Delete failed",
+        description: "Network error",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleMarkWithdrawn = async (admissionNumber: string, payload: { leftDate?: string; reason?: string }) => {
@@ -258,7 +271,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         await queryClient.invalidateQueries({ queryKey: ['students'] });
         return { added: summary.added, skipped: summary.skipped, skippedAdmissionNumbers: summary.skippedAdmissionNumbers };
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) { console.error("Import error:", e); }
     return { added: 0, skipped: 0, skippedAdmissionNumbers: [] };
   };
 

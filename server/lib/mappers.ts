@@ -28,26 +28,26 @@ export function formatDateForClient(v: any) {
 export function mapStudent(row: any) {
     return {
         id: row.id,
-        admissionNumber: row.admission_number,
+        admissionNumber: row.admissionNumber || row.admission_number,
         name: row.name,
-        rollNumber: row.roll_number, // Added roll number mapping
+        rollNumber: row.rollNumber || row.roll_number, // Added roll number mapping
         // normalize date fields to YYYY-MM-DD strings so frontend <input type="date"> can display them
-        dateOfBirth: formatDateForClient(row.date_of_birth),
-        admissionDate: formatDateForClient(row.admission_date),
-        aadharNumber: row.aadhar_number,
-        penNumber: row.pen_number,
-        aaparId: row.aapar_id,
-        mobileNumber: row.mobile_number,
+        dateOfBirth: formatDateForClient(row.dateOfBirth || row.date_of_birth),
+        admissionDate: formatDateForClient(row.admissionDate || row.admission_date),
+        aadharNumber: row.aadharNumber || row.aadhar_number,
+        penNumber: row.penNumber || row.pen_number,
+        aaparId: row.aaparId || row.aapar_id,
+        mobileNumber: row.mobileNumber || row.mobile_number,
         address: row.address,
         grade: row.grade,
         section: row.section,
-        fatherName: row.father_name,
-        motherName: row.mother_name,
+        fatherName: row.fatherName || row.father_name,
+        motherName: row.motherName || row.mother_name,
         yearlyFeeAmount: row.yearlyFeeAmount || row.session_fee?.toString?.() || row.yearly_fee_amount?.toString?.() || '0',
-        previousYearDue: row.previous_year_due?.toString?.() ?? row.previous_year_due,
+        previousYearDue: row.previousYearDue?.toString?.() ?? row.previous_year_due?.toString?.() ?? row.previous_year_due,
         status: row.status || 'active',
-        leftDate: formatDateForClient(row.left_date),
-        leavingReason: row.leaving_reason || '',
+        leftDate: formatDateForClient(row.leftDate || row.left_date),
+        leavingReason: row.leavingReason || row.leaving_reason || '',
         category: row.category || 'GEN',
         gender: row.gender || '',
         transportFee: row.transportFee || row.transport_fee?.toString?.() || '0',
@@ -58,7 +58,7 @@ export function mapStudent(row: any) {
 export function mapGrade(row: any) {
     return {
         id: row.id,
-        studentId: row.student_id,
+        studentId: row.studentId || row.student_id,
         subject: row.subject,
         marks: parseFloat(row.marks),
         term: row.term,
@@ -70,6 +70,6 @@ export function mapSubject(row: any) {
         id: row.id,
         code: row.code,
         name: row.name,
-        maxMarks: row.max_marks !== undefined ? (row.max_marks !== null ? parseFloat(row.max_marks) : null) : undefined,
+        maxMarks: (row.maxMarks !== undefined ? parseFloat(row.maxMarks) : (row.max_marks !== undefined ? (row.max_marks !== null ? parseFloat(row.max_marks) : null) : undefined)),
     };
 }

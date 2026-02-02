@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,8 @@ import { schoolConfig } from '@/lib/schoolConfig';
 const CATEGORY_ORDER = [
   'Admission Fee',
   'Teaching Fee',
+  'Using Fee', // If exists, otherwise just Transport Fee
+  'Transport Fee',
   'Exam. Fee',
   'Computer Fee',
   'Development',
@@ -123,6 +125,7 @@ export default function ReceiptDistributionModal({ open, onClose, transaction, s
       <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Distribute Amount for Receipt</DialogTitle>
+          <DialogDescription>Adjust fees distribution across categories.</DialogDescription>
         </DialogHeader>
         {transaction && student ? (
           <div className="space-y-5">

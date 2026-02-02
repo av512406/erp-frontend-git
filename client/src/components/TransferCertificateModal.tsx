@@ -4,6 +4,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -124,6 +125,7 @@ export function TransferCertificateModal({ open, onClose, student }: TransferCer
             <DialogContent className="max-w-[95vw] h-[95vh] flex flex-col p-0 gap-0">
                 <DialogHeader className="px-6 py-4 border-b">
                     <DialogTitle>Generate Transfer Certificate</DialogTitle>
+                    <DialogDescription>Review and edit details before printing the TC.</DialogDescription>
                 </DialogHeader>
 
                 <div className="flex flex-1 overflow-hidden">

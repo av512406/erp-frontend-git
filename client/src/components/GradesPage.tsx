@@ -38,6 +38,7 @@ interface GradesPageProps {
 }
 
 import { useSchoolConfig } from "@/hooks/useSchoolConfig";
+import { sortGrades } from "@/lib/utils";
 
 export default function GradesPage({ students, grades, onSaveGrades, saving = false }: GradesPageProps) {
   const { config } = useSchoolConfig();
@@ -54,9 +55,8 @@ export default function GradesPage({ students, grades, onSaveGrades, saving = fa
 
   // derive unique classes and sections from provided students
   const uniqueClasses = useMemo(() => (
-    Array.from(new Set(students.map(s => s.grade)))
-      .filter(Boolean)
-      .sort((a, b) => Number(a) - Number(b))
+    sortGrades(Array.from(new Set(students.map(s => s.grade)))
+      .filter(Boolean))
   ), [students]);
 
   const [sectionsForClass, setSectionsForClass] = useState<string[]>([]);

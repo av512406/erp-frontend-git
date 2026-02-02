@@ -123,6 +123,7 @@ async function runTests() {
         LOG_STEP(`Creating student ${admissionNumber}...`);
 
         const studentPayload = {
+            sessionId: sessionId, // Explicit session
             admissionNumber,
             name: 'Test Student',
             dateOfBirth: '2010-01-01',
@@ -160,7 +161,8 @@ async function runTests() {
         // Update
         LOG_STEP('Updating student...');
         const updateRes = await api('PUT', `/students/${admissionNumber}`, {
-            name: 'Test Student Updated'
+            name: 'Test Student Updated',
+            sessionId: sessionId // Use same session
         });
         if (!updateRes.ok) throw new Error('Failed to update student');
         assert.equal(updateRes.data.name, 'Test Student Updated');
@@ -174,6 +176,7 @@ async function runTests() {
         LOG_STEP('Marking attendance (creating dependency)...');
         const date = new Date().toISOString().slice(0, 10);
         const attRes = await api('POST', '/attendance', {
+            sessionId: sessionId, // REQUIRED
             date,
             grade: 'X',
             section: 'A',

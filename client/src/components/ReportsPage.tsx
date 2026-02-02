@@ -1,6 +1,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getAuthHeaders } from "@/lib/auth";
+import { sortGrades } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -75,7 +76,7 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
   useEffect(() => {
     fetch('/api/classes/grades', { headers: getAuthHeaders() })
       .then(res => res.ok ? res.json() : [])
-      .then(data => setAvailableGrades(data))
+      .then(data => setAvailableGrades(sortGrades(data)))
       .catch(() => setAvailableGrades([]));
   }, []);
 
@@ -85,7 +86,7 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
 
     fetch(`/api/classes/${encodeURIComponent(selectedClass)}/sections`, { headers: getAuthHeaders() })
       .then(res => res.ok ? res.json() : [])
-      .then(data => setAvailableSections(data))
+      .then(data => setAvailableSections(data.sort()))
       .catch(() => setAvailableSections([]));
   }, [selectedClass]);
 
