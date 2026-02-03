@@ -15,14 +15,17 @@ export const formatCsvDate = (value: string | undefined | null): string => {
     return value; // leave as-is (will surface for correction)
 };
 
-export const normalize = (val: any) => typeof val === 'string' ? val.trim() : (val ?? '');
+// Fix: Properly cast numbers/booleans to string
+export const normalize = (val: any) => (val === null || val === undefined) ? '' : String(val).trim();
 
+// Fix: Strip currency and non-numeric chars
 export const normalizeNumberString = (val: any) => {
-    const s = String(val ?? '').replace(/,/g, '').trim();
-    return s;
+    if (val === undefined || val === null) return '';
+    return String(val).replace(/[^0-9.\-]/g, '');
 };
 
-export const transformHeader = (h: string) => h.trim().toLowerCase();
+// Fix: Normalize to alphanumeric only for robust matching
+export const transformHeader = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 export const excelSerialToDate = (num: number) => {
     if (!isFinite(num) || num <= 0) return null;
@@ -39,6 +42,7 @@ export const toYMD = (d: Date) => {
 };
 
 export const normalizeDate = (raw: any): string => {
+    // Fix: Allow invalid strings to return empty instead of echoing back
     const v = normalize(raw);
     if (!v) return '';
     if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
@@ -72,5 +76,5 @@ export const normalizeDate = (raw: any): string => {
     const parsed = new Date(v);
     if (!isNaN(parsed.getTime())) return toYMD(new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())));
 
-    return v;
+    return ''; // Fix: Return empty string on failure
 };
