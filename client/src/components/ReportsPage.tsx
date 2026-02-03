@@ -13,17 +13,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { FileText, Printer } from "lucide-react";
-import type { Student } from '@shared/schema';
-import type { GradeEntry } from "./GradesPage";
+import type { Student } from '@/types';
+import type { GradeEntry } from "@/types";
 import { schoolConfig } from '@/lib/schoolConfig';
 import { useDocumentTemplate } from '@/hooks/useDocumentTemplate';
 import { useSchoolConfig } from '@/hooks/useSchoolConfig';
@@ -69,9 +61,6 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
   const [isStudentSelectOpen, setIsStudentSelectOpen] = useState(false);
   const [selectedTerm, setSelectedTerm] = useState("");
   const [showReport, setShowReport] = useState(false);
-
-  // Debounce logic replaced by manual save for explicit user control
-
 
   useEffect(() => {
     fetch('/api/classes/grades', { headers: getAuthHeaders() })
@@ -126,7 +115,9 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
     const map = new Map<string, number>();
     for (const g of grades) {
       if (g.studentId === selectedStudent && g.term === selectedTerm) {
-        map.set(g.subject, g.marks);
+        // Handle explicit number or string
+        const val = typeof g.marks === 'string' ? parseFloat(g.marks) : g.marks;
+        map.set(g.subject, val);
       }
     }
     return map;
@@ -136,38 +127,51 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
   const total = reportRows.reduce((sum, r) => sum + (r.marks ?? 0), 0);
   const average = reportRows.length > 0 ? (total / reportRows.length).toFixed(2) : '0';
 
+  const escapeHtml = (unsafe: string | number | null | undefined): string => {
+    if (unsafe === null || unsafe === undefined) return '';
+    const str = String(unsafe);
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  };
+
   const getReportHtml = () => {
     if (!student) return '';
 
     // Data Preparation
-    const logoSection = schoolConfig.logoUrl ? `<img src="${schoolConfig.logoUrl}" alt="Logo" class="logo" style="height: 60px;" />` : '';
+    // Note: logoUrl is trusted config, but still good to be careful if it was user input. 
+    // Assuming schoolConfig is trusted admin input.
+    const logoSection = schoolConfig.logoUrl ? `<img src="${encodeURI(schoolConfig.logoUrl)}" alt="Logo" class="logo" style="height: 60px;" />` : '';
     const dateStr = new Date().toLocaleDateString();
 
     const rowsHtml = reportRows.map((row, index) => `
       <tr>
         <td style="text-align: center;">${index + 1}</td>
-        <td>${row.subject}</td>
+        <td>${escapeHtml(row.subject)}</td>
         <td style="text-align: right;">100</td>
-        <td style="text-align: right;">${row.marks ?? '-'}</td>
+        <td style="text-align: right;">${escapeHtml(row.marks ?? '-')}</td>
       </tr>
     `).join('');
 
     const rowsSimple = reportRows.map((row, index) => `
       <tr>
         <td>${index + 1}</td>
-        <td>${row.subject}</td>
+        <td>${escapeHtml(row.subject)}</td>
         <td>100</td>
-        <td>${row.marks ?? '-'}</td>
+        <td>${escapeHtml(row.marks ?? '-')}</td>
         <td>${row.marks && row.marks >= 35 ? 'Pass' : 'Fail'}</td>
       </tr>
     `).join('');
 
     const rowsModern = reportRows.map((row, index) => `
       <tr>
-        <td class="sub-col" style="text-align: left; padding-left: 10px;">${row.subject}</td>
+        <td class="sub-col" style="text-align: left; padding-left: 10px;">${escapeHtml(row.subject)}</td>
         <td>100</td>
-        <td>${row.marks ?? '-'}</td>
-        <td>${calculateGrade(row.marks ?? 0)}</td>
+        <td>${escapeHtml(row.marks ?? '-')}</td>
+        <td>${escapeHtml(calculateGrade(row.marks ?? 0))}</td>
       </tr>
     `).join('');
 
@@ -186,16 +190,16 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
         <tbody>
           ${reportRows.map(row => `
             <tr>
-                <td class="left-align" style="text-align: left; padding-left: 10px;">${row.subject}</td>
-                <td>${row.marks ?? '-'}</td>
-                <td>${calculateGrade(row.marks ?? 0)}</td>
+                <td class="left-align" style="text-align: left; padding-left: 10px;">${escapeHtml(row.subject)}</td>
+                <td>${escapeHtml(row.marks ?? '-')}</td>
+                <td>${escapeHtml(calculateGrade(row.marks ?? 0))}</td>
             </tr>
           `).join('')}
         </tbody>
         <tfoot>
           <tr style="font-weight: bold; background-color: #f8f9fa;">
              <td class="left-align" style="text-align: left; padding-left: 10px;">Total</td>
-             <td>${reportRows.reduce((sum, row) => sum + (row.marks || 0), 0)}</td>
+             <td>${escapeHtml(reportRows.reduce((sum, row) => sum + (row.marks || 0), 0))}</td>
              <td>-</td>
           </tr>
           <tr style="font-weight: bold; background-color: #e9ecef;">
@@ -219,9 +223,12 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
 
       TERMS.forEach(term => {
         const g = grades.find(g => g.studentId === student.id && g.subject === sub && g.term === term);
-        if (g && g.marks !== undefined) {
-          termMarks[term] = g.marks;
-          totalMarks += g.marks;
+        // handle string marks
+        const val = g && g.marks !== undefined ? (typeof g.marks === 'string' ? parseFloat(g.marks) : g.marks) : undefined;
+
+        if (val !== undefined && !isNaN(val)) {
+          termMarks[term] = val;
+          totalMarks += val;
           count++;
         } else {
           termMarks[term] = '-';
@@ -244,16 +251,16 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
             </tr>
             <tr>
                 <th style="min-width: 150px; text-align: left; padding-left: 10px;">SUBJECTS</th>
-                ${TERMS.map(t => `<th>${t.toUpperCase()}</th>`).join('')}
+                ${TERMS.map(t => `<th>${escapeHtml(t.toUpperCase())}</th>`).join('')}
                 <th>TOTAL</th>
             </tr>
         </thead>
         <tbody>
           ${consolidatedRows.map(row => `
             <tr>
-                <td class="left-align" style="text-align: left; padding-left: 10px;">${row.subject}</td>
-                ${TERMS.map(t => `<td>${row.termMarks[t]}</td>`).join('')}
-                <td>${row.total}</td>
+                <td class="left-align" style="text-align: left; padding-left: 10px;">${escapeHtml(row.subject)}</td>
+                ${TERMS.map(t => `<td>${escapeHtml(row.termMarks[t])}</td>`).join('')}
+                <td>${escapeHtml(row.total)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -286,12 +293,10 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
     let templateContent = '';
     let templateStyles = '';
 
-    // 1. Custom DB Template (Highest Priority)
     if (customTemplate) {
       templateContent = customTemplate.content;
       templateStyles = customTemplate.styles || '';
     }
-    // 2. Selected System Template
     else {
       const sysTemplate = REPORT_TEMPLATES.find(t => t.id === selectedTemplateId) || REPORT_TEMPLATES[0];
       templateContent = sysTemplate.content;
@@ -313,10 +318,10 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
           ${reportRows.map((row, index) => `
             <tr>
               <td>${index + 1}</td>
-              <td style="text-align: left;">${row.subject}</td>
+              <td style="text-align: left;">${escapeHtml(row.subject)}</td>
               <td>100</td>
-              <td>${row.marks ?? '-'}</td>
-              <td>${calculateGrade(row.marks ?? 0)}</td>
+              <td>${escapeHtml(row.marks ?? '-')}</td>
+              <td>${escapeHtml(calculateGrade(row.marks ?? 0))}</td>
             </tr>
           `).join('')}
              <tr style="font-weight: bold; background-color: #f8f9fa;">
@@ -331,23 +336,23 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
 
     // Replacements
     let html = templateContent;
-    html = html.replace(/{{term}}/g, selectedTerm);
-    html = html.replace(/{{session}}/g, schoolConfig.session);
-    html = html.replace(/{{schoolName}}/g, schoolConfig.name);
-    html = html.replace(/{{schoolAddress}}/g, schoolConfig.address);
-    html = html.replace(/{{schoolPhone}}/g, schoolConfig.phone);
-    html = html.replace(/{{schoolEmail}}/g, schoolConfig.email);
-    html = html.replace(/{{logoSection}}/g, logoSection);
+    html = html.replace(/{{term}}/g, escapeHtml(selectedTerm));
+    html = html.replace(/{{session}}/g, escapeHtml(schoolConfig.session));
+    html = html.replace(/{{schoolName}}/g, escapeHtml(schoolConfig.name));
+    html = html.replace(/{{schoolAddress}}/g, escapeHtml(schoolConfig.address));
+    html = html.replace(/{{schoolPhone}}/g, escapeHtml(schoolConfig.phone));
+    html = html.replace(/{{schoolEmail}}/g, escapeHtml(schoolConfig.email));
+    html = html.replace(/{{logoSection}}/g, logoSection); // Already trusted/encoded
 
-    html = html.replace(/{{studentName}}/g, student.name);
-    html = html.replace(/{{admissionNumber}}/g, student.admissionNumber);
-    html = html.replace(/{{grade}}/g, student.grade);
-    html = html.replace(/{{section}}/g, student.section);
-    html = html.replace(/{{fatherName}}/g, student.fatherName || '-');
-    html = html.replace(/{{motherName}}/g, student.motherName || '-');
+    html = html.replace(/{{studentName}}/g, escapeHtml(student.name));
+    html = html.replace(/{{admissionNumber}}/g, escapeHtml(student.admissionNumber));
+    html = html.replace(/{{grade}}/g, escapeHtml(student.grade));
+    html = html.replace(/{{section}}/g, escapeHtml(student.section));
+    html = html.replace(/{{fatherName}}/g, escapeHtml(student.fatherName || '-'));
+    html = html.replace(/{{motherName}}/g, escapeHtml(student.motherName || '-'));
     html = html.replace(/{{dob}}/g, student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString() : '-');
-    html = html.replace(/{{rollNo}}/g, (student as any).rollNumber || '-');
-    html = html.replace(/{{rollNumber}}/g, (student as any).rollNumber || '-');
+    html = html.replace(/{{rollNo}}/g, escapeHtml((student as any).rollNumber || '-'));
+    html = html.replace(/{{rollNumber}}/g, escapeHtml((student as any).rollNumber || '-'));
 
     html = html.replace(/{{gradesTableDPS}}/g, gradesTableDPS);
     html = html.replace(/{{gradesTableConsolidated}}/g, gradesTableConsolidated);
@@ -364,7 +369,7 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
     return `
       <html>
         <head>
-          <title>Report Card - ${student.name}</title>
+          <title>Report Card - ${escapeHtml(student.name)}</title>
           <style>
             :root {
               --theme-color: ${reportColor};
@@ -410,10 +415,11 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
     const printWindow = window.open('', '', 'width=800,height=600');
     if (!printWindow) return;
 
+    // We write the HTML string to the new window. 
+    // Since we escaped user input in getReportHtml(), this is now safe(r) from XSS.
     printWindow.document.write(getReportHtml());
     printWindow.document.close();
     printWindow.focus();
-    // Allow images to load before print (basic delay)
     setTimeout(() => {
       printWindow.print();
       printWindow.close();
@@ -422,14 +428,11 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
 
   const [previewHtml, setPreviewHtml] = useState('');
 
-  // Update preview when template or data changes if report is shown
   useEffect(() => {
     if (showReport && student) {
       setPreviewHtml(getReportHtml());
     }
   }, [showReport, student, selectedTerm, selectedTemplateId, classSubjects, grades, reportColor]);
-
-  // Duplicates removed
 
 
   return (
@@ -482,7 +485,6 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
                 onValueChange={(v) => {
                   if (v === '__LOAD_MORE__') {
                     setStudentPage(p => p + 1);
-                    // reopen so user can continue selecting
                     setIsStudentSelectOpen(true);
                     return;
                   }
@@ -494,7 +496,6 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
                 onOpenChange={(open) => {
                   setIsStudentSelectOpen(open);
                   if (open) {
-                    // reset pagination/filter when opened
                     setStudentPage(0);
                     setStudentFilter('');
                   }

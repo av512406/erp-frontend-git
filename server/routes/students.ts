@@ -584,16 +584,30 @@ router.post('/api/students/import', requireAuth, async (req, res) => {
     const { students: imported, strategy, targetSessionId } = req.body as { students: any[]; strategy?: string; targetSessionId?: string };
     if (!Array.isArray(imported)) return res.status(400).json({ message: 'students array required' });
 
-    if (!targetSessionId) {
-        return res.status(400).json({ message: 'targetSessionId is required for import' });
-    }
-
     const client = await pool.connect();
     try {
+        let finalTargetSessionId = targetSessionId;
+
+        // Fallback: Resolve Session ID if not provided
+        if (!finalTargetSessionId || finalTargetSessionId === 'default') {
+            const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+            finalTargetSessionId = schoolRes.rows[0]?.current_session_id;
+        }
+
+        if (!finalTargetSessionId) {
+            // Second fallback: latest active session
+            const sessionRes = await client.query('SELECT id FROM academic_sessions WHERE school_id = $1 AND is_active = true ORDER BY end_date DESC LIMIT 1', [user.schoolId]);
+            finalTargetSessionId = sessionRes.rows[0]?.id;
+        }
+
+        if (!finalTargetSessionId) {
+            return res.status(400).json({ message: 'targetSessionId is required for import (no active/current session found for school)' });
+        }
+
         // Validate target session belongs to this school
         const sessionCheck = await client.query(
             'SELECT id FROM academic_sessions WHERE id = $1 AND school_id = $2',
-            [targetSessionId, user.schoolId]
+            [finalTargetSessionId, user.schoolId]
         );
         if (sessionCheck.rowCount === 0) {
             return res.status(400).json({ message: 'Invalid target session for this school' });
@@ -605,7 +619,7 @@ router.post('/api/students/import', requireAuth, async (req, res) => {
             sessionMap.set(row.name.trim().toLowerCase(), row.id);
         });
 
-        // Use targetSessionId (no fallback to database)
+        // Use targetSessionId (resolved)
 
         await client.query('BEGIN');
         const added: any[] = [];
@@ -632,7 +646,7 @@ router.post('/api/students/import', requireAuth, async (req, res) => {
                 }
 
                 const rowSessionName = (row.session || row['Session'] || row['Session Name'] || row.sessionName || '').toString().trim();
-                let effectiveSessionId = targetSessionId;  // Use validated targetSessionId
+                let effectiveSessionId = finalTargetSessionId;  // Use validated targetSessionId
 
                 if (rowSessionName) {
                     const fromMap = sessionMap.get(rowSessionName.toLowerCase());

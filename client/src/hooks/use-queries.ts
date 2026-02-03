@@ -1,8 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import type { Student } from "@shared/schema";
-import type { FeeTransaction } from "@/components/FeesPage"; // Import types if available, or redefine
-import type { GradeEntry } from "@/components/GradesPage";
+import type { FeeTransaction, GradeEntry } from "@/types";
 
 // Types (mirrored from App.tsx or Schema)
 // Ideally these should be imported from a shared type definition file

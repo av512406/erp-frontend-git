@@ -16,10 +16,8 @@ import { DataTable, Column } from "@/components/ui/data-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, Download, MessageSquare } from "lucide-react";
-import { printReceipt } from './Receipt';
 import ReceiptDistributionModal from './ReceiptDistributionModal';
-import { schoolConfig } from '@/lib/schoolConfig';
-import type { Student } from '@shared/schema';
+import type { Student, FeeTransaction } from '@/types';
 import {
   Dialog,
   DialogContent,
@@ -31,67 +29,48 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/auth";
 import { sortGrades, formatClass } from "@/lib/utils";
-
-export interface FeeTransaction {
-  id: string;
-  studentId: string;
-  studentName: string;
-  amount: number;
-  date: string;
-  transactionId: string;
-  paymentMode?: string;
-  remarks?: string;
-  receiptSerial?: number; // persisted server-side; undefined for legacy entries
-  createdAt?: string;
-  status?: string;
-  cancelReason?: string;
-}
+import { useFeeMutations } from "@/hooks/use-fee-mutations";
 
 interface FeesPageProps {
   students: Student[];
   transactions: FeeTransaction[];
-  // returns the created transaction (with id and transactionId)
-  onAddTransaction: (transaction: Omit<FeeTransaction, 'id' | 'transactionId'>) => Promise<FeeTransaction> | FeeTransaction;
-  onCancelTransaction?: (id: string, reason: string) => Promise<void>;
+  selectedSessionId: string;
   userRole?: string;
 }
 
-export default function FeesPage({ students, transactions, onAddTransaction, onCancelTransaction, userRole = 'admin' }: FeesPageProps) {
+export default function FeesPage({ students, transactions, selectedSessionId, userRole = 'admin' }: FeesPageProps) {
   const { toast } = useToast();
+  const { addTransaction, cancelTransaction } = useFeeMutations();
+
   const [viewStudent, setViewStudent] = useState("all");
   const [amount, setAmount] = useState("");
-  // Use local date for default
   const [date, setDate] = useState(() => {
     const now = new Date();
-    return `${now.getFullYear()} -${String(now.getMonth() + 1).padStart(2, '0')} -${String(now.getDate()).padStart(2, '0')} `;
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   });
-  // payslip removed; use distribution modal directly
   const [paymentMode, setPaymentMode] = useState<string>('cash');
   const [remarks, setRemarks] = useState<string>('');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [distributionTx, setDistributionTx] = useState<FeeTransaction | null>(null);
-  // New: class & section filters (dependencies order: choose class first, then section)
+
   const [filterGrade, setFilterGrade] = useState<'all' | string>('all');
   const [filterSection, setFilterSection] = useState<'all' | string>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  // Date range for Excel export
+
   const [exportStart, setExportStart] = useState<string>('');
   const [exportEnd, setExportEnd] = useState<string>('');
   const [exporting, setExporting] = useState(false);
   const [location] = useLocation();
   const [filterDate, setFilterDate] = useState<string | null>(null);
 
-  // Cancellation state
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [transactionToCancel, setTransactionToCancel] = useState<FeeTransaction | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
 
-  // Pending Fees Filters
   const [pendingFilterClass, setPendingFilterClass] = useState<string>("all");
   const [pendingFilterSection, setPendingFilterSection] = useState<string>("all");
 
-  // Feature Flags & Config
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [schoolName, setSchoolName] = useState("");
 
@@ -143,7 +122,6 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     });
   }, [studentsWithPendingFees, pendingFilterClass, pendingFilterSection]);
 
-  // Reset section if class changes
   useEffect(() => {
     if (pendingFilterSection !== 'all' && !uniquePendingSections.includes(pendingFilterSection)) {
       setPendingFilterSection('all');
@@ -186,7 +164,6 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
         });
       });
 
-      // Style header
       worksheet.getRow(1).font = { bold: true };
 
       const buffer = await workbook.xlsx.writeBuffer();
@@ -194,7 +171,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `pending - fees - ${pendingFilterClass === 'all' ? 'all' : pendingFilterClass} -${pendingFilterSection === 'all' ? 'all' : pendingFilterSection} -${new Date().toISOString().split('T')[0]}.xlsx`;
+      a.download = `pending-fees-${pendingFilterClass}-${pendingFilterSection}-${new Date().toISOString().split('T')[0]}.xlsx`;
       a.click();
       window.URL.revokeObjectURL(url);
     } catch (e) {
@@ -207,14 +184,13 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     const params = new URLSearchParams(window.location.search);
     if (params.get('filter') === 'today') {
       const now = new Date();
-      const today = `${now.getFullYear()} -${String(now.getMonth() + 1).padStart(2, '0')} -${String(now.getDate()).padStart(2, '0')} `;
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       setFilterDate(today);
     } else {
       setFilterDate(null);
     }
   }, [location]);
 
-  // API-based filters for Main Entry
   const [availableGrades, setAvailableGrades] = useState<string[]>([]);
   const [availableSections, setAvailableSections] = useState<string[]>([]);
 
@@ -235,7 +211,6 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
       .catch(() => setAvailableSections([]));
   }, [filterGrade]);
 
-  // Filter students by grade then section
   const filteredStudents = useMemo(() => {
     if (searchTerm) {
       return students.filter(s =>
@@ -250,7 +225,6 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     });
   }, [students, filterGrade, filterSection, searchTerm]);
 
-  // If section becomes invalid after grade change, reset to 'all'
   useEffect(() => {
     if (filterSection !== 'all' && availableSections.length > 0 && !availableSections.includes(filterSection)) {
       setFilterSection('all');
@@ -263,42 +237,44 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     if (student) {
       try {
         setSubmitError(null);
-        // preserve exact entered amount (no implicit numeric spinner adjustments)
         const raw = amount.trim();
         if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) {
           setSubmitError('Enter a valid amount (up to 2 decimals)');
           return;
         }
-        const created = await onAddTransaction({
-          studentId: student.id,
-          studentName: student.name,
-          // use Number on validated raw string to avoid float artifacts like 19999.99
-          amount: Number(raw),
-          date,
-          paymentMode,
-          remarks
+
+        const created = await addTransaction.mutateAsync({
+          transaction: {
+            studentId: student.id,
+            studentName: student.name,
+            amount: Number(raw),
+            date,
+            paymentMode,
+            remarks
+          },
+          sessionId: selectedSessionId
         });
+
         // open distribution modal immediately for printing
         setDistributionTx(created);
-        // setSelectedStudent(""); // Removed as we use viewStudent now
         setAmount("");
-        // Reset to today (local)
+
         const now = new Date();
         setDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
         setPaymentMode('cash');
         setRemarks('');
+        toast({ title: "Payment recorded successfully" });
       } catch (err: any) {
         setSubmitError(err?.message || 'Failed to record payment');
       }
     }
   };
 
-  // compute viewed student's totals
   const viewedStudent = viewStudent === 'all' ? null : (students.find(s => s.id === viewStudent) || null);
   const studentTransactions = viewStudent === 'all'
     ? []
     : transactions.filter(t => t.studentId === viewStudent);
-  // When viewing all, still apply class/section filter to transactions list
+
   const filteredTransactionIds = useMemo(() => new Set(filteredStudents.map(s => s.id)), [filteredStudents]);
   const displayedTransactions = useMemo(() => {
     let txs = viewStudent === 'all'
@@ -310,6 +286,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     }
     return txs;
   }, [viewStudent, transactions, filteredTransactionIds, studentTransactions, filterDate]);
+
   const totalPaid = studentTransactions
     .filter(t => t.status !== 'cancelled')
     .reduce((sum, t) => sum + (t.amount || 0), 0);
@@ -324,14 +301,11 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
       const params = new URLSearchParams();
       if (exportStart) params.set('start', exportStart);
       if (exportEnd) params.set('end', exportEnd);
-      // Direct navigation gives browser native download handling & avoids blob memory
       const url = `/api/export/transactions/excel?${params.toString()}`;
-      // Use a temporary iframe to avoid leaving current page
       const iframe = document.createElement('iframe');
       iframe.style.display = 'none';
       iframe.src = url;
       document.body.appendChild(iframe);
-      // Cleanup after some seconds
       setTimeout(() => {
         iframe.remove();
       }, 10000);
@@ -342,8 +316,6 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     }
   };
 
-
-  const startEditing = (transaction: FeeTransaction) => { /* Placeholder if needed */ };
 
   const historyColumns: Column<FeeTransaction>[] = [
     { header: "Receipt Serial", accessorKey: "receiptSerial", cell: (t) => t.receiptSerial != null ? String(t.receiptSerial).padStart(4, '0') : '—', className: "font-mono text-sm", sortable: true },
@@ -505,11 +477,9 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                     </div>
                   </div>
 
-                  {/* Student Summary & Payment Form */}
                   {viewedStudent && (
                     <div className="border-t pt-6 mt-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* Summary Side */}
                         <div className="space-y-4">
                           <div className="mb-6 p-4 border rounded-lg bg-slate-50">
                             <h3 className="text-lg font-semibold mb-2">{viewedStudent.name}</h3>
@@ -524,7 +494,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                               </div>
                               <div>
                                 <span className="text-muted-foreground">Class:</span>
-                                <span className="ml-2 font-medium">{viewedStudent.grade} - {viewedStudent.section}</span>
+                                <span className="ml-2 font-medium">{formatClass(viewedStudent.grade, viewedStudent.section)}</span>
                               </div>
                             </div>
                           </div>
@@ -556,7 +526,6 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                           </div>
                         </div>
 
-                        {/* Payment Form Side */}
                         <div className="space-y-4 border-l pl-8">
                           <h3 className="text-lg font-semibold">Record New Payment</h3>
                           <form onSubmit={handleSubmit} className="space-y-4">
@@ -756,30 +725,14 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                 if (!transactionToCancel || !cancelReason) return;
                 setIsCancelling(true);
                 try {
-                  if (onCancelTransaction) {
-                    await onCancelTransaction(transactionToCancel.id, cancelReason);
-                    toast({ title: "Transaction cancelled" });
-                    setCancelDialogOpen(false);
-                  } else {
-                    // Fallback if prop not provided (shouldn't happen with updated App.tsx)
-                    const res = await fetch(`/api/fees/${transactionToCancel.id}/cancel`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        ...getAuthHeaders()
-                      },
-                      body: JSON.stringify({ reason: cancelReason })
-                    });
-
-                    if (res.ok) {
-                      toast({ title: "Transaction cancelled" });
-                      setCancelDialogOpen(false);
-                      window.location.reload();
-                    } else {
-                      const err = await res.json();
-                      toast({ title: "Failed to cancel", description: err.message, variant: "destructive" });
-                    }
-                  }
+                  await cancelTransaction.mutateAsync({
+                    id: transactionToCancel.id,
+                    reason: cancelReason
+                  });
+                  toast({ title: "Transaction cancelled" });
+                  setCancelDialogOpen(false);
+                  // No need to reload, React Query invalidates cache
+                  setTransactionToCancel(null);
                 } catch (e: any) {
                   toast({ title: "Error", description: e.message || "Network error", variant: "destructive" });
                 } finally {

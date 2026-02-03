@@ -18,36 +18,34 @@ import {
 import StudentFormModal from "./StudentFormModal";
 import StudentViewModal from "./StudentViewModal";
 import PromoteStudentModal from "./PromoteStudentModal";
-import type { Student, InsertStudent } from "@shared/schema";
+import type { Student, ExtendedStudent } from "@/types";
 import { getAuthHeaders, clearToken } from "@/lib/auth";
 import { sortGrades } from "@/lib/utils";
-
-type ExtendedStudent = Student & { yearlyFeeAmount?: string | number };
+import { useStudentMutations } from "@/hooks/use-student-mutations";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 interface StudentsPageProps {
-  students: ExtendedStudent[];
-  onAddStudent: (student: Omit<Student, 'id'>) => void;
-  onEditStudent: (id: string, student: Omit<Student, 'id'>) => void;
+  students: ExtendedStudent[]; // This prop comes from App.tsx which fetches 'students' via useQuery
   selectedSessionId?: string;
-  onStudentPromoted?: () => void;
-  onDeleteStudent: (id: string) => Promise<void> | void;
-  onMarkWithdrawn?: (admissionNumber: string, data: { reason: string }) => Promise<void>;
   isReadOnly?: boolean;
   sessions?: any[];
+  userRole?: string;
 }
 
 export default function StudentsPage({
-  students,
-  onAddStudent,
-  onEditStudent,
-  onDeleteStudent,
-  onMarkWithdrawn,
+  students, // This is the 'all' list from parent. Used when filterGrade != 'all' ??? No, used when manualPagination is FALSE?
+  // Actually, original logic uses 'activeData'. 'serverData' when paginated, 'students' when not?
+  // Let's preserve original logic.
   isReadOnly = false,
   sessions = [],
   selectedSessionId,
-  onStudentPromoted,
   userRole
-}: StudentsPageProps & { userRole?: string }) {
+}: StudentsPageProps) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { addStudent, updateStudent, deleteStudent, markWithdrawn } = useStudentMutations();
+
   // Existing State
   const [searchTerm, setSearchTerm] = useState("");
   const [filterGrade, setFilterGrade] = useState<string>("all");
@@ -72,29 +70,25 @@ export default function StudentsPage({
   useEffect(() => {
     // If we are filtering by Grade, we want to fetch ALL students for that class to enable client-side sorting.
     // Otherwise (Global view), we use server pagination.
-    const isClassView = filterGrade !== 'all';
+    // Original logic: const isClassView = filterGrade !== 'all';
+    // const effectiveLimit = isClassView ? 1000 : limit;
 
-    // We update the mode state here or derive it. 
-    // Let's update the effective limit.
-    const effectiveLimit = isClassView ? 1000 : limit;
-
-    // If switching to class view, reset page to 1?
-    // Actually, fetchPage handles the fetch. We just trigger it.
-
+    // We only fetch if server paginated is ON.
     if (!isServerPaginated) return;
 
     const fetchPage = async () => {
       setIsLoading(true);
       try {
         const params = new URLSearchParams();
-        params.append('page', page.toString()); // If class view, backend might ignore or we send 1
+        const effectiveLimit = (filterGrade !== 'all') ? 1000 : limit;
+
+        params.append('page', page.toString());
         params.append('limit', effectiveLimit.toString());
         if (selectedSessionId) params.append('sessionId', selectedSessionId);
 
-        // Pass filters to backend
         if (filterGrade !== 'all') params.append('grade', filterGrade);
         if (filterSection !== 'all') params.append('section', filterSection);
-        if (searchTerm) params.append('q', searchTerm); // If backend supports 'q'
+        if (searchTerm) params.append('q', searchTerm);
 
         const headers: any = { 'Content-Type': 'application/json', ...getAuthHeaders() };
 
@@ -127,25 +121,28 @@ export default function StudentsPage({
     };
 
     fetchPage();
-  }, [isServerPaginated, page, limit, selectedSessionId, filterGrade, filterSection, searchTerm, refreshTrigger]); // Added filters to dep array
+  }, [isServerPaginated, page, limit, selectedSessionId, filterGrade, filterSection, searchTerm, refreshTrigger]);
 
   const handleConfirmDelete = async () => {
     if (studentToDelete) {
-      await onDeleteStudent(studentToDelete);
-      setStudentToDelete(null);
-      // Trigger refresh
-      setRefreshTrigger(prev => prev + 1);
+      try {
+        await deleteStudent.mutateAsync(studentToDelete);
+        setStudentToDelete(null);
+        setRefreshTrigger(prev => prev + 1);
+        toast({ title: "Student deleted successfully" });
+      } catch (error: any) {
+        toast({ title: "Failed to delete student", description: error.message, variant: "destructive" });
+      }
     }
   };
 
-  // Determine active data
   const activeData = isServerPaginated ? serverData : students;
 
-  // Derive unique grades/sections from ALL students (props.students) to ensure filters are complete
-  const uniqueGrades = sortGrades(Array.from(new Set(students.map(s => s.grade))));
-  const uniqueSections = Array.from(new Set(students.map(s => s.section))).sort();
+  // Use props.students for unique filters to include everyone
+  const uniqueGrades = sortGrades(Array.from(new Set(students.map(s => s.grade || ""))));
+  const uniqueSections = Array.from(new Set(students.map(s => s.section || ""))).filter(Boolean).sort();
 
-  const filteredStudents = activeData.filter(student => {
+  const filteredStudents = (activeData || []).filter(student => {
     const q = searchTerm.trim().toLowerCase();
     const matchesSearch = q === '' || (
       student.name.toLowerCase().includes(q) ||
@@ -166,25 +163,20 @@ export default function StudentsPage({
     setIsModalOpen(true);
   };
 
-  const handleSave = (studentData: Omit<Student, 'id'>) => {
-    if (editingStudent) {
-      onEditStudent(editingStudent.id, studentData);
-    } else {
-      onAddStudent(studentData);
-    }
-    setIsModalOpen(false);
-    setEditingStudent(null);
-
-    // If in server mode, refresh current page slightly later to allow backend update
-    if (isServerPaginated) {
-      setTimeout(() => {
-        // trigger refetch by "mocking" a page update or we could add a version state
-        // For now, simpler to just force re-render or assume user refreshes if they don't see it?
-        // Actually, onAddStudent updates parent state, but that doesn't update serverData.
-        // We need to re-fetch.
-        setPage(p => p); // Trigger effect? No, value needs change.
-        // Let's add a refresh key
-      }, 500);
+  const handleSave = async (studentData: Omit<Student, 'id'>) => {
+    try {
+      if (editingStudent) {
+        await updateStudent.mutateAsync({ id: editingStudent.id, data: studentData });
+        toast({ title: "Student updated successfully" });
+      } else {
+        await addStudent.mutateAsync(studentData);
+        toast({ title: "Student added successfully" });
+      }
+      setIsModalOpen(false);
+      setEditingStudent(null);
+      setRefreshTrigger(prev => prev + 1);
+    } catch (error: any) {
+      toast({ title: "Operation failed", description: error.message, variant: "destructive" });
     }
   };
 
@@ -194,7 +186,6 @@ export default function StudentsPage({
   };
 
   const columns: Column<ExtendedStudent>[] = [
-
     { header: "Admission No.", accessorKey: "admissionNumber", className: "font-mono", sortable: true },
     { header: "Name", accessorKey: "name", className: "font-medium", sortable: true },
     { header: "Class", accessorKey: "grade", sortable: true },
@@ -228,7 +219,7 @@ export default function StudentsPage({
           >
             <Trash2 className="w-4 h-4" />
           </Button>
-          {onMarkWithdrawn && student.status !== 'left' && (
+          {student.status !== 'left' && (
             <Button
               variant="ghost"
               size="sm"
@@ -236,9 +227,14 @@ export default function StudentsPage({
                 const reason = window.prompt('Withdrawal reason (optional):', '');
                 if (reason === null) return;
                 try {
-                  await onMarkWithdrawn(student.admissionNumber, { reason: reason || '' });
+                  await markWithdrawn.mutateAsync({
+                    admissionNumber: student.admissionNumber,
+                    payload: { reason: reason || '' }
+                  });
+                  toast({ title: "Student marked as withdrawn" });
+                  setRefreshTrigger(prev => prev + 1);
                 } catch (e: any) {
-                  alert(e?.message || 'Failed to mark student as withdrawn');
+                  toast({ title: "Failed to mark student as withdrawn", description: e.message, variant: "destructive" });
                 }
               }}
               title="Mark as Withdrawn"
@@ -327,9 +323,6 @@ export default function StudentsPage({
         <DataTable
           columns={columns}
           data={filteredStudents}
-
-          // Pagination Props
-          // If filtering by Grade, we have all data (limit=1000), so we use CLIENT pagination (manual=false)
           manualPagination={filterGrade === 'all' && isServerPaginated}
           totalRows={filterGrade === 'all' && isServerPaginated ? serverTotal : undefined}
           pageSize={limit}
@@ -337,8 +330,6 @@ export default function StudentsPage({
             setPage(p);
             setLimit(l);
           }}
-
-          // Toggle Props
           enablePaginationToggle={true}
           isPaginationEnabled={isServerPaginated}
           onPaginationToggle={setIsServerPaginated}
@@ -369,7 +360,9 @@ export default function StudentsPage({
           targetSessionId={selectedSessionId}
           sessions={sessions}
           onSuccess={() => {
-            if (onStudentPromoted) onStudentPromoted();
+            // Invalidate queries to refresh list
+            queryClient.invalidateQueries({ queryKey: ['students'] });
+            setRefreshTrigger(p => p + 1);
           }}
         />
       )}

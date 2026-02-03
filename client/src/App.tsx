@@ -28,7 +28,6 @@ import { useStudents, useWithdrawnStudents, useFees, useGrades } from "./hooks/u
 import { useQueryClient } from "@tanstack/react-query";
 
 import type { Student } from "@shared/schema";
-import type { FeeTransaction } from "@/components/FeesPage";
 import type { GradeEntry } from "@/components/GradesPage";
 import { setToken, clearToken, getAuthHeaders } from "./lib/auth";
 
@@ -80,138 +79,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
   const { data: grades = [] } = useGrades(selectedSessionId);
   const [savingGrades, setSavingGrades] = useState(false);
 
-  const handleAddStudent = async (student: Omit<Student, 'id'>) => {
-    try {
-      const res = await fetch('/api/students', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify(student)
-      });
-      if (res.ok) {
-        // const created = await res.json();
-        // setStudents(prev => [...prev, created]);
-        queryClient.invalidateQueries({ queryKey: ['students'] });
-      }
-    } catch (e) { /* ignore */ }
-  };
-
-  const handleEditStudent = async (id: string, student: Omit<Student, 'id'>) => {
-    // need admissionNumber for PUT endpoint
-    const existing = students.find(s => s.id === id);
-
-    // Use different endpoint based on whether we have the student in current list
-    const endpoint = existing
-      ? `/api/students/${encodeURIComponent(existing.admissionNumber)}`
-      : `/api/students/by-id/${encodeURIComponent(id)}`;
-
-    try {
-      const res = await fetch(endpoint, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify(student)
-      });
-      if (res.ok) {
-        // const updated = await res.json();
-        // setStudents(prev => prev.map(s => s.id === id ? updated : s));
-        queryClient.invalidateQueries({ queryKey: ['students'] });
-      }
-    } catch (e) { /* ignore */ }
-  };
-
-  const handleDeleteStudent = async (id: string) => {
-    try {
-      const res = await fetch(`/api/students/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        queryClient.invalidateQueries({ queryKey: ['students'] });
-        toast({ title: "Student deleted successfully" });
-      } else {
-        const errorData = await res.json();
-        toast({
-          title: "Failed to delete student",
-          description: errorData.message || "Unknown error",
-          variant: "destructive"
-        });
-      }
-    } catch (e) {
-      toast({
-        title: "Delete failed",
-        description: "Network error",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleMarkWithdrawn = async (admissionNumber: string, payload: { leftDate?: string; reason?: string }) => {
-    try {
-      // Prefer professional alias; fall back to legacy path if needed
-      let res = await fetch(`/api/students/${encodeURIComponent(admissionNumber)}/withdraw`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ leftDate: payload.leftDate, reason: payload.reason })
-      });
-      if (!res.ok) {
-        res = await fetch(`/api/students/${encodeURIComponent(admissionNumber)}/leave`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-          body: JSON.stringify({ leftDate: payload.leftDate, reason: payload.reason })
-        });
-      }
-      if (!res.ok) {
-        const msg = await (async () => { try { const j = await res.json(); return j?.message; } catch { return ''; } })();
-        throw new Error(msg || 'Failed');
-      }
-
-      // const updated = await res.json();
-      // setStudents(prev => prev.filter(s => s.admissionNumber !== admissionNumber));
-      // setWithdrawnStudents(prev => [...prev, updated]);
-      queryClient.invalidateQueries({ queryKey: ['students'] });
-    } catch (e) {
-      // surface minimal alert
-      alert((e as any)?.message || 'Failed to mark as withdrawn');
-    }
-  };
-
-  const handleAddTransaction = async (transaction: Omit<FeeTransaction, 'id' | 'transactionId'>) => {
-    const res = await fetch('/api/fees', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify({
-        studentId: transaction.studentId,
-        amount: String(transaction.amount),
-        paymentDate: transaction.date,
-        paymentMode: transaction.paymentMode || 'cash',
-        remarks: transaction.remarks || '',
-        sessionId: selectedSessionId  // CRITICAL: Use session from navbar
-      })
-    });
-    if (!res.ok) {
-      const msg = await (async () => { try { const j = await res.json(); return j?.message || 'Failed to record payment'; } catch { return 'Failed to record payment'; } })();
-      throw new Error(msg);
-    }
-    const created = await res.json();
-    // Force refetch for the current session to ensure new transaction appears immediately
-    await queryClient.refetchQueries({ queryKey: ['fees', selectedSessionId] });
-    return created as FeeTransaction;
-  };
-
-  const handleCancelTransaction = async (id: string, reason: string) => {
-    const res = await fetch(`/api/fees/${id}/cancel`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify({ reason })
-    });
-    if (!res.ok) {
-      const msg = await (async () => { try { const j = await res.json(); return j?.message; } catch { return 'Failed to cancel'; } })();
-      throw new Error(msg);
-    }
-    // const result = await res.json();
-    // Update local state - merge changes to preserve camelCase fields (studentName etc)
-    // setTransactions(prev => prev.map(t => t.id === id ? { ...t, status: 'cancelled', cancelReason: reason } : t));
-    queryClient.invalidateQueries({ queryKey: ['fees'] });
-  };
+  // Note: Student and Fee mutations are now handled in their respective pages using hooks (useStudentMutations, useFeeMutations)
 
   const handleSaveGrades = async (newGrades: GradeEntry[]) => {
     setSavingGrades(true);
@@ -264,7 +132,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       const res = await fetch('/api/students/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ students: imported, strategy: 'skip', targetSessionId: targetSessionId === 'default' ? undefined : targetSessionId })
+        body: JSON.stringify({ students: imported, strategy: 'skip', targetSessionId: (targetSessionId && targetSessionId !== 'default') ? targetSessionId : selectedSessionId })
       });
       if (res.ok) {
         const summary = await res.json();
@@ -367,13 +235,8 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         <ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']} userRole={user.role}>
           <StudentsPage
             students={students}
-            onAddStudent={handleAddStudent}
-            onEditStudent={handleEditStudent}
-            onDeleteStudent={handleDeleteStudent}
-            onMarkWithdrawn={handleMarkWithdrawn}
             sessions={sessions}
             selectedSessionId={selectedSessionId}
-            onStudentPromoted={refetchStudents}
             userRole={user.role}
             isReadOnly={user.role === 'teacher'}
           />
@@ -422,8 +285,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
           <FeesPage
             students={students}
             transactions={transactions}
-            onAddTransaction={handleAddTransaction}
-            onCancelTransaction={handleCancelTransaction}
+            selectedSessionId={selectedSessionId}
           />
         </ProtectedRoute>
       </Route>
