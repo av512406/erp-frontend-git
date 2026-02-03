@@ -38,7 +38,7 @@ interface GradesPageProps {
 }
 
 import { useSchoolConfig } from "@/hooks/useSchoolConfig";
-import { sortGrades } from "@/lib/utils";
+import { sortGrades, formatClass } from "@/lib/utils";
 
 export default function GradesPage({ students, grades, onSaveGrades, saving = false }: GradesPageProps) {
   const { config } = useSchoolConfig();
@@ -55,8 +55,7 @@ export default function GradesPage({ students, grades, onSaveGrades, saving = fa
 
   // derive unique classes and sections from provided students
   const uniqueClasses = useMemo(() => (
-    sortGrades(Array.from(new Set(students.map(s => s.grade)))
-      .filter(Boolean))
+    sortGrades(Array.from(new Set(students.map(s => s.grade?.trim()).filter(Boolean))))
   ), [students]);
 
   const [sectionsForClass, setSectionsForClass] = useState<string[]>([]);
@@ -266,7 +265,7 @@ export default function GradesPage({ students, grades, onSaveGrades, saving = fa
                 </SelectTrigger>
                 <SelectContent>
                   {uniqueClasses.map(cls => (
-                    <SelectItem key={cls} value={cls}>{cls}</SelectItem>
+                    <SelectItem key={cls} value={cls}>{formatClass(cls)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

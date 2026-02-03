@@ -30,7 +30,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/auth";
 import { Loader2, Plus, Trash2, UserPlus } from "lucide-react";
-import { sortGrades } from "@/lib/utils";
+import { sortGrades, formatClass } from "@/lib/utils";
 
 interface ClassItem {
     id: string;
@@ -101,7 +101,7 @@ export default function AdminClassesPage() {
             const res = await fetch("/api/classes", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-                body: JSON.stringify({ grade: newGrade, section: newSection })
+                body: JSON.stringify({ grade: newGrade.trim(), section: newSection.trim() })
             });
 
             if (!res.ok) {
@@ -267,7 +267,7 @@ export default function AdminClassesPage() {
                         </DialogHeader>
                         <div className="space-y-4 pt-4">
                             <div className="space-y-2">
-                                <Label>Select Teacher for Class {selectedClass?.grade}-{selectedClass?.section}</Label>
+                                <Label>Select Teacher for {selectedClass ? formatClass(selectedClass.grade, selectedClass.section) : 'Class'}</Label>
                                 <Select value={selectedTeacherId} onValueChange={setSelectedTeacherId}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select a teacher" />

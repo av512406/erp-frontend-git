@@ -310,7 +310,7 @@ export default function StudentsPage({
               <SelectContent>
                 <SelectItem value="all">All sections</SelectItem>
                 {uniqueSections.map(s => (
-                  <SelectItem key={s} value={s}>Section {s}</SelectItem>
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

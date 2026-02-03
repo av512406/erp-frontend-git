@@ -365,6 +365,7 @@ export const staff = pgTable("staff", {
   joiningDate: date("joining_date"),
   status: text("status").notNull().default('active'), // active, inactive
   schoolId: varchar("school_id").notNull().references(() => schools.id),
+  sessionId: varchar("session_id").references(() => academicSessions.id), // Added as per requirement
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

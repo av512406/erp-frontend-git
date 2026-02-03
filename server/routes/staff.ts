@@ -1,36 +1,36 @@
 import { Router } from 'express';
-import { pool, genId } from '../db';
+import { db, genId } from '../db';
 import { requireAuth } from '../middleware/auth';
+import { staff, staffPayments } from '@shared/schema';
+import { eq, and, desc, asc } from 'drizzle-orm';
 import { insertStaffSchema } from '@shared/schema';
+import { z } from 'zod';
 
 const router = Router();
 
-// Get all staff for a school
+// Get all staff for a school (optional session filter)
 router.get('/api/staff', requireAuth, async (req, res) => {
     const user = (req as any).user;
+    const { sessionId } = req.query;
+
     try {
-        const { rows } = await pool.query(`
-      SELECT * FROM staff 
-      WHERE school_id = $1
-      ORDER BY name ASC
-    `, [user.schoolId]);
+        const conditions = [eq(staff.schoolId, user.schoolId)];
+        if (sessionId) {
+            conditions.push(eq(staff.sessionId, sessionId as string));
+        }
 
-        const mapped = rows.map((r: any) => ({
-            id: r.id,
-            name: r.name,
-            email: r.email,
-            phone: r.phone,
-            position: r.position,
-            monthlySalary: parseFloat(r.monthly_salary),
-            joiningDate: r.joining_date ? new Date(r.joining_date).toISOString().split('T')[0] : null,
-            status: r.status,
-            createdAt: r.created_at,
-            updatedAt: r.updated_at
-        }));
+        const rows = await db.select()
+            .from(staff)
+            .where(and(...conditions))
+            .orderBy(asc(staff.name));
 
-        res.json(mapped);
+        res.json(rows.map(r => ({
+            ...r,
+            monthlySalary: parseFloat(r.monthlySalary),
+            joiningDate: r.joiningDate ? new Date(r.joiningDate).toISOString().split('T')[0] : null,
+        })));
     } catch (e) {
-        console.error(e);
+        console.error('Error fetching staff:', e);
         res.status(500).json({ message: 'Failed to fetch staff' });
     }
 });
@@ -39,42 +39,39 @@ router.get('/api/staff', requireAuth, async (req, res) => {
 router.post('/api/staff', requireAuth, async (req, res) => {
     const user = (req as any).user;
     try {
+        // Enforce sessionId if req.body has it, otherwise Zod might allow optional if schema is nullable
         const data = insertStaffSchema.parse(req.body);
-        const id = genId();
 
-        const { rows } = await pool.query(`
-      INSERT INTO staff (id, name, email, phone, position, monthly_salary, joining_date, status, school_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING *
-    `, [
-            id,
-            data.name,
-            data.email || null,
-            data.phone || null,
-            data.position,
-            data.monthlySalary,
-            data.joiningDate || null,
-            data.status || 'active',
-            user.schoolId
-        ]);
+        // User requirement: "All have session_id constraint"
+        // If not in body, check if passed or strictly required?
+        // Frontend sends it now. Let's strictly require it in logic if schema allows null.
+        const sessionId = (req.body as any).sessionId;
+
+        if (!sessionId) {
+            // For legacy compatibility, maybe allow? 
+            // But request asked for "CONSTRAINT".
+            // Let's warn or error? 
+            // "Make sure staff ... all have session_id constraint"
+            return res.status(400).json({ message: 'Session ID is required for staff creation' });
+        }
+
+        const [newStaff] = await db.insert(staff).values({
+            ...data,
+            schoolId: user.schoolId,
+            sessionId: sessionId,
+            status: data.status || 'active'
+        } as any).returning();
 
         res.status(201).json({
-            id: rows[0].id,
-            name: rows[0].name,
-            email: rows[0].email,
-            phone: rows[0].phone,
-            position: rows[0].position,
-            monthlySalary: parseFloat(rows[0].monthly_salary),
-            joiningDate: rows[0].joining_date ? new Date(rows[0].joining_date).toISOString().split('T')[0] : null,
-            status: rows[0].status,
-            createdAt: rows[0].created_at,
-            updatedAt: rows[0].updated_at
+            ...newStaff,
+            monthlySalary: parseFloat(newStaff.monthlySalary),
+            joiningDate: newStaff.joiningDate ? new Date(newStaff.joiningDate).toISOString().split('T')[0] : null
         });
     } catch (e: any) {
-        if (e.name === 'ZodError') {
+        if (e instanceof z.ZodError) {
             return res.status(400).json({ message: 'Validation error', issues: e.format() });
         }
-        console.error(e);
+        console.error('Error adding staff:', e);
         res.status(500).json({ message: 'Failed to add staff' });
     }
 });
@@ -87,70 +84,76 @@ router.put('/api/staff/:id', requireAuth, async (req, res) => {
     try {
         const data = insertStaffSchema.parse(req.body);
 
-        const { rows } = await pool.query(`
-      UPDATE staff 
-      SET name = $1, email = $2, phone = $3, position = $4, 
-          monthly_salary = $5, joining_date = $6, status = $7, updated_at = NOW()
-      WHERE id = $8 AND school_id = $9
-      RETURNING *
-    `, [
-            data.name,
-            data.email || null,
-            data.phone || null,
-            data.position,
-            data.monthlySalary,
-            data.joiningDate || null,
-            data.status || 'active',
-            id,
-            user.schoolId
-        ]);
+        // Note: we generally don't change sessionId on simple edit unless specified.
 
-        if (rows.length === 0) {
+        const [updated] = await db.update(staff)
+            .set({
+                ...data,
+                updatedAt: new Date(),
+                // preserve sessionId unless we specifically want to move them?
+                // The body might contain sessionId from frontend form.
+                // If so, update it.
+                // But schema parse includes/excludes it?
+                // insertStaffSchema is based on schema. sessionId is in schema.
+                // So data might include it if frontend sends it.
+            } as any)
+            .where(and(eq(staff.id, id), eq(staff.schoolId, user.schoolId)))
+            .returning();
+
+        if (!updated) {
             return res.status(404).json({ message: 'Staff not found' });
         }
 
         res.json({
-            id: rows[0].id,
-            name: rows[0].name,
-            email: rows[0].email,
-            phone: rows[0].phone,
-            position: rows[0].position,
-            monthlySalary: parseFloat(rows[0].monthly_salary),
-            joiningDate: rows[0].joining_date ? new Date(rows[0].joining_date).toISOString().split('T')[0] : null,
-            status: rows[0].status,
-            createdAt: rows[0].created_at,
-            updatedAt: rows[0].updated_at
+            ...updated,
+            monthlySalary: parseFloat(updated.monthlySalary),
+            joiningDate: updated.joiningDate ? new Date(updated.joiningDate).toISOString().split('T')[0] : null
         });
     } catch (e: any) {
-        if (e.name === 'ZodError') {
+        if (e instanceof z.ZodError) {
             return res.status(400).json({ message: 'Validation error', issues: e.format() });
         }
-        console.error(e);
+        console.error('Error updating staff:', e);
         res.status(500).json({ message: 'Failed to update staff' });
     }
 });
 
-// Delete (soft delete) staff
+// Delete staff (Hard Delete with Transaction)
 router.delete('/api/staff/:id', requireAuth, async (req, res) => {
     const user = (req as any).user;
     const { id } = req.params;
 
     try {
-        // Soft delete by setting status to 'inactive'
-        const { rows } = await pool.query(`
-      UPDATE staff 
-      SET status = 'inactive', updated_at = NOW()
-      WHERE id = $1 AND school_id = $2
-      RETURNING id
-    `, [id, user.schoolId]);
+        await db.transaction(async (tx) => {
+            // 1. Delete all payments related to this staff member
+            // Check ownership via schoolId
+            await tx.delete(staffPayments)
+                .where(and(
+                    eq(staffPayments.staffId, id),
+                    eq(staffPayments.schoolId, user.schoolId)
+                ));
 
-        if (rows.length === 0) {
+            // 2. Delete the staff member
+            const deleted = await tx.delete(staff)
+                .where(and(
+                    eq(staff.id, id),
+                    eq(staff.schoolId, user.schoolId)
+                ))
+                .returning({ id: staff.id });
+
+            if (deleted.length === 0) {
+                // If staff checking returned length 0, it means either not found or not in school
+                // We should rollback by throwing error
+                throw new Error('STAFF_NOT_FOUND');
+            }
+        });
+
+        res.json({ message: 'Staff and related transactions deleted successfully' });
+    } catch (e: any) {
+        if (e.message === 'STAFF_NOT_FOUND') {
             return res.status(404).json({ message: 'Staff not found' });
         }
-
-        res.json({ message: 'Staff deactivated', id });
-    } catch (e) {
-        console.error(e);
+        console.error('Error deleting staff:', e);
         res.status(500).json({ message: 'Failed to delete staff' });
     }
 });

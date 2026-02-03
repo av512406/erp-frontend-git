@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/auth";
-import { sortGrades } from "@/lib/utils";
+import { sortGrades, formatClass } from "@/lib/utils";
 
 export interface FeeTransaction {
   id: string;
@@ -127,18 +127,18 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
   }, [students, transactions]);
 
   const uniquePendingClasses = useMemo(() => {
-    return sortGrades(Array.from(new Set(studentsWithPendingFees.map(s => s.grade))).filter(Boolean));
+    return sortGrades(Array.from(new Set(studentsWithPendingFees.map(s => s.grade?.trim()))).filter(Boolean) as string[]);
   }, [studentsWithPendingFees]);
 
   const uniquePendingSections = useMemo(() => {
-    const pool = pendingFilterClass === 'all' ? studentsWithPendingFees : studentsWithPendingFees.filter(s => s.grade === pendingFilterClass);
-    return Array.from(new Set(pool.map(s => s.section))).sort();
+    const pool = pendingFilterClass === 'all' ? studentsWithPendingFees : studentsWithPendingFees.filter(s => s.grade?.trim() === pendingFilterClass);
+    return Array.from(new Set(pool.map(s => s.section?.trim()))).filter(Boolean).sort() as string[];
   }, [studentsWithPendingFees, pendingFilterClass]);
 
   const filteredPendingStudents = useMemo(() => {
     return studentsWithPendingFees.filter(s => {
-      const classMatch = pendingFilterClass === 'all' || s.grade === pendingFilterClass;
-      const sectionMatch = pendingFilterSection === 'all' || s.section === pendingFilterSection;
+      const classMatch = pendingFilterClass === 'all' || s.grade?.trim() === pendingFilterClass;
+      const sectionMatch = pendingFilterSection === 'all' || s.section?.trim() === pendingFilterSection;
       return classMatch && sectionMatch;
     });
   }, [studentsWithPendingFees, pendingFilterClass, pendingFilterSection]);
@@ -229,7 +229,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
     setAvailableSections([]);
     if (!filterGrade || filterGrade === 'all') return;
 
-    fetch(`/ api / classes / ${encodeURIComponent(filterGrade)}/sections`, { headers: getAuthHeaders() })
+    fetch(`/api/classes/${encodeURIComponent(filterGrade)}/sections`, { headers: getAuthHeaders() })
       .then(res => res.ok ? res.json() : [])
       .then(data => setAvailableSections(data.sort()))
       .catch(() => setAvailableSections([]));
@@ -468,7 +468,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                         <SelectContent>
                           <SelectItem value="all">All classes</SelectItem>
                           {availableGrades.map(g => (
-                            <SelectItem key={g} value={g}>{g}</SelectItem>
+                            <SelectItem key={g} value={g}>{formatClass(g)}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -482,7 +482,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                         <SelectContent>
                           <SelectItem value="all">All sections</SelectItem>
                           {availableSections.map(sec => (
-                            <SelectItem key={sec} value={sec}>Section {sec}</SelectItem>
+                            <SelectItem key={sec} value={sec}>{sec}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -689,7 +689,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                       <SelectContent>
                         <SelectItem value="all">All Classes</SelectItem>
                         {uniquePendingClasses.map(c => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                          <SelectItem key={c} value={c}>{formatClass(c)}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -703,7 +703,7 @@ export default function FeesPage({ students, transactions, onAddTransaction, onC
                       <SelectContent>
                         <SelectItem value="all">All Sections</SelectItem>
                         {uniquePendingSections.map(s => (
-                          <SelectItem key={s} value={s}>Section {s}</SelectItem>
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

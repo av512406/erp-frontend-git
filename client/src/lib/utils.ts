@@ -38,4 +38,6 @@ export function sortGrades(grades: string[]) {
   });
 }
 
-
+export function formatClass(grade: string, section?: string) {
+  return section ? `${grade} - ${section}` : `${grade}`;
+}

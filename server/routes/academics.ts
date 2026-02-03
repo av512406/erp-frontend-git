@@ -125,9 +125,12 @@ router.post('/api/classes', requireAuth, async (req, res) => {
     try {
         const data = insertClassSchema.parse(req.body);
 
+        const grade = data.grade.trim();
+        const section = data.section.trim();
+
         const exists = await pool.query(
             'SELECT 1 FROM classes WHERE grade = $1 AND section = $2 AND school_id = $3',
-            [data.grade, data.section, user.schoolId]
+            [grade, section, user.schoolId]
         );
         if (exists.rowCount && exists.rowCount > 0) {
             return res.status(409).json({ message: 'Class already exists' });
@@ -136,7 +139,7 @@ router.post('/api/classes', requireAuth, async (req, res) => {
         const id = genId();
         await pool.query(
             'INSERT INTO classes (id, grade, section, class_teacher_id, school_id) VALUES ($1, $2, $3, $4, $5)',
-            [id, data.grade, data.section, data.classTeacherId || null, user.schoolId]
+            [id, grade, section, data.classTeacherId || null, user.schoolId]
         );
 
         res.status(201).json({ message: 'Class created' });
@@ -238,23 +241,7 @@ router.get('/api/classes/grades', requireAuth, async (req, res) => {
         [user.schoolId]
     );
 
-    let rows = classRes.rows;
-
-    // Fallback if no classes are defined: use existing student data
-    if (rows.length === 0) {
-        const fallbackRes = await pool.query(`
-        SELECT DISTINCT grade FROM (
-            SELECT grade FROM students WHERE grade IS NOT NULL AND school_id = $1
-            UNION
-            SELECT grade FROM class_subjects WHERE school_id = $1
-        ) t
-        WHERE grade IS NOT NULL AND grade <> ''
-        ORDER BY grade
-        `, [user.schoolId]);
-        rows = fallbackRes.rows;
-    }
-
-    res.json(rows.map(r => r.grade));
+    res.json(classRes.rows.map(r => r.grade));
 });
 
 router.get('/api/classes/:grade/sections', requireAuth, async (req, res) => {
@@ -263,24 +250,10 @@ router.get('/api/classes/:grade/sections', requireAuth, async (req, res) => {
 
     // Use classes table as source of truth
     const classRes = await pool.query(
-        `SELECT DISTINCT section FROM classes WHERE school_id = $1 AND grade = $2 ORDER BY section`,
+        `SELECT DISTINCT section FROM classes WHERE school_id = $1 AND TRIM(grade) = TRIM($2) ORDER BY section`,
         [user.schoolId, grade]
     );
-    let rows = classRes.rows;
-
-    // Fallback if no classes defined
-    if (rows.length === 0) {
-        const fallbackRes = await pool.query(`
-        SELECT DISTINCT section FROM (
-            SELECT section FROM students WHERE grade=$2 AND school_id=$1
-            UNION
-            SELECT section FROM student_sessions WHERE grade=$2 AND school_id=$1
-        ) t WHERE section IS NOT NULL AND section <> '' ORDER BY section
-       `, [user.schoolId, grade]);
-        rows = fallbackRes.rows;
-    }
-
-    res.json(rows.map(r => r.section));
+    res.json(classRes.rows.map(r => r.section));
 });
 
 router.get('/api/classes/:grade/subjects', requireAuth, async (req, res) => {

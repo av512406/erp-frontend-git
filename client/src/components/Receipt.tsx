@@ -3,6 +3,7 @@ import { schoolConfig, nextReceiptSerial } from '@/lib/schoolConfig';
 import { useSchoolConfig } from '@/hooks/useSchoolConfig';
 import { amountToIndianWords } from '@/lib/amountWords';
 import { createRoot } from 'react-dom/client';
+import { formatClass } from '@/lib/utils';
 
 export interface ReceiptItem {
 	label: string;
@@ -50,7 +51,7 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 	const ordered = DEFAULT_ORDER.map(label => ({ label, amount: map[label] ?? 0 }));
 	const total = ordered.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
 	const amountWords = amountToIndianWords(total);
-	const cls = [student.grade ? `Class ${student.grade}` : '', student.section ? `Section ${student.section}` : ''].filter(Boolean).join(' ');
+	const cls = formatClass(student.grade || '', student.section);
 	const sessionValue = session || config.session;
 
 	// Two copies (Student & Office) share same data; differentiate by copy label.
@@ -211,7 +212,7 @@ function buildPlainHtml(props: ReceiptProps): string {
 	const ordered = DEFAULT_ORDER.map(label => ({ label, amount: map[label] ?? 0 }));
 	const total = ordered.reduce((s, r) => s + r.amount, 0);
 	const words = amountToIndianWords(total);
-	const cls = [props.student.grade ? `Class ${props.student.grade}` : '', props.student.section ? `Section ${props.student.section}` : ''].filter(Boolean).join(' ');
+	const cls = formatClass(props.student.grade || '', props.student.section);
 	const copies = ['Student Copy', 'Office Copy'];
 	const showSummary = typeof props.yearlyFeeAmount === 'number' && typeof props.paidSoFar === 'number';
 	const remaining = showSummary ? (typeof props.remainingFee === 'number' ? props.remainingFee : ((props.yearlyFeeAmount! + (props.previousYearDue || 0)) - props.paidSoFar!)) : undefined;

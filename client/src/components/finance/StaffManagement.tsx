@@ -22,7 +22,11 @@ interface Staff {
     status: string;
 }
 
-export function StaffManagement() {
+interface StaffManagementProps {
+    selectedSessionId: string;
+}
+
+export function StaffManagement({ selectedSessionId }: StaffManagementProps) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -39,10 +43,11 @@ export function StaffManagement() {
     });
 
     // Fetch all staff
+    // Note: If staff are session-specific, we should add sessionId to queryKey and fetch URL query param
     const { data: staffList = [], isLoading } = useQuery<Staff[]>({
-        queryKey: ['staff'],
+        queryKey: ['staff', selectedSessionId],
         queryFn: async () => {
-            const res = await fetch('/api/staff', { headers: getAuthHeaders() });
+            const res = await fetch(`/api/staff?sessionId=${selectedSessionId}`, { headers: getAuthHeaders() });
             if (!res.ok) throw new Error('Failed to fetch staff');
             return res.json();
         }
@@ -54,10 +59,12 @@ export function StaffManagement() {
             const url = editingStaff ? `/api/staff/${editingStaff.id}` : '/api/staff';
             const method = editingStaff ? 'PUT' : 'POST';
 
+            const payload = { ...data, sessionId: selectedSessionId };
+
             const res = await fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                body: JSON.stringify(data)
+                body: JSON.stringify(payload)
             });
             if (!res.ok) {
                 const error = await res.json();

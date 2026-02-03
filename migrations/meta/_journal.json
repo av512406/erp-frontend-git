@@ -50,6 +50,13 @@
       "when": 1769880943000,
       "tag": "0006_thick_albert_cleary",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1770083949169,
+      "tag": "0007_lovely_dexter_bennett",
+      "breakpoints": true
     }
   ]
 }

@@ -140,8 +140,8 @@ router.get('/api/students', requireAuth, async (req, res) => {
 
             const mapped = rows.map(({ student, session }) => ({
                 ...mapStudent(student),
-                grade: session.grade,
-                section: session.section,
+                grade: session.grade?.trim(),
+                section: session.section?.trim(),
                 status: session.status,
                 rollNumber: session.rollNumber,
                 transportFee: session.transportFee || '0',
@@ -294,8 +294,8 @@ router.post('/api/students', requireAuth, async (req, res) => {
                 aaparId: data.aaparId,
                 mobileNumber: data.mobileNumber,
                 address: data.address,
-                grade: data.grade,
-                section: data.section,
+                grade: data.grade?.trim(),
+                section: data.section?.trim(),
                 fatherName: (data as any).fatherName,
                 motherName: (data as any).motherName,
                 status: 'active',
@@ -319,8 +319,8 @@ router.post('/api/students', requireAuth, async (req, res) => {
             await tx.insert(studentSessions).values({
                 studentId: newStudent.id,
                 sessionId: sessionId,
-                grade: data.grade,
-                section: data.section,
+                grade: data.grade?.trim(),
+                section: data.section?.trim(),
                 status: 'active',
                 schoolId: user.schoolId,
                 transportFee: finalTransportFee,
@@ -408,8 +408,8 @@ router.put('/api/students/:admissionNumber', requireAuth, async (req, res) => {
                     isRTE: isRteBool
                 };
 
-                if (data.grade) sessionUpdate.grade = data.grade;
-                if (data.section) sessionUpdate.section = data.section;
+                if (data.grade) sessionUpdate.grade = data.grade.trim();
+                if (data.section) sessionUpdate.section = data.section.trim();
 
                 await tx.update(studentSessions)
                     .set(sessionUpdate)

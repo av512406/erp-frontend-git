@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Printer } from "lucide-react";
 import type { Student } from '@shared/schema';
 import { schoolConfig } from '@/lib/schoolConfig';
+import { formatClass } from '@/lib/utils';
 import { GovtStandardTemplate } from './GovtStandardTemplate';
 import { SchoolDetails, StudentTCDetails } from '../types';
 
@@ -40,7 +41,7 @@ export function TransferCertificateModal({ open, onClose, student }: TransferCer
                 casteCategory: student.category || 'General',
                 dateOfAdmission: student.admissionDate ? new Date(student.admissionDate).toLocaleDateString('en-GB') : '',
                 classAdmitted: '', // info not always available in basic student record
-                currentClass: `${student.grade} - ${student.section}`,
+                currentClass: formatClass(student.grade || '', student.section),
                 lastExamResult: 'Passed',
                 qualifiedForPromotion: 'Yes',
                 subjectsStudied: 'English, Hindi, Mathematics, Science, Social Science',

@@ -40,7 +40,7 @@ export default function FinancePage({ selectedSessionId }: FinancePageProps) {
                 <TabsContent value="staff" className="space-y-4">
                     <Card>
                         <CardContent className="pt-6">
-                            <StaffManagement />
+                            <StaffManagement selectedSessionId={selectedSessionId} />
                         </CardContent>
                     </Card>
                 </TabsContent>
