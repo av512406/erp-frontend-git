@@ -102,16 +102,18 @@ router.get('/api/students', requireAuth, async (req, res) => {
             // Fetch Page
             const rows = await db.select({
                 student: students,
-                session: studentSessions
+                session: studentSessions,
+                academicSession: academicSessions
             })
                 .from(students)
                 .innerJoin(studentSessions, eq(students.id, studentSessions.studentId))
+                .leftJoin(academicSessions, eq(studentSessions.sessionId, academicSessions.id))
                 .where(whereClause)
                 .orderBy(studentSessions.grade, studentSessions.section, students.name)
                 .limit(limit)
                 .offset(offset);
 
-            const mapped = rows.map(({ student, session }) => ({
+            const mapped = rows.map(({ student, session, academicSession }) => ({
                 ...mapStudent(student),
                 // Overlay session specific data
                 grade: session.grade,
@@ -120,7 +122,8 @@ router.get('/api/students', requireAuth, async (req, res) => {
                 rollNumber: session.rollNumber,
                 transportFee: session.transportFee || '0',
                 yearlyFeeAmount: session.yearlyFeeAmount || '0',
-                isRTE: session.isRTE || false
+                isRTE: session.isRTE || false,
+                sessionName: academicSession?.name || ''
             }));
 
             return res.json({
@@ -131,14 +134,16 @@ router.get('/api/students', requireAuth, async (req, res) => {
             // No Pagination
             const rows = await db.select({
                 student: students,
-                session: studentSessions
+                session: studentSessions,
+                academicSession: academicSessions
             })
                 .from(students)
                 .innerJoin(studentSessions, eq(students.id, studentSessions.studentId))
+                .leftJoin(academicSessions, eq(studentSessions.sessionId, academicSessions.id))
                 .where(whereClause)
                 .orderBy(studentSessions.grade, studentSessions.section, students.name);
 
-            const mapped = rows.map(({ student, session }) => ({
+            const mapped = rows.map(({ student, session, academicSession }) => ({
                 ...mapStudent(student),
                 grade: session.grade?.trim(),
                 section: session.section?.trim(),
@@ -146,7 +151,8 @@ router.get('/api/students', requireAuth, async (req, res) => {
                 rollNumber: session.rollNumber,
                 transportFee: session.transportFee || '0',
                 yearlyFeeAmount: session.yearlyFeeAmount || '0',
-                isRTE: session.isRTE || false
+                isRTE: session.isRTE || false,
+                sessionName: academicSession?.name || ''
             }));
 
             res.json(mapped);

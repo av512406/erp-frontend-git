@@ -7,7 +7,8 @@ import { getToken } from '@/lib/auth';
 
 interface StudentsExcelExportModalProps {
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
+  students: any[]; // added missing prop definition to avoid TS errors if strict
 }
 
 const COLUMN_OPTIONS: { key: string; label: string; default?: boolean }[] = [
@@ -29,12 +30,14 @@ const COLUMN_OPTIONS: { key: string; label: string; default?: boolean }[] = [
   { key: 'mobileNumber', label: 'Mobile Number' },
   { key: 'address', label: 'Address' },
   { key: 'yearlyFeeAmount', label: 'Yearly Fee Amount' },
+  { key: 'transportFee', label: 'Transport Fee' },
+  { key: 'isRTE', label: 'RTE Status' },
   { key: 'status', label: 'Student Status (Global)' },
   { key: 'leftDate', label: 'Left Date' },
   { key: 'leavingReason', label: 'Leaving Reason' }
 ];
 
-export default function StudentsExcelExportModal({ open, onClose }: StudentsExcelExportModalProps) {
+export default function StudentsExcelExportModal({ open, onOpenChange }: StudentsExcelExportModalProps) {
   const [selected, setSelected] = useState<string[]>(COLUMN_OPTIONS.filter(c => c.default).map(c => c.key));
   const allSelected = selected.length === COLUMN_OPTIONS.length;
 
@@ -58,11 +61,11 @@ export default function StudentsExcelExportModal({ open, onClose }: StudentsExce
     // Direct navigation is more robust for downloads than hidden iframes
     window.location.href = url;
 
-    onClose();
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Export Students (Excel)</DialogTitle>
@@ -88,7 +91,7 @@ export default function StudentsExcelExportModal({ open, onClose }: StudentsExce
             </div>
           </ScrollArea>
           <div className="flex justify-end gap-2 mt-2">
-            <Button variant="outline" onClick={onClose} data-testid="button-cancel-students-excel">Cancel</Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel-students-excel">Cancel</Button>
             <Button onClick={handleExport} data-testid="button-confirm-students-excel">Export {selected.length ? `(${selected.length})` : ''}</Button>
           </div>
           <p className="text-xs text-muted-foreground">File downloads as a real .xlsx Excel workbook (compatible with Excel / LibreOffice).</p>

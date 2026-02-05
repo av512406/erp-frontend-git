@@ -79,7 +79,9 @@ router.get('/api/export/students/excel', requireAuth, async (req, res) => {
             sessionName: { header: 'Session Name', expr: 'acs.name' },
             sessionGrade: { header: 'Session Class', expr: 'ss.grade' },
             sessionSection: { header: 'Session Section', expr: 'ss.section' },
-            sessionStatus: { header: 'Session Status', expr: 'ss.status' }
+            sessionStatus: { header: 'Session Status', expr: 'ss.status' },
+            transportFee: { header: 'Transport Fee', expr: 'ss.transport_fee', transform: v => v?.toString?.() ?? v },
+            isRTE: { header: 'RTE Status', expr: 'ss.is_rte', transform: v => v ? 'Yes' : 'No' }
         };
 
         const finalCols = (requested.length ? requested : Object.keys(allowedMap)).filter(c => allowedMap[c]);
@@ -144,7 +146,8 @@ router.get('/api/export/students/excel', requireAuth, async (req, res) => {
         const buf = Buffer.from(arrayBuffer);
         const filename = `students-${finalCols.length}-cols-${new Date().toISOString().split('T')[0]}.xlsx`;
 
-        res.attachment(filename);
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.send(buf);
     } catch (e: any) {
         console.error('students excel export error', e);

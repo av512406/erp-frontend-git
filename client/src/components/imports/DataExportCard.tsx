@@ -21,7 +21,7 @@ export function DataExportCard({ students, onOpenExcelExport }: DataExportCardPr
         }
 
         const csvContent = [
-            ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'previousYearDue', 'category', 'gender', 'session', 'isRTE'].join(','),
+            ['admissionNumber', 'name', 'fatherName', 'motherName', 'dateOfBirth', 'admissionDate', 'aadharNumber', 'penNumber', 'aaparId', 'mobileNumber', 'address', 'class', 'section', 'yearlyFeeAmount', 'transportFee', 'previousYearDue', 'category', 'gender', 'session', 'isRTE'].join(','),
             ...rteStudents.map(s => [
                 s.admissionNumber,
                 `"${(s.name || '').replace(/"/g, '""')}"`,
@@ -36,7 +36,8 @@ export function DataExportCard({ students, onOpenExcelExport }: DataExportCardPr
                 `"${(s.address || '').replace(/"/g, '""')}"`,
                 s.grade,
                 s.section,
-                '0', // RTE implies 0 fee
+                '0', // RTE implies 0 tuition fee
+                (s as any).transportFee || '0', // Include Transport Fee
                 (s as any).previousYearDue || '0',
                 (s as any).category || 'GEN',
                 (s as any).gender || '',
