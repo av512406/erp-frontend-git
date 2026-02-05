@@ -253,7 +253,7 @@ router.put('/api/schools/:id', requireAuth, async (req, res) => {
             if (logoUrl !== undefined) { updates.push(`logo_url = $${idx++}`); values.push(logoUrl); }
             if (examPattern) { updates.push(`exam_pattern = $${idx++}`); values.push(JSON.stringify(examPattern)); }
             if (newSessionId) { updates.push(`current_session_id = $${idx++}`); values.push(newSessionId); }
-            if (req.body.features) { updates.push(`features = $${idx++}`); values.push(JSON.stringify(req.body.features)); }
+            if (isSuperAdmin && req.body.features) { updates.push(`features = $${idx++}`); values.push(JSON.stringify(req.body.features)); }
 
             updates.push(`updated_at = now()`);
             values.push(id);
