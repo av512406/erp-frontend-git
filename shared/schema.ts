@@ -77,6 +77,7 @@ export const insertStudentSchema = createInsertSchema(students).omit({
   yearlyFeeAmount: z.string().optional(),
   transportFee: z.string().optional(),
   session: z.string().optional(),
+  sessionId: z.string().optional(),
   sessionName: z.string().optional(),
   isRTE: z.boolean().optional().or(z.string().optional()) // Allow boolean or string "true"/"yes" for import
 });

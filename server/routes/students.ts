@@ -123,6 +123,7 @@ router.get('/api/students', requireAuth, async (req, res) => {
                 transportFee: session.transportFee || '0',
                 yearlyFeeAmount: session.yearlyFeeAmount || '0',
                 isRTE: session.isRTE || false,
+                sessionId: session.sessionId,
                 sessionName: academicSession?.name || ''
             }));
 
@@ -152,6 +153,7 @@ router.get('/api/students', requireAuth, async (req, res) => {
                 transportFee: session.transportFee || '0',
                 yearlyFeeAmount: session.yearlyFeeAmount || '0',
                 isRTE: session.isRTE || false,
+                sessionId: session.sessionId,
                 sessionName: academicSession?.name || ''
             }));
 
