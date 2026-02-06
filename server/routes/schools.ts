@@ -25,7 +25,7 @@ router.get('/api/school-config', requireAuth, async (req, res) => {
 
     try {
         const { rows } = await pool.query(`
-        SELECT s.id, s.name, s.slug, s.address, s.phone, s.logo_url as "logoUrl", s.exam_pattern as "examPattern", s.features, ac.name as "session"
+        SELECT s.id, s.name, s.slug, s.address, s.phone, s.email, s.logo_url as "logoUrl", s.exam_pattern as "examPattern", s.features, ac.name as "session"
         FROM schools s
         LEFT JOIN academic_sessions ac ON s.current_session_id = ac.id
         WHERE s.id = $1
@@ -76,7 +76,7 @@ router.post('/api/schools', requireAuth, async (req, res) => {
 
     const client = await pool.connect();
     try {
-        const { name, slug, address, phone, logoUrl, examPattern } = req.body;
+        const { name, slug, address, phone, email, logoUrl, examPattern } = req.body;
         // Basic validation
         if (!name || !slug) return res.status(400).json({ message: 'Name and Slug are required' });
 
@@ -88,8 +88,8 @@ router.post('/api/schools', requireAuth, async (req, res) => {
         const featuresStr = req.body.features ? JSON.stringify(req.body.features) : '{"attendance": false}';
 
         const q = await client.query(
-            'INSERT INTO schools (id, name, slug, address, phone, logo_url, exam_pattern, features) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-            [id, name, slug, address, phone, logoUrl, patternStr, featuresStr]
+            'INSERT INTO schools (id, name, slug, address, phone, email, logo_url, exam_pattern, features) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+            [id, name, slug, address, phone, email, logoUrl, patternStr, featuresStr]
         );
 
         // Create a default admin for this school
@@ -199,7 +199,7 @@ router.put('/api/schools/:id', requireAuth, async (req, res) => {
 
     try {
         const { id } = req.params;
-        const { name, slug, address, phone, logoUrl, examPattern, session } = req.body;
+        const { name, slug, address, phone, email, logoUrl, examPattern, session } = req.body;
 
         const client = await pool.connect();
         try {
@@ -250,6 +250,7 @@ router.put('/api/schools/:id', requireAuth, async (req, res) => {
             if (slug) { updates.push(`slug = $${idx++}`); values.push(slug); }
             if (address) { updates.push(`address = $${idx++}`); values.push(address); }
             if (phone) { updates.push(`phone = $${idx++}`); values.push(phone); }
+            if (email) { updates.push(`email = $${idx++}`); values.push(email); }
             if (logoUrl !== undefined) { updates.push(`logo_url = $${idx++}`); values.push(logoUrl); }
             if (examPattern) { updates.push(`exam_pattern = $${idx++}`); values.push(JSON.stringify(examPattern)); }
             if (newSessionId) { updates.push(`current_session_id = $${idx++}`); values.push(newSessionId); }

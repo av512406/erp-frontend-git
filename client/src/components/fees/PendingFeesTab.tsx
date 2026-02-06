@@ -14,9 +14,10 @@ interface PendingFeesTabProps {
     transactions: FeeTransaction[];
     schoolName: string;
     smsEnabled: boolean;
+    sessionName: string;
 }
 
-export default function PendingFeesTab({ students, transactions, schoolName, smsEnabled }: PendingFeesTabProps) {
+export default function PendingFeesTab({ students, transactions, schoolName, smsEnabled, sessionName }: PendingFeesTabProps) {
     const { toast } = useToast();
     const {
         filteredPendingStudents,
@@ -55,7 +56,7 @@ export default function PendingFeesTab({ students, transactions, schoolName, sms
                     fatherName: s.fatherName || '',
                     grade: s.grade,
                     section: s.section,
-                    phone: (s as any).phone || '',
+                    phone: s.mobileNumber || '',
                     yearly: s.yearly,
                     transport: (s as any).transportFee || 0,
                     previousDue: s.previousDue,
@@ -64,14 +65,29 @@ export default function PendingFeesTab({ students, transactions, schoolName, sms
                 });
             });
 
-            worksheet.getRow(1).font = { bold: true };
+            // Insert Header Rows
+            worksheet.insertRow(1, ['']);
+            worksheet.insertRow(1, [`Session: ${sessionName}`]);
+            worksheet.insertRow(1, [schoolName]);
+
+            // Style Main Header
+            const titleRow = worksheet.getRow(1);
+            titleRow.font = { bold: true, size: 14 };
+            worksheet.mergeCells('A1:E1');
+
+            const sessionRow = worksheet.getRow(2);
+            sessionRow.font = { bold: true, size: 12 };
+            worksheet.mergeCells('A2:E2');
+
+            // Style Column Headers (now at row 4)
+            worksheet.getRow(4).font = { bold: true };
 
             const buffer = await workbook.xlsx.writeBuffer();
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `pending-fees-${pendingFilterClass}-${pendingFilterSection}-${new Date().toISOString().split('T')[0]}.xlsx`;
+            a.download = `pending-fees-${sessionName.replace('/', '-')}-${pendingFilterClass}-${pendingFilterSection}.xlsx`;
             a.click();
             window.URL.revokeObjectURL(url);
         } catch (e) {

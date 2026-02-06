@@ -9,6 +9,7 @@ export const schools = pgTable("schools", {
   slug: text("slug").notNull().unique(),
   address: text("address"),
   phone: text("phone"),
+  email: text("email"),
   logoUrl: text("logo_url"),
   isActive: boolean("is_active").default(true),
   currentSessionId: varchar("current_session_id"),

@@ -48,8 +48,7 @@ export const Receipt: React.FC<ReceiptProps> = ({ student, items, paymentDate, s
 	// Normalize item list into ordered rows
 	const map: Record<string, number> = {};
 	items.forEach(i => { map[i.label] = i.amount; });
-	const ordered = DEFAULT_ORDER.map(label => ({ label, amount: map[label] ?? 0 }))
-		.filter(item => item.amount > 0);
+	const ordered = DEFAULT_ORDER.map(label => ({ label, amount: map[label] ?? 0 }));
 	const total = ordered.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
 	const amountWords = amountToIndianWords(total);
 	const cls = formatClass(student.grade || '', student.section);

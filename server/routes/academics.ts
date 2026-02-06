@@ -279,12 +279,8 @@ router.post('/api/classes/:grade/sync-all', requireAuth, async (req, res) => {
             return res.status(400).json({ message: 'no subjects assigned to source class' });
         }
         const gradesRes = await client.query(`
-        SELECT DISTINCT grade FROM (
-          SELECT grade FROM students WHERE grade IS NOT NULL AND school_id=$1
-          UNION
-          SELECT grade FROM class_subjects WHERE school_id=$1
-        ) t WHERE grade IS NOT NULL AND grade <> ''
-      `, [user.schoolId]);
+            SELECT DISTINCT grade FROM classes WHERE school_id=$1
+        `, [user.schoolId]);
         const allGrades: string[] = gradesRes.rows.map((r: any) => r.grade);
         let inserted = 0;
         for (const g of allGrades) {

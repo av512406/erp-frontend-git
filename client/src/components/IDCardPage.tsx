@@ -318,7 +318,7 @@ export default function IDCardPage({ students }: IDCardPageProps) {
                                         style={{ borderColor: themeColor }}
                                     >
                                         {photoUrl ? (
-                                            <img src={photoUrl} className="w-full h-full object-cover" alt="Student" />
+                                            <img src={photoUrl} className="w-full h-full object-cover object-top" alt="Student" />
                                         ) : (
                                             <span className="text-gray-300 text-4xl">?</span>
                                         )}

@@ -24,9 +24,10 @@ import { REPORT_TEMPLATES, getTemplateById } from '@/lib/documentTemplates';
 interface ReportsPageProps {
   students: Student[];
   grades: GradeEntry[];
+  sessionName?: string;
 }
 
-export default function ReportsPage({ students, grades }: ReportsPageProps) {
+export default function ReportsPage({ students, grades, sessionName }: ReportsPageProps) {
   const { config, updateConfig } = useSchoolConfig();
   const TERMS = config.examPattern || ['Term 1', 'Term 2', 'Final'];
   const { data: customTemplate } = useDocumentTemplate('report_card');
@@ -337,7 +338,7 @@ export default function ReportsPage({ students, grades }: ReportsPageProps) {
     // Replacements
     let html = templateContent;
     html = html.replace(/{{term}}/g, escapeHtml(selectedTerm));
-    html = html.replace(/{{session}}/g, escapeHtml(schoolConfig.session));
+    html = html.replace(/{{session}}/g, escapeHtml(sessionName || schoolConfig.session));
     html = html.replace(/{{schoolName}}/g, escapeHtml(schoolConfig.name));
     html = html.replace(/{{schoolAddress}}/g, escapeHtml(schoolConfig.address));
     html = html.replace(/{{schoolPhone}}/g, escapeHtml(schoolConfig.phone));

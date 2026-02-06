@@ -17,7 +17,7 @@ export function formatCurrency(amount: number) {
 // Sort grades numerically/logically: Play, LKG, UKG, 1, 2, ... 10, 11, 12
 export function sortGrades(grades: string[]) {
   const order: Record<string, number> = {
-    'play': -3, 'playgroup': -3,
+    'play': -3, 'playgroup': -3, 'pre-nursery': -3, 'nursery': -2.5,
     'lkg': -2, 'pp1': -2,
     'ukg': -1, 'pp2': -1,
   };

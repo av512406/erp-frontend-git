@@ -27,12 +27,13 @@ interface PaymentEntryTabProps {
     students: Student[];
     transactions: FeeTransaction[];
     selectedSessionId: string;
+    sessionName: string;
     userRole?: string;
     filterDate: string | null;
     setFilterDate: (date: string | null) => void;
 }
 
-export default function PaymentEntryTab({ students, transactions, selectedSessionId, userRole, filterDate, setFilterDate }: PaymentEntryTabProps) {
+export default function PaymentEntryTab({ students, transactions, selectedSessionId, sessionName, userRole, filterDate, setFilterDate }: PaymentEntryTabProps) {
     const { toast } = useToast();
     const { addTransaction, cancelTransaction } = useFeeMutations();
 
@@ -322,7 +323,7 @@ export default function PaymentEntryTab({ students, transactions, selectedSessio
                                                 </div>
                                                 <div className="p-4 bg-muted rounded-lg">
                                                     <p className="text-sm text-muted-foreground">Total Paid</p>
-                                                    <p className="text-2xl font-bold">₹{totalPaid.toLocaleString('en-IN')}</p>
+                                                    <p className="text-2xl font-bold text-green-600">₹{totalPaid.toLocaleString('en-IN')}</p>
                                                 </div>
                                                 <div className="p-4 bg-muted rounded-lg">
                                                     <p className="text-sm text-muted-foreground">Transport Fee</p>
@@ -449,6 +450,7 @@ export default function PaymentEntryTab({ students, transactions, selectedSessio
                 yearlyFeeAmount={distributionTx ? parseFloat(String((students.find(s => s.id === distributionTx.studentId) as any)?.yearlyFeeAmount || '0')) : undefined}
                 previousYearDue={distributionTx ? parseFloat(String((students.find(s => s.id === distributionTx.studentId) as any)?.previousYearDue || '0')) : undefined}
                 paidSoFar={distributionTx ? (transactions.filter(t => t.studentId === distributionTx.studentId && t.status !== 'cancelled').reduce((sum, t) => sum + (t.amount || 0), 0)) : undefined}
+                sessionName={sessionName}
             />
 
             <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>

@@ -54,6 +54,7 @@ export function useSchoolConfig() {
         phone: payload.phone ?? currentConfig.phone,
         session: payload.session ?? currentConfig.session,
         logoUrl: logoUrl ?? currentConfig.logoUrl,
+        email: payload.email ?? currentConfig.email,
         examPattern: payload.examPattern ?? currentConfig.examPattern,
         features: payload.features ?? currentConfig.features
       };

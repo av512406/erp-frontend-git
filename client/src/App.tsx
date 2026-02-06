@@ -286,6 +286,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
             students={students}
             transactions={transactions}
             selectedSessionId={selectedSessionId}
+            sessionName={sessions.find(s => s.id === selectedSessionId)?.name || ''}
           />
         </ProtectedRoute>
       </Route>
@@ -319,7 +320,11 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       </Route>
       <Route path="/reports">
         <ProtectedRoute allowedRoles={['admin', 'superadmin']} userRole={user.role}>
-          <ReportsPage students={students} grades={grades} />
+          <ReportsPage
+            students={students}
+            grades={grades}
+            sessionName={sessions.find(s => s.id === selectedSessionId)?.name}
+          />
         </ProtectedRoute>
       </Route>
       <Route path="/admin-settings">

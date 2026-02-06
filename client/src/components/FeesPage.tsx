@@ -11,10 +11,11 @@ interface FeesPageProps {
   students: Student[];
   transactions: FeeTransaction[];
   selectedSessionId: string;
+  sessionName: string;
   userRole?: string;
 }
 
-export default function FeesPage({ students, transactions, selectedSessionId, userRole = 'admin' }: FeesPageProps) {
+export default function FeesPage({ students, transactions, selectedSessionId, sessionName, userRole = 'admin' }: FeesPageProps) {
   const { toast } = useToast();
   const [location] = useLocation();
   const [filterDate, setFilterDate] = useState<string | null>(null);
@@ -83,6 +84,7 @@ export default function FeesPage({ students, transactions, selectedSessionId, us
             students={students}
             transactions={transactions}
             selectedSessionId={selectedSessionId}
+            sessionName={sessionName}
             userRole={userRole}
             filterDate={filterDate}
             setFilterDate={setFilterDate}
@@ -95,6 +97,7 @@ export default function FeesPage({ students, transactions, selectedSessionId, us
             transactions={transactions}
             schoolName={schoolName}
             smsEnabled={smsEnabled}
+            sessionName={sessionName}
           />
         </TabsContent>
       </Tabs>

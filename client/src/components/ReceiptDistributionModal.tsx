@@ -4,8 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { printReceipt } from './Receipt';
-import type { FeeTransaction } from './FeesPage';
-import type { Student } from '@shared/schema';
+import type { Student, FeeTransaction } from '@/types';
 import { schoolConfig } from '@/lib/schoolConfig';
 
 const CATEGORY_ORDER = [
@@ -28,9 +27,10 @@ interface ReceiptDistributionModalProps {
   yearlyFeeAmount?: number;
   previousYearDue?: number;
   paidSoFar?: number; // cumulative INCLUDING current transaction
+  sessionName?: string;
 }
 
-export default function ReceiptDistributionModal({ open, onClose, transaction, student, yearlyFeeAmount, previousYearDue, paidSoFar }: ReceiptDistributionModalProps) {
+export default function ReceiptDistributionModal({ open, onClose, transaction, student, yearlyFeeAmount, previousYearDue, paidSoFar, sessionName }: ReceiptDistributionModalProps) {
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState(false);
   const [receiptSerial, setReceiptSerial] = useState<number | undefined>(transaction?.receiptSerial);
@@ -110,7 +110,7 @@ export default function ReceiptDistributionModal({ open, onClose, transaction, s
       student: { name: student.name, fatherName: (student as any).fatherName || '', grade: student.grade, section: student.section, admissionNumber: student.admissionNumber },
       paymentDate: transaction.date.slice(0, 10),
       items,
-      session: schoolConfig.session,
+      session: sessionName || schoolConfig.session,
       copies: 1,
       serial: serialToUse,
       yearlyFeeAmount: typeof yearlyFeeAmount === 'number' ? yearlyFeeAmount : undefined,
