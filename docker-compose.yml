@@ -6,7 +6,7 @@ services:
     # ports:
     #   - "5000:5000" # Exposed via Nginx now
     environment:
-      - DATABASE_URL=postgresql://school_erp:school_erp_pass@postgres:5432/school_erp
+      - DATABASE_URL=${DATABASE_URL}
       - PORT=${PORT}
       - NODE_ENV=${NODE_ENV}
       - SESSION_SECRET=${SESSION_SECRET}
@@ -51,7 +51,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U school_erp"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -64,9 +64,9 @@ services:
     restart: unless-stopped
     environment:
       - POSTGRES_HOST=postgres
-      - POSTGRES_USER=school_erp
-      - POSTGRES_DB=school_erp
-      - PGPASSWORD=school_erp_pass
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - PGPASSWORD=${POSTGRES_PASSWORD}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION}
