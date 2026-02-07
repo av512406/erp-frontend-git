@@ -229,7 +229,8 @@ export default function StudentsPage({
                 try {
                   await markWithdrawn.mutateAsync({
                     admissionNumber: student.admissionNumber,
-                    payload: { reason: reason || '' }
+                    payload: { reason: reason || '' },
+                    sessionId: selectedSessionId
                   });
                   toast({ title: "Student marked as withdrawn" });
                   setRefreshTrigger(prev => prev + 1);

@@ -758,7 +758,7 @@ router.put('/api/students/:admissionNumber/withdraw', requireAuth, async (req, r
     const client = await pool.connect();
     try {
         const admissionNumber = req.params.admissionNumber;
-        const { leftDate, reason } = req.body as { leftDate?: string; reason?: string };
+        const { leftDate, reason, sessionId } = req.body as { leftDate?: string; reason?: string; sessionId?: string };
 
         await client.query('BEGIN');
 
@@ -771,15 +771,19 @@ router.put('/api/students/:admissionNumber/withdraw', requireAuth, async (req, r
         const dateToSet = leftDate || new Date().toISOString().slice(0, 10);
         const q = await client.query('UPDATE students SET status=$1, left_date=$2, leaving_reason=$3 WHERE admission_number=$4 AND school_id=$5 RETURNING *', ['left', dateToSet, reason || null, admissionNumber, user.schoolId]);
 
-        // Sync to current session
+        // Sync to target session (provided or current)
         const studentId = q.rows[0].id;
-        const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
-        const currentSessionId = schoolRes.rows[0]?.current_session_id;
+        let targetSessionId = sessionId;
 
-        if (currentSessionId) {
+        if (!targetSessionId) {
+            const schoolRes = await client.query('SELECT current_session_id FROM schools WHERE id = $1', [user.schoolId]);
+            targetSessionId = schoolRes.rows[0]?.current_session_id;
+        }
+
+        if (targetSessionId) {
             await client.query(
                 `UPDATE student_sessions SET status = 'left' WHERE student_id = $1 AND session_id = $2`,
-                [studentId, currentSessionId]
+                [studentId, targetSessionId]
             );
         }
 

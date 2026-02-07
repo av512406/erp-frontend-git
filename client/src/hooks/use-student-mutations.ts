@@ -72,12 +72,12 @@ export function useStudentMutations() {
     });
 
     const markWithdrawn = useMutation({
-        mutationFn: async ({ admissionNumber, payload }: { admissionNumber: string; payload: { leftDate?: string; reason?: string } }) => {
+        mutationFn: async ({ admissionNumber, payload, sessionId }: { admissionNumber: string; payload: { leftDate?: string; reason?: string }; sessionId?: string }) => {
             // Try preferred endpoint first
             let res = await fetch(`/api/students/${encodeURIComponent(admissionNumber)}/withdraw`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({ ...payload, sessionId })
             });
 
             // Fallback
