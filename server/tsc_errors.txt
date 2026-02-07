@@ -1,0 +1,43 @@
+../client/src/App.tsx(237,13): error TS2322: Type '{ address: string; section: string; id: string; name: string; status: string; admissionNumber: string; dateOfBirth: string; admissionDate: string; aadharNumber: string; penNumber: string; aaparId: string; ... 12 more ...; schoolId: string; }[]' is not assignable to type 'ExtendedStudent[]'.
+  Type '{ address: string; section: string; id: string; name: string; status: string; admissionNumber: string; dateOfBirth: string; admissionDate: string; aadharNumber: string; penNumber: string; aaparId: string; ... 12 more ...; schoolId: string; }' is not assignable to type 'ExtendedStudent'.
+    Types of property 'previousYearDue' are incompatible.
+      Type 'string | null' is not assignable to type 'number | undefined'.
+        Type 'null' is not assignable to type 'number | undefined'.
+../client/src/App.tsx(300,13): error TS2322: Type '(imported: GradeEntry[]) => Promise<void>' is not assignable to type '(grades: GradeEntry[]) => void | Promise<void>'.
+  Types of parameters 'imported' and 'grades' are incompatible.
+    Type 'import("/mnt/sda7/18Nov_erp_frontend_git/erp-frontend-git/client/src/types/index").GradeEntry[]' is not assignable to type 'import("/mnt/sda7/18Nov_erp_frontend_git/erp-frontend-git/client/src/components/GradesPage").GradeEntry[]'.
+      Type 'import("/mnt/sda7/18Nov_erp_frontend_git/erp-frontend-git/client/src/types/index").GradeEntry' is not assignable to type 'import("/mnt/sda7/18Nov_erp_frontend_git/erp-frontend-git/client/src/components/GradesPage").GradeEntry'.
+        Types of property 'marks' are incompatible.
+          Type 'string | number' is not assignable to type 'number'.
+            Type 'string' is not assignable to type 'number'.
+../client/src/App.tsx(316,11): error TS2322: Type 'import("/mnt/sda7/18Nov_erp_frontend_git/erp-frontend-git/client/src/types/index").GradeEntry[]' is not assignable to type 'import("/mnt/sda7/18Nov_erp_frontend_git/erp-frontend-git/client/src/components/GradesPage").GradeEntry[]'.
+  Type 'import("/mnt/sda7/18Nov_erp_frontend_git/erp-frontend-git/client/src/types/index").GradeEntry' is not assignable to type 'import("/mnt/sda7/18Nov_erp_frontend_git/erp-frontend-git/client/src/components/GradesPage").GradeEntry'.
+    Types of property 'marks' are incompatible.
+      Type 'string | number' is not assignable to type 'number'.
+        Type 'string' is not assignable to type 'number'.
+../client/src/components/PayslipModal.tsx(9,15): error TS2614: Module '"./FeesPage"' has no exported member 'FeeTransaction'. Did you mean to use 'import FeeTransaction from "./FeesPage"' instead?
+../client/src/components/StudentsPage.tsx(325,11): error TS2322: Type '({ address: string; section: string; id: string; name: string; status: string; admissionNumber: string; dateOfBirth: string; admissionDate: string; aadharNumber: string; penNumber: string; aaparId: string; ... 12 more ...; schoolId: string; } | ExtendedStudent)[]' is not assignable to type 'ExtendedStudent[]'.
+  Type '{ address: string; section: string; id: string; name: string; status: string; admissionNumber: string; dateOfBirth: string; admissionDate: string; aadharNumber: string; penNumber: string; aaparId: string; ... 12 more ...; schoolId: string; } | ExtendedStudent' is not assignable to type 'ExtendedStudent'.
+    Type '{ address: string; section: string; id: string; name: string; status: string; admissionNumber: string; dateOfBirth: string; admissionDate: string; aadharNumber: string; penNumber: string; aaparId: string; ... 12 more ...; schoolId: string; }' is not assignable to type 'ExtendedStudent'.
+      Types of property 'previousYearDue' are incompatible.
+        Type 'string | null' is not assignable to type 'number | undefined'.
+          Type 'null' is not assignable to type 'number | undefined'.
+../client/src/components/imports/GradeImportCard.tsx(30,20): error TS2339: Property 'Papa' does not exist on type 'Window & typeof globalThis'.
+../client/src/components/imports/StudentImportCard.tsx(40,20): error TS2339: Property 'Papa' does not exist on type 'Window & typeof globalThis'.
+../client/src/components/imports/StudentImportCard.tsx(93,64): error TS2345: Argument of type 'RawStudentRow[]' is not assignable to parameter of type 'Omit<{ address: string; section: string; id: string; name: string; status: string; admissionNumber: string; dateOfBirth: string; admissionDate: string; aadharNumber: string; penNumber: string; aaparId: string; ... 12 more ...; schoolId: string; }, "id">[]'.
+  Type 'RawStudentRow' is missing the following properties from type 'Omit<{ address: string; section: string; id: string; name: string; status: string; admissionNumber: string; dateOfBirth: string; admissionDate: string; aadharNumber: string; penNumber: string; aaparId: string; ... 12 more ...; schoolId: string; }, "id">': status, leftDate, leavingReason, nationality, and 3 more.
+../client/src/components/imports/TransactionImportCard.tsx(31,20): error TS2339: Property 'Papa' does not exist on type 'Window & typeof globalThis'.
+../client/src/types/index.ts(27,18): error TS2430: Interface 'ExtendedStudent' incorrectly extends interface '{ address: string; section: string; id: string; name: string; status: string; admissionNumber: string; dateOfBirth: string; admissionDate: string; aadharNumber: string; penNumber: string; aaparId: string; ... 12 more ...; schoolId: string; }'.
+  Types of property 'previousYearDue' are incompatible.
+    Type 'number | undefined' is not assignable to type 'string | null'.
+      Type 'undefined' is not assignable to type 'string | null'.
+routes/staff.ts(27,27): error TS7006: Parameter 'r' implicitly has an 'any' type.
+routes/staff.ts(127,37): error TS7006: Parameter 'tx' implicitly has an 'any' type.
+routes/students.ts(116,40): error TS7031: Binding element 'student' implicitly has an 'any' type.
+routes/students.ts(116,49): error TS7031: Binding element 'session' implicitly has an 'any' type.
+routes/students.ts(116,58): error TS7031: Binding element 'academicSession' implicitly has an 'any' type.
+routes/students.ts(147,40): error TS7031: Binding element 'student' implicitly has an 'any' type.
+routes/students.ts(147,49): error TS7031: Binding element 'session' implicitly has an 'any' type.
+routes/students.ts(147,58): error TS7031: Binding element 'academicSession' implicitly has an 'any' type.
+routes/students.ts(278,52): error TS7006: Parameter 'tx' implicitly has an 'any' type.
+routes/students.ts(388,58): error TS7006: Parameter 'tx' implicitly has an 'any' type.

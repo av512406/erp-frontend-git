@@ -40,3 +40,4 @@ fix_*.cjs
 fix_*.ts
 sync_*.cjs
 db_schema.html
+local_documentation/

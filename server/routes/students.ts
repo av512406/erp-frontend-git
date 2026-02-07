@@ -113,7 +113,7 @@ router.get('/api/students', requireAuth, async (req, res) => {
                 .limit(limit)
                 .offset(offset);
 
-            const mapped = rows.map(({ student, session, academicSession }) => ({
+            const mapped = rows.map(({ student, session, academicSession }: any) => ({
                 ...mapStudent(student),
                 // Overlay session specific data
                 grade: session.grade,
@@ -144,7 +144,7 @@ router.get('/api/students', requireAuth, async (req, res) => {
                 .where(whereClause)
                 .orderBy(studentSessions.grade, studentSessions.section, students.name);
 
-            const mapped = rows.map(({ student, session, academicSession }) => ({
+            const mapped = rows.map(({ student, session, academicSession }: any) => ({
                 ...mapStudent(student),
                 grade: session.grade?.trim(),
                 section: session.section?.trim(),
@@ -275,7 +275,7 @@ router.post('/api/students', requireAuth, async (req, res) => {
             });
         }
 
-        const result = await db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx: any) => {
             // Check for existing admission number
             const exists = await tx.select({ id: students.id })
                 .from(students)
@@ -385,7 +385,7 @@ router.put('/api/students/:admissionNumber', requireAuth, async (req, res) => {
         // Filter out session fields from student data
         const { yearlyFeeAmount, transportFee, session, sessionName, sessionId, isRTE, ...studentFields } = data as any;
 
-        const updateResult = await db.transaction(async (tx) => {
+        const updateResult = await db.transaction(async (tx: any) => {
             let updatedStudent = existingStudent;
 
             // Update Students Table if there are fields

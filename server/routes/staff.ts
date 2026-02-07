@@ -24,7 +24,7 @@ router.get('/api/staff', requireAuth, async (req, res) => {
             .where(and(...conditions))
             .orderBy(asc(staff.name));
 
-        res.json(rows.map(r => ({
+        res.json(rows.map((r: any) => ({
             ...r,
             monthlySalary: parseFloat(r.monthlySalary),
             joiningDate: r.joiningDate ? new Date(r.joiningDate).toISOString().split('T')[0] : null,
@@ -124,7 +124,7 @@ router.delete('/api/staff/:id', requireAuth, async (req, res) => {
     const { id } = req.params;
 
     try {
-        await db.transaction(async (tx) => {
+        await db.transaction(async (tx: any) => {
             // 1. Delete all payments related to this staff member
             // Check ownership via schoolId
             await tx.delete(staffPayments)
