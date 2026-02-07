@@ -104,6 +104,7 @@ router.get('/api/staff-payments/:staffId', requireAuth, async (req, res) => {
     const user = (req as any).user;
     try {
         const { staffId } = req.params;
+        const { sessionId } = req.query;
 
         // Verify staff belongs to this school
         const staffCheck = await pool.query(
@@ -116,11 +117,20 @@ router.get('/api/staff-payments/:staffId', requireAuth, async (req, res) => {
         }
 
         // Fetch all payments for this staff member
-        const { rows } = await pool.query(`
-      SELECT * FROM staff_payments 
-      WHERE staff_id = $1 AND school_id = $2
-      ORDER BY payment_date DESC, created_at DESC
-    `, [staffId, user.schoolId]);
+        let query = `
+            SELECT * FROM staff_payments 
+            WHERE staff_id = $1 AND school_id = $2
+        `;
+        const params: any[] = [staffId, user.schoolId];
+
+        if (sessionId) {
+            query += ` AND session_id = $3`;
+            params.push(sessionId);
+        }
+
+        query += ` ORDER BY payment_date DESC, created_at DESC`;
+
+        const { rows } = await pool.query(query, params);
 
         const payments = rows.map(r => ({
             ...r,
@@ -145,6 +155,8 @@ router.get('/api/staff-payments/:staffId', requireAuth, async (req, res) => {
 router.get('/api/staff-salary-summary', requireAuth, async (req, res) => {
     const user = (req as any).user;
     try {
+        const { sessionId } = req.query; // Added sessionId param
+
         // Fetch all staff
         const staffRes = await pool.query(`
       SELECT s.id, s.name, s.monthly_salary, s.phone, s.position, s.email
@@ -153,16 +165,30 @@ router.get('/api/staff-salary-summary', requireAuth, async (req, res) => {
       ORDER BY s.name
     `, [user.schoolId]);
 
-        // Fetch payment totals and last payment for current year
+        // Fetch payment totals and last payment
+        // LEGACY: If no sessionId, use current year (fallback)
+        // NEW: If sessionId, filter by session_id in staff_payments
+
         const currentYear = new Date().getFullYear();
 
         const summary = await Promise.all(staffRes.rows.map(async (s: any) => {
-            // Get total payments this year
-            const ytdRes = await pool.query(`
-        SELECT SUM(amount) as total, MAX(payment_date) as last_payment
-        FROM staff_payments
-        WHERE staff_id = $1 AND school_id = $2 AND year = $3
-      `, [s.id, user.schoolId, currentYear.toString()]);
+            let ytdRes;
+
+            if (sessionId) {
+                // Filter by Session
+                ytdRes = await pool.query(`
+                    SELECT SUM(amount) as total, MAX(payment_date) as last_payment
+                    FROM staff_payments
+                    WHERE staff_id = $1 AND school_id = $2 AND session_id = $3
+                `, [s.id, user.schoolId, sessionId]);
+            } else {
+                // Filter by Calendar Year (Legacy fallback)
+                ytdRes = await pool.query(`
+                    SELECT SUM(amount) as total, MAX(payment_date) as last_payment
+                    FROM staff_payments
+                    WHERE staff_id = $1 AND school_id = $2 AND year = $3
+                `, [s.id, user.schoolId, currentYear.toString()]);
+            }
 
             const ytdTotal = parseFloat(ytdRes.rows[0]?.total || '0');
             const lastPayment = ytdRes.rows[0]?.last_payment;

@@ -91,13 +91,23 @@ router.post('/api/grades', requireAuth, async (req, res) => {
                     }
                 }
 
-                const exists = await client.query('SELECT id FROM grades WHERE student_id=$1 AND subject=$2 AND term=$3 AND school_id=$4', [data.studentId, data.subject, data.term, user.schoolId]);
+                // CRITICAL: Scope by sessionId to prevent overwriting grades from other sessions
+                let query = 'SELECT id FROM grades WHERE student_id=$1 AND subject=$2 AND term=$3 AND school_id=$4';
+                const params: any[] = [data.studentId, data.subject, data.term, user.schoolId];
+
+                if (sessionId) {
+                    query += ' AND session_id=$5';
+                    params.push(sessionId);
+                } else {
+                    query += ' AND session_id IS NULL';
+                }
+
+                const exists = await client.query(query, params);
 
                 if ((exists.rowCount ?? 0) > 0) {
                     await client.query('UPDATE grades SET marks=$1 WHERE id=$2', [data.marks, exists.rows[0].id]);
                 } else {
                     const id = genId();
-                    // Use sessionId from request if provided, otherwise set to null
                     await client.query('INSERT INTO grades (id, student_id, subject, marks, term, school_id, session_id) VALUES ($1,$2,$3,$4,$5,$6,$7)', [id, data.studentId, data.subject, data.marks, data.term, user.schoolId, sessionId || null]);
                 }
                 keys.push({ studentId: data.studentId, subject: data.subject, term: data.term });

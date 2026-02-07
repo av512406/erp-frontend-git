@@ -24,7 +24,7 @@ import AttendancePage from "@/components/AttendancePage";
 import IDCardPage from "@/components/IDCardPage";
 import FinancePage from "@/pages/FinancePage";
 
-import { useStudents, useWithdrawnStudents, useFees, useGrades } from "./hooks/use-queries";
+import { useStudents, useWithdrawnStudents, useFees, useGrades, useAttendanceStats } from "./hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 
 import type { Student } from "@shared/schema";
@@ -77,6 +77,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
   const { data: withdrawnStudents = [] } = useWithdrawnStudents(selectedSessionId);
   const { data: transactions = [] } = useFees(selectedSessionId);
   const { data: grades = [] } = useGrades(selectedSessionId);
+  const { data: attendanceStats } = useAttendanceStats(selectedSessionId);
   const [savingGrades, setSavingGrades] = useState(false);
 
   // Note: Student and Fee mutations are now handled in their respective pages using hooks (useStudentMutations, useFeeMutations)
@@ -213,7 +214,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
         .reduce((sum, t) => sum + (t.amount || 0), 0);
     })(),
     gradesEntered: grades.length,
-    avgAttendance: 95,
+    avgAttendance: attendanceStats?.averageAttendance || 0,
   };
 
   return (

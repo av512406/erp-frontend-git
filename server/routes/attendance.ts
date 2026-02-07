@@ -274,4 +274,33 @@ router.post('/api/attendance', requireAuth, requireFeature('attendance'), async 
     }
 });
 
+router.get('/api/attendance/stats', requireAuth, requireFeature('attendance'), async (req, res) => {
+    const user = (req as any).user;
+    const { sessionId } = req.query;
+
+    if (!sessionId) return res.status(400).json({ message: 'sessionId is required' });
+
+    try {
+        const query = `
+        SELECT 
+          COUNT(*) FILTER (WHERE status = 'Present') as present_count,
+          COUNT(*) as total_marked
+        FROM attendance
+        WHERE school_id = $1 AND session_id = $2
+      `;
+
+        const { rows } = await pool.query(query, [user.schoolId, sessionId]);
+        const stats = rows[0];
+        const total = parseInt(stats.total_marked || '0');
+        const present = parseInt(stats.present_count || '0');
+
+        const percentage = total > 0 ? ((present / total) * 100).toFixed(1) : '0.0';
+
+        res.json({ averageAttendance: parseFloat(percentage) });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ message: 'Failed to fetch attendance stats' });
+    }
+});
+
 export const attendanceRouter = router;

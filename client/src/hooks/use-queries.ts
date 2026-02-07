@@ -69,3 +69,15 @@ export function useGrades(sessionId?: string) {
         }
     });
 }
+export function useAttendanceStats(sessionId?: string) {
+    return useQuery<{ averageAttendance: number }>({
+        queryKey: ['attendance', 'stats', sessionId],
+        queryFn: async () => {
+            const queryParams = sessionId ? `?sessionId=${sessionId}` : '';
+            const res = await fetch(`/api/attendance/stats${queryParams}`, { headers: getAuthHeaders() });
+            if (!res.ok) throw new Error('Failed to fetch attendance stats');
+            return res.json();
+        },
+        enabled: !!sessionId
+    });
+}

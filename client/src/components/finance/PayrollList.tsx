@@ -57,9 +57,9 @@ export function PayrollList({ selectedSessionId }: PayrollListProps) {
 
     // Fetch all staff with summary
     const { data: staffList = [], isLoading } = useQuery<StaffSummary[]>({
-        queryKey: ['staff-salary-summary'], // Global staff summary
+        queryKey: ['staff-salary-summary', selectedSessionId], // Global staff summary
         queryFn: async () => {
-            const res = await fetch('/api/staff-salary-summary', { headers: getAuthHeaders() });
+            const res = await fetch(`/api/staff-salary-summary?sessionId=${selectedSessionId}`, { headers: getAuthHeaders() });
             if (!res.ok) throw new Error('Failed to fetch staff');
             return res.json();
         }
@@ -67,10 +67,10 @@ export function PayrollList({ selectedSessionId }: PayrollListProps) {
 
     // Fetch payment history for selected staff
     const { data: paymentHistory } = useQuery<PaymentHistory>({
-        queryKey: ['staff-payments', selectedStaff?.id],
+        queryKey: ['staff-payments', selectedStaff?.id, selectedSessionId],
         queryFn: async () => {
             if (!selectedStaff) throw new Error('No staff selected');
-            const res = await fetch(`/api/staff-payments/${selectedStaff.id}`, { headers: getAuthHeaders() });
+            const res = await fetch(`/api/staff-payments/${selectedStaff.id}?sessionId=${selectedSessionId}`, { headers: getAuthHeaders() });
             if (!res.ok) throw new Error('Failed to fetch payment history');
             return res.json();
         },
@@ -103,7 +103,7 @@ export function PayrollList({ selectedSessionId }: PayrollListProps) {
         onSuccess: () => {
             toast({ title: "Success", description: "Payment recorded successfully" });
             queryClient.invalidateQueries({ queryKey: ['staff-salary-summary'] });
-            queryClient.invalidateQueries({ queryKey: ['staff-payments', selectedStaff?.id] });
+            queryClient.invalidateQueries({ queryKey: ['staff-payments'] });
             queryClient.invalidateQueries({ queryKey: ['finance-stats'] }); // Update dashboard stats
             setPaymentDialogOpen(false);
             resetPaymentForm();
