@@ -74,7 +74,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
 
   // Use React Query Hooks
   const { data: students = [] } = useStudents(selectedSessionId);
-  const { data: withdrawnStudents = [] } = useWithdrawnStudents();
+  const { data: withdrawnStudents = [] } = useWithdrawnStudents(selectedSessionId);
   const { data: transactions = [] } = useFees(selectedSessionId);
   const { data: grades = [] } = useGrades(selectedSessionId);
   const [savingGrades, setSavingGrades] = useState(false);

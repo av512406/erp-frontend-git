@@ -26,11 +26,12 @@ export function useStudents(sessionId?: string) {
     });
 }
 
-export function useWithdrawnStudents() {
+export function useWithdrawnStudents(sessionId?: string) {
     return useQuery<Student[]>({
-        queryKey: ['students', 'withdrawn'],
+        queryKey: ['students', 'withdrawn', sessionId],
         queryFn: async () => {
-            const res = await fetch('/api/students/withdrawn', { headers: getAuthHeaders() });
+            const queryParams = sessionId ? `?sessionId=${sessionId}` : '';
+            const res = await fetch(`/api/students/withdrawn${queryParams}`, { headers: getAuthHeaders() });
             if (!res.ok) throw new Error('Failed to fetch withdrawn students');
             return res.json();
         }

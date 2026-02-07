@@ -730,8 +730,27 @@ router.post('/api/students/import', requireAuth, async (req, res) => {
 
 router.get('/api/students/withdrawn', requireAuth, async (req, res) => {
     const user = (req as any).user;
-    const { rows } = await pool.query("SELECT * FROM students WHERE status = 'left' AND school_id = $1 ORDER BY left_date DESC NULLS LAST, admission_number", [user.schoolId]);
-    res.json(rows.map(mapStudent));
+    const { sessionId } = req.query;
+
+    if (sessionId) {
+        // Session-scoped withdrawn list
+        // Join with student_sessions to check status in that specific session
+        const query = `
+            SELECT s.* 
+            FROM students s
+            JOIN student_sessions ss ON s.id = ss.student_id
+            WHERE ss.session_id = $1 
+              AND ss.school_id = $2 
+              AND ss.status = 'left'
+            ORDER BY s.left_date DESC NULLS LAST, s.admission_number
+        `;
+        const { rows } = await pool.query(query, [sessionId, user.schoolId]);
+        res.json(rows.map(mapStudent));
+    } else {
+        // Legacy global behavior (all students who have globally left)
+        const { rows } = await pool.query("SELECT * FROM students WHERE status = 'left' AND school_id = $1 ORDER BY left_date DESC NULLS LAST, admission_number", [user.schoolId]);
+        res.json(rows.map(mapStudent));
+    }
 });
 
 router.put('/api/students/:admissionNumber/withdraw', requireAuth, async (req, res) => {
