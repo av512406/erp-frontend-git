@@ -11,6 +11,7 @@ RUN npm install --legacy-peer-deps
 COPY . .
 
 # Build the application
+ENV NODE_OPTIONS="--max-old-space-size=3072"
 RUN npm run build
 
 # Stage 2: Production
