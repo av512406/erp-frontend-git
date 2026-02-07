@@ -6,7 +6,7 @@ http {
     # HTTP - Redirect to HTTPS
     server {
         listen 80;
-        server_name school.edulekha.in;
+        server_name school1.edulekha.in;
 
         location /.well-known/acme-challenge/ {
             root /var/www/certbot;
@@ -20,10 +20,10 @@ http {
     # HTTPS
     server {
         listen 443 ssl;
-        server_name school.edulekha.in;
+        server_name school1.edulekha.in;
 
-        ssl_certificate /etc/letsencrypt/live/school.edulekha.in/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/school.edulekha.in/privkey.pem;
+        ssl_certificate /etc/letsencrypt/live/school1.edulekha.in/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/school1.edulekha.in/privkey.pem;
 
         location / {
             proxy_pass http://app:5000;
