@@ -209,8 +209,7 @@ function buildPlainHtml(props: ReceiptProps): string {
 	const sessionValue = props.session || schoolConfig.session;
 	const map: Record<string, number> = {};
 	props.items.forEach(i => { map[i.label] = i.amount; });
-	const ordered = DEFAULT_ORDER.map(label => ({ label, amount: map[label] ?? 0 }))
-		.filter(item => item.amount > 0);
+	const ordered = DEFAULT_ORDER.map(label => ({ label, amount: map[label] ?? 0 }));
 	const total = ordered.reduce((s, r) => s + r.amount, 0);
 	const words = amountToIndianWords(total);
 	const cls = formatClass(props.student.grade || '', props.student.section);

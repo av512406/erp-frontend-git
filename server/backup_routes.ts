@@ -69,6 +69,21 @@ router.get("/export", requireSchoolAdmin, async (req: Request, res: Response) =>
     }
 });
 
+// Helper to fix date strings for Drizzle timestamp columns
+const fixDates = (row: any) => {
+    const newRow: any = { ...row };
+    for (const key in newRow) {
+        const val = newRow[key];
+        if (typeof val === 'string') {
+            // Check for ISO timestamp format (simple check: YYYY-MM-DDTHH:mm:ss...)
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) {
+                newRow[key] = new Date(val);
+            }
+        }
+    }
+    return newRow;
+};
+
 router.post("/restore", requireSchoolAdmin, async (req: Request, res: Response) => {
     try {
         const schoolId = (req as any).user!.schoolId!;
@@ -105,20 +120,29 @@ router.post("/restore", requireSchoolAdmin, async (req: Request, res: Response) 
             // 2. Insert new data in dependency order
             const d = backup.data;
             for (const config of orderedBackupTables) {
-                const rows = d[config.name];
-                if (rows && rows.length > 0) {
+                const rawRows = d[config.name];
+                if (rawRows && rawRows.length > 0) {
                     // Special handling for 'schools' - we update, not insert
                     if (config.name === 'schools') {
-                        // We don't restore the school record itself usually as we are "in" it.
-                        // Maybe update fields? For now, skip to be safe/simple.
                         continue;
                     }
 
-                    // Special handling for users - Skip or Upsert?
-                    // Audit decision: Skip for now to avoid lockout.
+                    // Special handling for users
                     if (config.name === 'users') continue;
 
-                    await tx.insert(config.table).values(rows);
+                    // Fix Dates for Timestamp columns
+                    const rows = rawRows.map(fixDates);
+
+                    try {
+                        console.log(`Restoring table: ${config.name} with ${rows.length} rows`);
+                        await tx.insert(config.table).values(rows);
+                    } catch (insertError) {
+                        console.error(`FAILED to restore table ${config.name}`);
+                        if (rows.length > 0) {
+                            console.error('First row sample:', JSON.stringify(rows[0]));
+                        }
+                        throw insertError;
+                    }
                 }
             }
 
@@ -136,7 +160,7 @@ router.post("/restore", requireSchoolAdmin, async (req: Request, res: Response) 
         res.json({ message: "Restore successful", recordCounts: backup.meta.recordCounts });
 
     } catch (error) {
-        console.error("Restore error:", error);
+        console.error("Restore error trace:", error);
         res.status(500).json({ message: "Restore failed: " + (error as Error).message });
     }
 });

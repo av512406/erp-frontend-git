@@ -329,7 +329,7 @@ function Router({ user, sessions, selectedSessionId }: RouterProps) {
       </Route>
       <Route path="/admin-settings">
         <ProtectedRoute allowedRoles={['admin']} userRole={user.role}>
-          <AdminSettingsPage />
+          <AdminSettingsPage currentUser={user} />
         </ProtectedRoute>
       </Route>
 

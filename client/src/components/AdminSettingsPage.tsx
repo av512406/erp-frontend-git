@@ -27,7 +27,8 @@ interface User {
   created_at?: string;
 }
 
-function UserManagement() {
+// Pass currentUser to access the logged-in admin's domain
+function UserManagement({ currentUser }: { currentUser: any }) {
   const [users, setUsers] = useState<User[]>([]);
   const { config } = useSchoolConfig();
   const [loading, setLoading] = useState(false);
@@ -70,7 +71,13 @@ function UserManagement() {
 
       // Auto-append domain if missing
       if (!finalUsername.includes('@')) {
-        const domain = config.email ? config.email.split('@')[1] : 'school.com';
+        // Use the logged-in admin's domain if available, otherwise config email, otherwise default
+        let domain = 'school.com';
+        if (currentUser && currentUser.username && currentUser.username.includes('@')) {
+          domain = currentUser.username.split('@')[1];
+        } else if (config.email && config.email.includes('@')) {
+          domain = config.email.split('@')[1];
+        }
         finalUsername = `${finalUsername}@${domain}`;
       }
 
@@ -145,6 +152,8 @@ function UserManagement() {
     }
   ];
 
+  const currentDomain = currentUser?.username?.split('@')[1] || config.email?.split('@')[1] || 'school.com';
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -178,9 +187,9 @@ function UserManagement() {
                     disabled={!!editingUser}
                     placeholder="jdoe"
                   />
-                  {!editingUser && <span className="text-sm text-muted-foreground whitespace-nowrap">@schoolname.com (auto-appended if omitted)</span>}
+                  {!editingUser && <span className="text-sm text-muted-foreground whitespace-nowrap">@{currentDomain}</span>}
                 </div>
-                {!editingUser && <p className="text-xs text-muted-foreground">Login will be username@schoolname.com</p>}
+                {!editingUser && <p className="text-xs text-muted-foreground">Login will be username@{currentDomain}</p>}
               </div>
               <div className="space-y-2">
                 <Label>Password {editingUser && '(Leave blank to keep current)'}</Label>
@@ -606,7 +615,7 @@ function DocumentSettings() {
   );
 }
 
-export default function AdminSettingsPage() {
+export default function AdminSettingsPage({ currentUser }: { currentUser?: any }) {
   return (
     <div className="container mx-auto p-4 max-w-4xl">
       <h2 className="text-2xl font-bold mb-6">Admin Settings</h2>
@@ -627,7 +636,7 @@ export default function AdminSettingsPage() {
           <SessionManagement />
         </TabsContent>
         <TabsContent value="users">
-          <UserManagement />
+          <UserManagement currentUser={currentUser} />
         </TabsContent>
       </Tabs>
     </div>

@@ -268,36 +268,46 @@ router.get('/api/classes/:grade/subjects', requireAuth, async (req, res) => {
 
 router.post('/api/classes/:grade/sync-all', requireAuth, async (req, res) => {
     const user = (req as any).user;
-    const sourceGrade = req.params.grade;
+    const sourceGrade = req.params.grade.trim();
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        const src = await client.query(`SELECT subject_id FROM class_subjects WHERE grade=$1 AND school_id=$2`, [sourceGrade, user.schoolId]);
+        const src = await client.query(`SELECT subject_id FROM class_subjects WHERE TRIM(grade)=TRIM($1) AND school_id=$2`, [sourceGrade, user.schoolId]);
         const subjectIds: string[] = src.rows.map((r: any) => r.subject_id);
         if (subjectIds.length === 0) {
             await client.query('ROLLBACK');
-            return res.status(400).json({ message: 'no subjects assigned to source class' });
+            return res.status(400).json({ message: 'No subjects assigned to source class (checked with TRIM)' });
         }
         const gradesRes = await client.query(`
             SELECT DISTINCT grade FROM classes WHERE school_id=$1
         `, [user.schoolId]);
         const allGrades: string[] = gradesRes.rows.map((r: any) => r.grade);
+
         let inserted = 0;
+        let skipped = 0;
+
         for (const g of allGrades) {
+            // Skip if it's the source class itself
+            if (g.trim() === sourceGrade) continue;
+
             for (const sid of subjectIds) {
                 const id = genId();
                 try {
-                    await client.query(
+                    const insertRes = await client.query(
                         `INSERT INTO class_subjects (id, grade, subject_id, school_id) VALUES ($1,$2,$3,$4)
                ON CONFLICT (grade, subject_id) DO NOTHING`,
                         [id, g, sid, user.schoolId]
                     );
-                    inserted++;
+                    if (insertRes.rowCount && insertRes.rowCount > 0) {
+                        inserted++;
+                    } else {
+                        skipped++;
+                    }
                 } catch { }
             }
         }
         await client.query('COMMIT');
-        res.json({ syncedFrom: sourceGrade, grades: allGrades.length, subjects: subjectIds.length, inserted });
+        res.json({ syncedFrom: sourceGrade, targetClasses: allGrades.length, subjectsCount: subjectIds.length, inserted, skipped });
     } catch (e) {
         await client.query('ROLLBACK');
         console.error(e);

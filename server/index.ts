@@ -13,7 +13,7 @@ declare module 'http' {
 // Increase body size limit to accommodate base64 logo uploads (default ~100kb was causing 413)
 app.use(express.json({
   // Allow up to 5mb to avoid upstream proxy truncation after base64 expansion; actual logo size enforced server-side at 300KB
-  limit: '5mb',
+  limit: '50mb',
   verify: (req, _res, buf) => {
     req.rawBody = buf;
   }
@@ -37,7 +37,7 @@ if (process.env.NODE_ENV === 'production' && corsOptions.origin !== '*') {
 } else if (process.env.NODE_ENV === 'production') {
   console.warn('WARNING: ALLOWED_ORIGINS not set, CORS will block all cross-origin requests in production');
 }
-app.use(express.urlencoded({ extended: false, limit: '5mb' }));
+app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 
 
 
