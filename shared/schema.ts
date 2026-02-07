@@ -277,8 +277,7 @@ export const attendance = pgTable("attendance", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (t) => ({
-  // Composite unique constraint on student + date to prevent duplicate marking
-  // Again, will ensure in SQL migration for robustness.
+  unq: uniqueIndex("attendance_student_date_unique").on(t.studentId, t.date),
 }));
 
 export const insertAttendanceSchema = createInsertSchema(attendance).omit({ id: true, schoolId: true, markedBy: true });
