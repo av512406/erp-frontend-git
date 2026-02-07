@@ -1,0 +1,13 @@
+FROM postgres:16-alpine
+
+# Install AWS CLI
+RUN apk add --no-cache bash coreutils tzdata python3 py3-pip && \
+    pip3 install --upgrade pip --break-system-packages && \
+    pip3 install awscli --break-system-packages && \
+    apk del py3-pip
+
+# Copy backup script
+COPY backup.sh /usr/local/bin/backup.sh
+RUN chmod +x /usr/local/bin/backup.sh
+
+CMD ["/usr/local/bin/backup.sh"]
